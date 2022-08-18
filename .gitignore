@@ -1,0 +1,9 @@
+# Specify filepatterns you want git to ignore.
+
+*.iml
+.gradle
+.idea
+build
+/dist
+/local.properties
+/publishingCredentials.properties
