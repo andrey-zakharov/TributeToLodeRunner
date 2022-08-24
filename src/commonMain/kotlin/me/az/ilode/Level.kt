@@ -3,6 +3,7 @@ package me.az.ilode
 import Tile
 import TileLogicType
 import ViewCell
+import de.fabmax.kool.math.MutableVec2i
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.pipeline.TexFormat
 import de.fabmax.kool.pipeline.TextureData2d
@@ -22,8 +23,8 @@ fun loadGameLevel(levelId: Int, map: List<String>, tilesAtlasIndex: Map<String, 
 
                 when(tile) {
                     Tile.PLAYER -> {
-                        playerX = x
-                        playerY = y
+                        runner.x = x
+                        runner.y = y
                     }
                     Tile.GUARD -> {
                         guard = true
@@ -42,14 +43,13 @@ fun loadGameLevel(levelId: Int, map: List<String>, tilesAtlasIndex: Map<String, 
             }
         }
 
-        buf.flip()
     }
 }
 
 class GameLevel(
-    private val levelId: Int,
-    private val width: Int,
-    private val height: Int,
+    val levelId: Int,
+    val width: Int,
+    val height: Int,
     private val primaryTileSet: Map<String, Int> // index
 ) {
 
@@ -60,8 +60,7 @@ class GameLevel(
     }
     // store view info
     val buf = createUint8Buffer(width * height)
-    var playerX by Delegates.notNull<Int>()
-    var playerY by Delegates.notNull<Int>()
+    var runner = MutableVec2i()
     val guards = mutableListOf<Vec2i>()
     var gold = 0
     var status = Status.LEVEL_STARTUP
@@ -70,24 +69,28 @@ class GameLevel(
     val act = Array(width) { Array(height) { TileLogicType.EMPTY } }
     val base = Array(width) { Array(height) { TileLogicType.EMPTY } }
     val guard = Array(width) { Array(height) { false } }
+    var dirty = false
+
 
     // 0 - 6 bits
     // 7 bit - for hole as frame tile set
 
-//    private fun UInt.packBaseTile(t: TileType) = (this and 0xfff0u) or (t.ordinal.toUInt() and 0x000fu)
-//    private fun UInt.packActTile(t: TileType) = (this and 0xff0fu) or ((t.ordinal.toUInt() and 0x000fu) shl 4)
-
-//    private fun UInt.unpackBaseTile() = TileType.values()[(this and 0x000fu).toInt()]
-//    private fun UInt.unpackActTile() = TileType.values()[((this shr 4) and 0x000fu).toInt()]
-
-//    private fun UInt.unpackGuard() = getBit(5)
-
-//    private fun UInt.packGuard(v: Boolean) = withBit(5, v)
-
     operator fun get(x: Int, y: Int): ViewCell? = if ( isValid(x, y) ) ViewCell.unpack(buf[y * width + x]) else null
-    operator fun set(x: Int, y: Int, v: ViewCell)  { if ( isValid(x, y) ) buf[y * width + x] = v.pack }
-    private fun isValid(at: Vec2i) = isValid(at.x, at.y)
+    operator fun set(x: Int, y: Int, v: ViewCell)  { if ( isValid(x, y) ) buf[y * width + x] = v.pack; dirty = true }
+
+    operator fun get(at: Vec2i) = get(at.x, at.y)
+    operator fun set(at: Vec2i, v: ViewCell) = set(at.x, at.y, v)
+    operator fun set(at: Vec2i, t: Tile) {
+        if (isValid(at)) {
+            set(at.x, at.y, ViewCell(get(at.x, at.y)!!.hole, primaryTileSet[t.frame]!!))
+        }
+    }
+
+    fun getAct(at: Vec2i) = act[at.x][at.y]
+    fun getBase(at: Vec2i) = base[at.x][at.y]
+
     private fun isValid(x: Int, y: Int) = x >= 0 && x < width && y >= 0 && y < height
+    private fun isValid(at: Vec2i) = isValid(at.x, at.y)
 
     fun updateTileMap(): TextureData2d {
         return TextureData2d(buf, width, height, TexFormat.R)
@@ -96,20 +99,29 @@ class GameLevel(
     fun isBarrier(x: Int, y: Int) = !isValid(x, y) ||
         act[x][y] == TileLogicType.BLOCK || act[x][y] == TileLogicType.SOLID ||
         act[x][y] == TileLogicType.TRAP
+    fun isBarrier(at: Vec2i) = isBarrier(at.x, at.y)
 
     fun isLadder(x: Int, y: Int, hidden: Boolean) = isValid(x, y) && (
         act[x][y] == TileLogicType.LADDR || (base[x][y] == TileLogicType.HLADR && hidden)
     )
+    fun isLadder(at: Vec2i, hidden: Boolean) = isLadder(at.x, at.y, hidden)
 
     fun isFloor(x: Int, y: Int, useBase: Boolean = false, useGuard: Boolean = true): Boolean {
         val check = if ( useBase ) { base } else { act }
         return !isValid(x, y) || check[x][y] == TileLogicType.BLOCK || check[x][y] == TileLogicType.SOLID ||
                 check[x][y] == TileLogicType.LADDR || (useGuard && guard[x][y])
     }
+    fun isFloor(at: Vec2i, useBase: Boolean = false, useGuard: Boolean = true) = isFloor(at.x, at.y, useBase, useGuard)
 
     fun isBar(x: Int, y: Int) = isValid(x, y) && base[x][y] == TileLogicType.BAR
+    fun isBar(at: Vec2i) = isBar(at.x, at.y)
+
     fun isGold(x: Int, y: Int) = isValid(x, y) && base[x][y] == TileLogicType.GOLD
+
     fun isEmpty(x: Int, y: Int) = isValid(x, y) && base[x][y] == TileLogicType.EMPTY
+    fun isEmpty(at: Vec2i) = isEmpty(at.x, at.y)
+
     fun hasGuard(x: Int, y: Int) = isValid(x, y) && guard[x][y]
+    fun hasGuard(at: Vec2i) = hasGuard(at.x, at.y)
 
 }

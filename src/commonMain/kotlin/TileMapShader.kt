@@ -1,4 +1,5 @@
 import de.fabmax.kool.modules.ksl.KslShader
+import de.fabmax.kool.modules.ksl.blocks.mvpMatrix
 import de.fabmax.kool.modules.ksl.lang.*
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.Mesh
@@ -18,19 +19,16 @@ class TileMapShader(conf: TileMapShaderConf) : KslShader(Program(conf), Pipeline
     var field by texture2d("tileMap") // field
     var time by uniform1f("time")
 
-    var fitMatrix by uniformMat4f("fitMatrix")
-
-
     class Program(conf: TileMapShaderConf) : KslProgram("tilemap") {
         val uv = interStageFloat2("uv")
 
         init {
 //            dumpCode = true
             vertexStage {
-                val uScaleMat = uniformMat4("fitMatrix")
+                val uMvp = mvpMatrix()
                 main {
                     uv.input set vertexAttribFloat2(Attribute.TEXTURE_COORDS.name)
-                    outPosition set uScaleMat * float4Value(vertexAttribFloat3(Attribute.POSITIONS.name), 1f)
+                    outPosition set uMvp.matrix * float4Value(vertexAttribFloat3(Attribute.POSITIONS.name), 1f)
                 }
             }
             fragmentStage {
@@ -40,7 +38,6 @@ class TileMapShader(conf: TileMapShaderConf) : KslShader(Program(conf), Pipeline
                 val tileSize = uniformInt2("tileSize")
                 val tileFrames = uniformFloat2Array("frames", conf.totalTiles)
 
-
                 main {
                     val tileSetSize = float2Var(textureSize2d(tileSet).toFloat2())
                     // in tiles
@@ -49,11 +46,15 @@ class TileMapShader(conf: TileMapShaderConf) : KslShader(Program(conf), Pipeline
                     val inField = fieldSize * uv.output
                     val tilePos = floor(inField)
                     val t = sampleTexture(field, tilePos / fieldSize)
-                    val tileIndex = intVar((t.r * 255f.const).toInt1())
+
+                    val tx = texelFetch(field, tilePos.toInt2())
+                    val tileIndex = int1Var((tx.r * 255f.const).toInt1())
                     
 //                    colorOutput(sampleTexture(field, uv.output) * conf.totalTiles.const.toFloat1())
-//                    colorOutput(float4Value(tileFrames[tileIndex].x / tileSetSize.x, tileFrames[tileIndex].y / tileSetSize.y, 0f.const, 1f.const))
-//                    colorOutput(float4Value(tileFrames[tileIndex].x / tileSetSize.x, tileIndex.toFloat1() / conf.totalTiles.const.toFloat1(), 0f.const, 1f.const))
+//                    colorOutput(float4Value(tx.x* conf.totalTiles.const.toFloat1(), t.x * conf.totalTiles.const.toFloat1(), 0f.const, 1f.const))
+
+//                    colorOutput(float4Value(sampleTexture(field, uv.output).r * conf.totalTiles.const.toFloat1(),
+//                        tileIndex.toFloat1() / tileSetSize.x , 0f.const, 1f.const))
                     colorOutput(sampleTexture(tileSet,((inField - tilePos) * tileSize.toFloat2() + tileFrames[tileIndex]) / tileSetSize))
                 }
             }
@@ -61,12 +62,12 @@ class TileMapShader(conf: TileMapShaderConf) : KslShader(Program(conf), Pipeline
     }
 }
 
-fun Mesh.generateFullscreenQuad(mirrorTexCoordsY: Boolean = true) {
+fun Mesh.generateQuad(width: Float, height: Float, mirrorTexCoordsY: Boolean = true) {
     isFrustumChecked = false
     generate {
         rect {
-            origin.set(-1f, -1f, 0f)
-            size.set(2f, 2f)
+            origin.set(-width/2f, -height/2f, 0f)
+            size.set(width, height)
             if (mirrorTexCoordsY) {
                 mirrorTexCoordsY()
             }

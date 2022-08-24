@@ -3,6 +3,8 @@
 *.iml
 .gradle
 .idea
+.httpCache
+.storage
 build
 /dist
 /local.properties

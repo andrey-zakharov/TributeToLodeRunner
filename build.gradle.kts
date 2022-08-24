@@ -56,6 +56,7 @@ kotlin {
                 implementation(DepsCommon.kotlinCoroutines)
                 implementation(DepsCommon.kotlinSerialization)
                 implementation(DepsCommon.kotlinSerializationJson)
+                implementation("com.russhwolf:multiplatform-settings-no-arg:0.9")
             }
         }
         val jsMain by getting {
