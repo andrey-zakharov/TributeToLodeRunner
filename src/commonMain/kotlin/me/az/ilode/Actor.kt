@@ -1,9 +1,6 @@
 package me.az.ilode
 
 import SoundPlayer
-import Tile
-import TileLogicType
-import ViewCell
 import de.fabmax.kool.math.MutableVec2i
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.math.randomI
@@ -12,13 +9,7 @@ const val MOVE_X = 4
 const val MOVE_Y = 4
 const val TILE_WIDTH    = 20
 const val TILE_HEIGHT   = 22
-fun createPlayer() {
 
-}
-
-fun createGuard() {
-
-}
 enum class CharType {
     RUNNER, GUARD
 }
@@ -71,7 +62,9 @@ open class Actor(val level: GameLevel,
                 addScore(SCORE_GOLD)
                 takeGold = true
                 if ( level.gold == 0 ) {
-                    playSound("goldFinish${(level.levelId - 1) % 6 + 1}")
+//                    playSound("goldFinish${(level.levelId - 1) % 6 + 1}")
+                    playSound("goldFinish")
+                    level.showHiddenLadders()
                 }
             } else if ((this as Guard).hasGold == 0) {
                 hasGold = randomI(0, 26) + 12
@@ -105,17 +98,16 @@ open class Actor(val level: GameLevel,
             this as Runner
             if ( canDig ) {
                 playSound("dig")
-                val digTile = if ( digLeft || (action == "runLeft" && !digRight)) {
+                val (digTileX, bitmap) = if ( digLeft || (action == "runLeft" && !digRight)) {
                     action = "digLeft"
-                    Vec2i(block.x - 1, block.y + 1) // = ViewCell(true)
-                    // bitmap = digHoleLeft
+                    Pair(block.x - 1, "digHoleLeft")
                 } else {
                     action = "digRight"
-                    Vec2i(block.x + 1, block.y + 1)
-                    // bitmap = "digHoleRight"
+                    Pair(block.x + 1, "digHoleRight")
                 }
-                level.act[digTile.x][digTile.y] = TileLogicType.EMPTY
-                level[digTile] = ViewCell(true, 0)
+                level.act[digTileX][block.y + 1] = TileLogicType.EMPTY
+                level.anims[Vec2i(digTileX, block.y)] = Pair(bitmap, 0)
+                level.anims[Vec2i(digTileX, block.y + 1)] = Pair("${bitmap}Base", 0)
                 state = State.STATE_MOVE
                 offset.x = 0
             }

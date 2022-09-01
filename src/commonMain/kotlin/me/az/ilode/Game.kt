@@ -9,13 +9,25 @@ import de.fabmax.kool.InputManager
 import de.fabmax.kool.KeyCode
 import de.fabmax.kool.UniversalKeyCode
 import me.az.utils.enumDelegate
+import kotlin.random.Random
 
+
+enum class GameState {
+    GAME_START,
+    GAME_RUNNING ,
+    GAME_FINISH , GAME_FINISH_SCORE_COUNT,
+    GAME_WAITING , GAME_PAUSE,
+    GAME_NEW_LEVEL , GAME_RUNNER_DEAD,
+    GAME_OVER_ANIMATION , GAME_OVER,
+    GAME_NEXT_LEVEL , GAME_PREV_LEVEL,
+    GAME_LOADING , GAME_WIN
+}
 
 class GameSettings(val settings: Settings) {
     var spriteMode: TileSet by enumDelegate(settings, defaultValue = TileSet.SPRITES_APPLE2)
     var version: LevelSet by enumDelegate(settings, defaultValue = LevelSet.CLASSIC)
     val startLevel: Int by settings.int(defaultValue = 0)
-    var speed: GameSpeed by enumDelegate(settings, defaultValue = GameSpeed.SPEED_NORMAL)
+    var speed: GameSpeed by enumDelegate(settings, defaultValue = GameSpeed.SPEED_SLOW)
 }
 
 const val SCORE_COMPLETE = 1500
@@ -36,7 +48,10 @@ class Game(val settings: GameSettings) {
     var nextGuard = 0
     var nextMoves = 0
 
-    val gameOver get() = runner.health > 0
+    val gameOver get() = runner.health <= 0
+    var gameState = GameState.GAME_START
+    val isPlaying get() = gameState == GameState.GAME_RUNNING
+    val isPaused get() = gameState == GameState.GAME_PAUSE
 
     lateinit var level: GameLevel
 
@@ -45,7 +60,7 @@ class Game(val settings: GameSettings) {
         // playStartAnim
         runner = Runner(level)
         guards.clear()
-        level.guards.forEach {
+        level.guardsPos.forEach {
             val g = Guard(level, anims = guardAnims)
             g.startLevel(level, it)
             guards.add(g)
@@ -60,8 +75,32 @@ class Game(val settings: GameSettings) {
     }
 
     fun tick() {
+        when(gameState) {
+            GameState.GAME_START -> {
+                if (runner.anyKeyPressed) {
+                    gameState = GameState.GAME_RUNNING
+                    if ( level.gold <= 0 ) level.showHiddenLadders()
+                }
+            }
+
+            GameState.GAME_RUNNING -> {
+                playGame()
+            }
+
+            GameState.GAME_RUNNER_DEAD -> {
+//                stopSound
+            }
+            else -> {}
+        }
+    }
+
+    val onPlayGame = mutableListOf<Game.(level: GameLevel) -> Unit>()
+
+    fun playGame() {
         runner.update()
         guardsUpdate()
+        level.update(runner, guards)
+        onPlayGame.forEach { it.invoke(this, level) }
     }
 
     fun guardsUpdate() {
@@ -90,7 +129,16 @@ class Game(val settings: GameSettings) {
            with(guards[nextGuard]) {
                if ( !alive ) {
                    // respawn
-
+                   for ( ty in 0 until level.height ) {
+                       block.x = Random.nextInt(level.width)
+                       block.y = ty
+                       if ( level.base[block.y][ty] == TileLogicType.EMPTY ) {
+                           action = "reborn"
+                           alive = true
+                           inHole = false
+                           break
+                       }
+                   }
                }
 
                if ( !stopGuards ) {
@@ -101,8 +149,6 @@ class Game(val settings: GameSettings) {
 
             movesCount--
         }
-
-        //guards.forEach { it.updateGuard(runner) }
     }
 
 

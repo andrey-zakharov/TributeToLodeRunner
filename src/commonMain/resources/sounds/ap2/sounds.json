@@ -1,0 +1,36 @@
+{"clips":{
+    "born": { "type":"wav" },
+    "down": { "type":"wav" },
+    "trap": { "type":"wav" },
+    "goldFinish": { "type":"wav" },
+    "dead":
+    {
+        "type":"wav",
+        "duration":472,
+        "priority":30
+    },
+    "dig":
+    {
+        "type":"wav",
+        "duration":498,
+        "priority":20
+    },
+    "fall":
+    {
+        "type":"wav",
+        "duration":3657,
+        "priority":20
+    },
+    "getGold":
+    {
+        "type":"wav",
+        "duration":550,
+        "priority":20
+    },
+    "pass":
+    {
+        "type":"wav",
+        "duration":1462,
+        "priority":30
+    }
+}}

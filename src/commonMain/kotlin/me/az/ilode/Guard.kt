@@ -1,7 +1,6 @@
 package me.az.ilode
 
 import AnimationFrames
-import Tile
 import de.fabmax.kool.math.Vec2i
 import kotlin.math.abs
 
@@ -54,6 +53,7 @@ class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharTyp
                 inHole = true
                 action = action.replace("fall", "shake")
                 runner.addScore(SCORE_FALL)
+                playSound("trap")
             } else if (action.startsWith("shake")) {
                 if ( frameIndex == anims.sequence[action]!!.size - 1 ) {
                     action = "runUpDown"
@@ -101,6 +101,7 @@ class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharTyp
 
         } else if ( action == "reborn") {
             if ( anims.sequence[action]!!.size - 1 == frameIndex ) {
+                playSound("reborn")
                 action = "runLeft"
                 frameIndex = 1
             }
@@ -125,6 +126,11 @@ class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharTyp
                     move(Action.ACT_NONE)
                 }
             }
+        }
+
+        if ( block.x != x || block.y != y ) {
+            level.guard[x][y] = false
+            level.guard[block.x][block.y] = true
         }
 
         updateFrame()

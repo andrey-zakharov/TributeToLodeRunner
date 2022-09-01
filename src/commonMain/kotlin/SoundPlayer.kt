@@ -9,7 +9,7 @@ class SoundPlayer(val assets: AssetManager) {
     private val sounds = mutableMapOf<String, AudioClip>()
 
     suspend fun loadSounds() {
-        val soundsDir = "sounds/c64/"
+        val soundsDir = "sounds/ap2/"
         val soundsJsonPath = "$soundsDir/sounds.json"
         val content = assets.loadAsset(soundsJsonPath)!!.toArray().decodeToString()
         val clipsObj = Json.decodeFromString<JsonObject>(content)

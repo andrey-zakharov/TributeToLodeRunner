@@ -5,42 +5,82 @@ import de.fabmax.kool.modules.ksl.blocks.mvpMatrix
 import de.fabmax.kool.modules.ksl.lang.*
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.Group
+import de.fabmax.kool.scene.Scene
 import de.fabmax.kool.scene.mesh
 // represent both simple texture2d or frame in atlas
-fun createSprite() {
-
+fun Scene.sprite(texture: Texture2d,
+                 name: String? = null,
+                 spriteSize: Vec2i? = null,
+                 regionSize: Vec2i? = null,
+                 mirrorTexCoordsY: Boolean = false): Sprite {
+    return Sprite(spriteSize, texture, regionSize, name, mirrorTexCoordsY)
 }
-open class Sprite(val spriteSize: Vec2i, // in pixels
-                  val texture: Texture2d,
-                  val regionSize: Vec2i, // how much get from texture by pixels
-                  name: String? = null,
-                  mirrorTexCoordsY: Boolean = false) :
-    Group("sprite $name group") {
+
+open class Sprite(
+    private val spriteSize: Vec2i?, // in pixels
+    private val texture: Texture2d,
+    private val regionSize: Vec2i?, // how much get from texture by pixels
+    name: String? = null,
+    private val mirrorTexCoordsY: Boolean = false) : Group("sprite $name group") {
 
     val textureOffset = MutableVec2i(Vec2i.ZERO)
 
     val spriteShader by lazy { SpriteShader() }
+
+    val _spriteSize = MutableVec2i(spriteSize?.x ?: 0, spriteSize?.y ?: 0)
+    val _regionSize = MutableVec2i(regionSize?.x ?: 0, regionSize?.y ?: 0)
+
     init {
+        buildMesh()
+        onUpdate += {
+            if ( _spriteSize == Vec2i.ZERO || _regionSize == Vec2i.ZERO ) {
+                if ( texture.loadingState == Texture.LoadingState.LOADED ) {
+                    if ( _spriteSize == Vec2i.ZERO ) {
+                        _spriteSize.x = texture.loadedTexture!!.width
+                        _spriteSize.y = texture.loadedTexture!!.height
+                    }
+                    if ( _regionSize == Vec2i.ZERO ) {
+                        _regionSize.x = texture.loadedTexture!!.width
+                        _regionSize.y = texture.loadedTexture!!.height
+                    }
+                }
+            }
+            transform.resetScale()
+            transform.scale(_spriteSize.x.toDouble(), _spriteSize.y.toDouble(), 1.0)
+        }
+    }
+
+    private fun buildMesh() {
+        removeAllChildren()
+
+        // texture should be loaded
+//        require(texture.loadingState == Texture.LoadingState.LOADED) { "texture in sprite $name (${texture.name}) not loaded" }
+//
+//        val fullTexSize = Vec2i( texture.loadedTexture!!.width, texture.loadedTexture!!.height )
+
         +mesh(SpriteShader.SPRITE_MESH_ATTRIBS, name) {
             generate {
                 rect {
-                    width = spriteSize.x.toFloat()
-                    height = spriteSize.y.toFloat()
+                    width = 1f//(spriteSize ?: fullTexSize).x.toFloat()
+                    height = 1f//(spriteSize ?: fullTexSize).y.toFloat()
                     origin.set(-width / 2f, -height / 2f, 0f)
+
                     if (mirrorTexCoordsY) {
                         mirrorTexCoordsY()
                     }
                 }
                 shader = spriteShader.also {
                     it.texture = texture
-                    it.tileSize = regionSize
                 }
             }
 
             onUpdate += {
                 spriteShader.textureOffset = this@Sprite.textureOffset
+                spriteShader.tileSize = _regionSize
             }
         }
+        setIdentity()
+
     }
 
     class SpriteShader() : KslShader(Model(), pipelineConfig) {
@@ -76,8 +116,8 @@ open class Sprite(val spriteSize: Vec2i, // in pixels
                         val textureOffset = uniformInt2("texOffset")
                         val tileSize = uniformInt2("tileSize")
                         val atlasTexSize = textureSize2d(atlasTex).toFloat2()
-                        colorOutput(sampleTexture(atlasTex,
-                            (texCoords.output * tileSize.toFloat2() + textureOffset.toFloat2()) / atlasTexSize))
+                        colorOutput(texelFetch(atlasTex,
+                            (texCoords.output * tileSize.toFloat2() + textureOffset.toFloat2()).toInt2()))
                     }
                 }
             }
@@ -85,6 +125,4 @@ open class Sprite(val spriteSize: Vec2i, // in pixels
 
 
     }
-
-
 }

@@ -14,8 +14,8 @@ enum class PlayerAction(
     UP(InputManager.KEY_CURSOR_UP, RunnerController::updateStance, { if ( !contMode ) runner.stance[0] = false }),
     DOWN(InputManager.KEY_CURSOR_DOWN, RunnerController::updateStance, { if ( !contMode ) runner.stance[2] = false }),
     STOP(UniversalKeyCode(' '), RunnerController::updateStance, { } ),
-    DIG_LEFT(UniversalKeyCode('z'), { runner.digLeft = true }, { runner.digLeft = false} ),
-    DIG_RIGHT(UniversalKeyCode('x'), { runner.digRight = true }, { runner.digRight = false} ),
+    DIG_LEFT(UniversalKeyCode('z'), { runner.digLeft = true; clearStance() }, { runner.digLeft = false } ),
+    DIG_RIGHT(UniversalKeyCode('x'), { runner.digRight = true; clearStance()  }, { runner.digRight = false } ),
 }
 
 class RunnerController(val inputManager: InputManager, val runner: Runner): Node() {
@@ -30,8 +30,10 @@ class RunnerController(val inputManager: InputManager, val runner: Runner): Node
         }
     }
 
+    fun clearStance() = runner.stance.fill(false)
+
     fun updateStance(event: InputManager.KeyEvent) {
-        runner.stance.fill(false)
+        clearStance()
 
         for( ev in inputManager.keyEvents ) {
             when(ev.keyCode) {
@@ -43,4 +45,5 @@ class RunnerController(val inputManager: InputManager, val runner: Runner): Node
             }
         }
     }
+
 }

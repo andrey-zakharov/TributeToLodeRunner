@@ -1,10 +1,5 @@
 package me.az.ilode
 
-import SoundPlayer
-import TileLogicType
-import de.fabmax.kool.InputManager
-import de.fabmax.kool.KeyCode
-import de.fabmax.kool.UniversalKeyCode
 import de.fabmax.kool.math.Vec2i
 
 
@@ -20,6 +15,8 @@ class Runner(level: GameLevel) : Actor(level, CharType.RUNNER) {
     var digRight: Boolean = false
     val dig: Boolean get() = digLeft || digRight
     val success: Boolean get() = block.y == 0 && offset.y == 0 && level.gold == 0
+
+    val anyKeyPressed get() = dig || stance.any { it }
 
     val canDig: Boolean get() {
         val x = block.x
@@ -52,7 +49,7 @@ class Runner(level: GameLevel) : Actor(level, CharType.RUNNER) {
 
 
     init {
-        block = level.runner
+        block = level.runnerPos
     }
     fun reset() {
         digLeft = false

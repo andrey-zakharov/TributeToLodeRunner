@@ -1,6 +1,7 @@
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.math.Vec2f
 import de.fabmax.kool.math.Vec2i
+import de.fabmax.kool.math.Vec4i
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.geometry.RectProps
 import kotlinx.serialization.Serializable
@@ -31,12 +32,13 @@ data class Frame(
     val x: Int, val y: Int, val w: Int, val h: Int
 ) {
     val asVec: Vec2i get() = Vec2i(x, y)
+    val asVec4: Vec4i get() = Vec4i(x, y, w, h)
 }
 
 class ImageAtlas(val spec: ImageAtlasSpec) {
     lateinit var tex: Texture2d
     lateinit var frames: Map<String, Frame>
-    lateinit var tileCoords: Array<Vec2i>
+    lateinit var tileCoords: Array<Vec4i>
 
     val tilesTexPath get() = "sprites/${spec.tileset.path}/${spec.name}.png"
     val tilesMapPath get() = "sprites/${spec.tileset.path}/${spec.name}.json"
@@ -56,16 +58,18 @@ class ImageAtlas(val spec: ImageAtlasSpec) {
         }
 
         val tilesInRow = tex.loadedTexture!!.width / spec.tileWidth
+        println("tiles in row = $tilesInRow")
         val sortedByXYKeys = res.keys.sortedBy { res[it]!!.y * tilesInRow + res[it]!!.x }
 
         frames = sortedByXYKeys.associateWith { res[it]!! }
         sortedByXYKeys.forEachIndexed { i, s -> nameIndex[s] = i }
 
-        tileCoords = frames.map { Vec2i(it.value.x, it.value.y) }.toTypedArray()
+        tileCoords = frames.map { it.value.asVec4 }.toTypedArray()
     }
 
     fun getTexOffset(frameName: String) = frames[frameName]!!.asVec
-    fun getTexOffset(frameIndex: Int): Vec2i = tileCoords[frameIndex]
+    fun getTexOffset(frameIndex: Int): Vec2i = Vec2i(tileCoords[frameIndex].x, tileCoords[frameIndex].y)
+    fun getFrame(frameIndex: Int): Vec4i = tileCoords[frameIndex]
 }
 
 data class Region(val x: Double, val y: Double, val w: Double, val h: Double)

@@ -1,17 +1,12 @@
 import com.russhwolf.settings.Settings
-import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
-import de.fabmax.kool.math.MutableVec2f
 import de.fabmax.kool.math.Vec2i
-import de.fabmax.kool.modules.audio.AudioClip
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.*
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
+import de.fabmax.kool.scene.ui.*
 import me.az.ilode.Game
 import me.az.ilode.GameSettings
+import me.az.ilode.ViewCell
 import me.az.utils.b
 
 val simpleTextureProps = TextureProps(TexFormat.RGBA,
@@ -30,26 +25,134 @@ enum class GameSpeed(val msByPass: Int) {
     SPEED_VERY_FAST (10),
 }
 
-class LevelSceneSpec (
-    val gameWidth: Int = 560, // total screen with toolbar and level
-    val gameHeight: Int = 384, // total screen with toolbar and level
+class LevelSpec (
     val tileSize: Vec2i = Vec2i(20, 22)
 ) {}
 
-class App(ctx: KoolContext) {
+sealed class State <T> {
+    open fun enterState(obj: T) {}
+    open fun exitState(obj: T) {}
+    abstract fun update(obj: T): State<T>?
+}
+
+class MainMenuState : State<App>() {
+    var cachedTex: TextureData? = null
+    val bgTex = Texture2d( simpleTextureProps ) {assets ->
+        if ( cachedTex == null ) {
+            cachedTex = assets.loadTextureData("images/start-screen.png")
+        }
+        cachedTex!!
+    }
+    val bg by lazy { scene {
+        +sprite( texture = bgTex )
+    } }
+
+    var startnewGame = false
+
+    val mainMenu = uiScene {scene ->
+        +container("main menu container") {
+//            layoutSpec.setOrigin(dps(50f), dps(50f), dps(0f) )
+            layoutSpec.setSize(full(), full(), full())
+
+            var y = -90f
+            val centered = Gravity(Alignment.CENTER, Alignment.CENTER)
+            +button("new game") {
+                layoutSpec.setOrigin(zero(), dps(y), zero())
+                layoutSpec.setSize(full(), dps(30f), full())
+                textAlignment = centered
+                onClick += { _ , _ , _ ->
+                    startnewGame = true
+                }
+            }
+
+            y-= 30f
+            +label("level: ") {
+                layoutSpec.setOrigin(zero(), dps(y), zero())
+                layoutSpec.setSize(full(), dps(30f), full())
+                textAlignment = centered
+            }
+
+            y-= 30f
+            +label( "exit" ) {
+                layoutSpec.setOrigin(zero(), dps(y), zero())
+                layoutSpec.setSize(full(), dps(30f), full())
+                textAlignment = centered
+            }
+        }
+
+    }
+    override fun enterState(app: App) {
+        super.enterState(app)
+        // preload
+        app.ctx.scenes += bg
+        app.ctx.scenes += mainMenu
+    }
+
+    override fun exitState(app: App) {
+        super.exitState(app)
+        app.ctx.scenes -= mainMenu
+        app.ctx.scenes -= bg
+    }
+    override fun update(obj: App): State<App>? {
+
+        if ( startnewGame ) {
+            startnewGame = false
+            return RunGameState()
+        }
+        return null
+    }
+}
+
+class RunGameState : State<App>() {
+    var gameScene: Scene? = null
+    var infoScene: Scene? = null
+
+    override fun enterState(app: App) {
+        super.enterState(app)
+        val game = Game(app.gameSettings)
+        gameScene = GameLevelScene(game, app.ctx.assetMgr, "level", app.gameSettings)
+        app.ctx.scenes += gameScene!!
+        infoScene = uiScene {
+
+        }
+    }
+
+    override fun exitState(app: App) {
+        super.exitState(app)
+        gameScene?.run { app.ctx.scenes -= this }
+        infoScene?.run { app.ctx.scenes -= this }
+    }
+
+    override fun update(app: App): State<App>? {
+        return null
+    }
+}
+
+class App(val ctx: KoolContext) {
     val settings = Settings()
     val gameSettings = GameSettings(settings)
 
+    var state: State<App>? = null
+
     init {
-        println(settings)
+        println(settings.keys)
         ctx.assetMgr.assetsBaseDir = "." // = resources
 
-        val game = Game(gameSettings)
+        changeState(MainMenuState())
 
-        ctx.scenes += GameLevelScene(game, ctx.assetMgr, "level", gameSettings)
+        ctx.onRender += {
+            val newState = state?.update(this)
+            newState?.run { changeState(this) }
+        }
         ctx.run()
 
         test1()
+    }
+
+    fun changeState(newState: State<App>) {
+        state?.exitState(this)
+        state = newState
+        state?.enterState(this)
     }
 
     fun test1() {
@@ -65,103 +168,7 @@ class App(ctx: KoolContext) {
     }
 }
 
-class GameLevelScene(val game: Game, val assets: AssetManager, name: String?, val gameSettings: GameSettings) : Scene(name) {
-    var levelState = State.NEW
-    var tileSet: TileSet = TileSet.SPRITES_APPLE2
-    val conf = LevelSceneSpec()
 
-
-    private var tilesAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet, "tiles"))
-    private var runnerAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet, "runner"))
-    private var guardAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet, "guard"))
-    private var holeAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet, "hole"))
-    private var runnerAnims = AnimationFrames("runner")
-    private var guardAnims = AnimationFrames("guard")
-    private var holeAnims = AnimationFrames("hole")
-
-    private val sounds = SoundPlayer(assets)
-
-
-    private val levels = LevelsRep(assets, tilesAtlas)
-    val currentLevelId = 0
-    val currentLevel
-        get() = levels.getLevel(currentLevelId)
-
-
-    init {
-
-        camera = OrthographicCamera("plain").apply {
-            projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
-            isClipToViewport = false
-            isKeepAspectRatio = true
-            setCentered(conf.gameHeight.toFloat(), 0.1f, 10f)
-        }
-
-        onRenderScene += {
-            checkState(it)
-        }
-    }
-
-    fun checkState(ctx: KoolContext) {
-        if (levelState == State.NEW) {
-            // load resources (async from AssetManager CoroutineScope)
-            levelState = State.LOADING
-            ctx.assetMgr.launch {
-                loadResources(ctx)
-                levelState = State.SETUP
-            }
-        }
-
-        if (levelState == State.SETUP) {
-            setupMainScene(ctx)
-            levelState = State.RUNNING
-        }
-    }
-
-    suspend fun AssetManager.loadResources(ctx: KoolContext) {
-        tilesAtlas.load(this)
-        runnerAtlas.load(this)
-        guardAtlas.load(this)
-        holeAtlas.load(this)
-        levels.load(LevelSet.CLASSIC)
-        runnerAnims.loadAnimations(ctx)
-        guardAnims.loadAnimations(ctx)
-
-        sounds.loadSounds()
-
-    }
-
-    fun dispose() {
-
-    }
-
-    fun setupMainScene(ctx: KoolContext) {
-
-        game.levelStartup(currentLevel, guardAnims)
-        +RunnerController(ctx.inputMgr, game.runner)
-        game.runner.sounds = sounds
-
-        // views
-        +LevelView(game, currentLevel, conf, tilesAtlas, runnerAtlas, runnerAnims, guardAtlas, guardAnims)
-
-        onUpdate += {
-            if ( (it.time - lastUpdate) * 1000 >= gameSettings.speed.msByPass ) {
-                game.tick()
-                lastUpdate = it.time
-            }
-        }
-    }
-
-    var lastUpdate = 0.0
-
-    enum class State {
-        NEW,
-        LOADING,
-        SETUP,
-        RUNNING
-    }
-
-}
 
 /*
     Game(settings).startLevel()
