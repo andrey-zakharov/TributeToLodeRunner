@@ -138,7 +138,8 @@ class App(val ctx: KoolContext) {
         println(settings.keys)
         ctx.assetMgr.assetsBaseDir = "." // = resources
 
-        changeState(MainMenuState())
+//        changeState(MainMenuState())
+        changeState(RunGameState())
 
         ctx.onRender += {
             val newState = state?.update(this)

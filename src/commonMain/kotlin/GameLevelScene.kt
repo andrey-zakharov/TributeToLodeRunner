@@ -100,12 +100,12 @@ class GameLevelScene (val game: Game, val assets: AssetManager, name: String?, v
         guardAtlas.load(this)
         holeAtlas.load(this)
         fontAtlas.load(this)
-        levels.load(LevelSet.CLASSIC)
         runnerAnims.loadAnimations(ctx)
         guardAnims.loadAnimations(ctx)
         holeAnims.loadAnimations(ctx)
 
         sounds.loadSounds()
+        levels.load(LevelSet.CLASSIC)
 
     }
 

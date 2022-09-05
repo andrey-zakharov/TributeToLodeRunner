@@ -35,8 +35,6 @@ const val SCORE_GOLD     = 250
 const val SCORE_FALL     = 75
 const val SCORE_DIES     = 75
 
-const val TILES_X = 28
-const val TILES_Y = 16
 //system
 class Game(val settings: GameSettings) {
     var stopGuards = false

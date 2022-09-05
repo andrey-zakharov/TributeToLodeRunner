@@ -205,7 +205,7 @@ open class Actor(val level: GameLevel,
 
             if ( action == "fallRight" ) {
                 state = State.STATE_FALL
-            } else if ( !((block.x == TILES_X-1 && offset.x == 0) || level.isBarrier(rightTile))) {
+            } else if ( !((block.x == level.width-1 && offset.x == 0) || level.isBarrier(rightTile))) {
                 state = State.STATE_MOVE
                 offset.x += MOVE_X
                 if ( offset.x >= TILE_WIDTH / 2 ) {

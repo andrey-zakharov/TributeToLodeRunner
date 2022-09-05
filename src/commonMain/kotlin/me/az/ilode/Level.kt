@@ -1,11 +1,15 @@
 package me.az.ilode
 
+import Ac3
 import AnimationFrames
+import calcRestrictions
 import de.fabmax.kool.math.MutableVec2i
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.pipeline.TexFormat
 import de.fabmax.kool.pipeline.TextureData2d
 import de.fabmax.kool.util.createUint8Buffer
+import kotlin.time.ExperimentalTime
+import kotlin.time.measureTime
 
 enum class TileLogicType() {
     EMPTY,
@@ -31,6 +35,10 @@ enum class Tile(val char: Char, val base: TileLogicType, val act: TileLogicType,
     GUARD('0', TileLogicType.EMPTY, TileLogicType.EMPTY, "" ),
     PLAYER('&', TileLogicType.EMPTY, TileLogicType.EMPTY, "" );
     val frame: String get() = frameName ?: name.lowercase()
+    companion object {
+//        fun byChar(c: Char) = Tile.values().first { it.char == c }
+        val byChar = Tile.values().associateBy { it.char }
+    }
 }
 
 data class ViewCell (
@@ -67,6 +75,67 @@ data class ViewCell (
     }
 }
 
+@OptIn(ExperimentalTime::class)
+fun generateGameLevel(
+    levelId: Int,
+    exampleMap: List<String>,
+    tilesAtlasIndex: Map<String, Int>,
+    holesIndex: MutableMap<String, Int>,
+    holesAnims: AnimationFrames
+): GameLevel {
+
+    val contrains = calcRestrictions(exampleMap)
+    println(contrains)
+    val exampleWidth = exampleMap.first().length
+    val exampleHeight = exampleMap.size
+    val mapHeight = 2 * exampleHeight
+    val mapWidth = 2 * exampleWidth
+    val wcf = Ac3(mapWidth, mapHeight, contrains)
+
+    // fill example
+
+
+    exampleMap.forEachIndexed { y, row ->
+        row.forEachIndexed { x, c ->
+            val tile = Tile.byChar[c] ?: return@forEachIndexed
+            wcf.collapseTile(
+                //(wcf.width - exampleWidth) / 2 +
+                 x,
+                //(wcf.height - exampleHeight) / 2 +
+                 y,
+                tile
+            )
+        }
+    }
+
+    println("after load example: ")
+    println(wcf.variables.joinToString("\n") { it.joinToString { it.joinToString("") { it.char.toString() }.toString() } })
+
+    val dur = measureTime { wcf.run() }
+    println("wcf run in $dur")
+
+    println(wcf.variables.joinToString("\n") { it.joinToString() { it.map { it.char }.toString() } })
+
+    return loadGameLevel(levelId, wcf.variables.map {row ->
+        row.joinToString("") {
+            if ( it.size > 1 ) {
+                println("unobserved: $it")
+                Tile.EMPTY.char.toString()
+            } else {
+                /*(when (it.first()) {
+                    Tile.PLAYER,
+                    Tile.GUARD -> Tile.EMPTY
+                    else -> it.first()
+                }).char.toString()*/
+                it.first().char.toString()
+            }
+        }
+    }, tilesAtlasIndex, holesIndex, holesAnims).apply {
+
+    }
+
+}
+
 fun loadGameLevel(
     levelId: Int,
     map: List<String>,
@@ -75,14 +144,15 @@ fun loadGameLevel(
     holesAnims: AnimationFrames
 ): GameLevel {
     return GameLevel(levelId, map.first().length, map.size + 1, tilesAtlasIndex, holesIndex, holesAnims).apply {
+
+        val maxGuards = 5
         // for load
 
         map.forEachIndexed { y, row ->
             row.forEachIndexed { x, cell ->
                 var guard = false
 
-                val tile = Tile.values().first { it.char == cell }
-
+                val tile = Tile.byChar[cell]!!
 
                 when(tile) {
                     Tile.PLAYER -> {
@@ -90,8 +160,10 @@ fun loadGameLevel(
                         runnerPos.y = y
                     }
                     Tile.GUARD -> {
-                        guard = true
-                        guardsPos.add(Vec2i(x, y))
+                        if ( guardsPos.size < maxGuards ) {
+                            guard = true
+                            guardsPos.add(Vec2i(x, y))
+                        }
                     }
                     Tile.GOLD -> {
                         gold ++
@@ -110,10 +182,10 @@ fun loadGameLevel(
                 )
             }
         }
-        for (x in 0 until width ) {
-            this.act[x][height-1] = TileLogicType.SOLID
-            this.base[x][height-1] = TileLogicType.SOLID
-            this[x, height-1] = ViewCell(false, tilesAtlasIndex["ground"]!!)
+        for (x in 0 until this.width ) {
+            this.act[x][this.height-1] = TileLogicType.SOLID
+            this.base[x][this.height-1] = TileLogicType.SOLID
+            this[x, this.height-1] = ViewCell(false, tilesAtlasIndex["ground"]!!)
         }
     }
 }

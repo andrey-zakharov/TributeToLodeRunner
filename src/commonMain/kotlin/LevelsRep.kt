@@ -3,6 +3,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.*
 import me.az.ilode.GameLevel
 import me.az.ilode.Tile
+import me.az.ilode.generateGameLevel
 import me.az.ilode.loadGameLevel
 
 enum class LevelSet(val path: String) {
@@ -51,8 +52,13 @@ class LevelsRep(
         }
     }
 
-    fun getLevel(id: Int): GameLevel {
-        return loadedLevels.getOrPut(id) { loadGameLevel(id, levels[id], tileSet.nameIndex, holeAtlas.nameIndex, holeAnims) }
+    fun getLevel(id: Int, generated: Boolean = true): GameLevel {
+        return loadedLevels.getOrPut(id) {
+            if ( generated )
+                generateGameLevel(id, levels[id], tileSet.nameIndex, holeAtlas.nameIndex, holeAnims)
+            else
+                loadGameLevel(id, levels[id], tileSet.nameIndex, holeAtlas.nameIndex, holeAnims)
+        }
     }
 }
 
