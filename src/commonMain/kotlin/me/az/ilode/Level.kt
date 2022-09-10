@@ -1,6 +1,6 @@
 package me.az.ilode
 
-import Ac3
+import LevelGenerator
 import AnimationFrames
 import calcRestrictions
 import de.fabmax.kool.math.MutableVec2i
@@ -84,37 +84,36 @@ fun generateGameLevel(
     holesAnims: AnimationFrames
 ): GameLevel {
 
+
+
     val contrains = calcRestrictions(exampleMap)
     println(contrains)
     val exampleWidth = exampleMap.first().length
     val exampleHeight = exampleMap.size
     val mapHeight = 2 * exampleHeight
     val mapWidth = 2 * exampleWidth
-    val wcf = Ac3(mapWidth, mapHeight, contrains)
+    val initials = buildMap {
+        exampleMap.forEachIndexed { y, row ->
+            row.forEachIndexed { x, c ->
+                val tile = Tile.byChar[c] ?: return@forEachIndexed
 
-    // fill example
-
-
-    exampleMap.forEachIndexed { y, row ->
-        row.forEachIndexed { x, c ->
-            val tile = Tile.byChar[c] ?: return@forEachIndexed
-            wcf.collapseTile(
+                this[Vec2i((mapWidth - exampleWidth) / 2 + x, y + exampleHeight)] = tile
                 //(wcf.width - exampleWidth) / 2 +
-                 x,
                 //(wcf.height - exampleHeight) / 2 +
-                 y,
-                tile
-            )
+            }
         }
     }
+    val wcf = LevelGenerator(mapWidth, mapHeight, contrains, initials, Tile.values())
 
-    println("after load example: ")
-    println(wcf.variables.joinToString("\n") { it.joinToString { it.joinToString("") { it.char.toString() }.toString() } })
+    // fill example
+    println(wcf.dis("after load example"))
 
-    val dur = measureTime { wcf.run() }
+    val dur = measureTime {
+        wcf.run()
+    }
     println("wcf run in $dur")
 
-    println(wcf.variables.joinToString("\n") { it.joinToString() { it.map { it.char }.toString() } })
+    println(wcf.dis("result"))
 
     return loadGameLevel(levelId, wcf.variables.map {row ->
         row.joinToString("") {

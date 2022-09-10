@@ -3,6 +3,7 @@ package me.az.utils
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.contains
 import kotlin.properties.ReadWriteProperty
+import kotlin.random.Random
 import kotlin.reflect.KProperty
 
 val Int.b get() = toByte()
@@ -33,4 +34,20 @@ internal class EnumDelegate<E: Enum<E>>(
         settings.putString(lookupKey, value.name)
     }
 
+}
+
+
+// return index in choices
+fun Random.choice(choices: List<Int>): Int {
+    val total = choices.sum()
+//    print("collapsing random for: $choices total=$total ")
+    var r = nextInt(total)
+    var choice = 0//choices.last()
+
+    while ( r > 0 ) {
+        r -= choices[choice]
+        if ( r <= 0 ) return choice
+        choice++
+    }
+    return choice
 }

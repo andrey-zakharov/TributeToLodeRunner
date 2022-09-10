@@ -1,6 +1,7 @@
 import com.russhwolf.settings.Settings
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.Vec2i
+import de.fabmax.kool.math.isFuzzyZero
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.*
 import de.fabmax.kool.scene.ui.*
@@ -8,6 +9,8 @@ import me.az.ilode.Game
 import me.az.ilode.GameSettings
 import me.az.ilode.ViewCell
 import me.az.utils.b
+import me.az.utils.choice
+import kotlin.random.Random
 
 val simpleTextureProps = TextureProps(TexFormat.RGBA,
     AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE,
@@ -136,6 +139,7 @@ class App(val ctx: KoolContext) {
 
     init {
         println(settings.keys)
+        test2()
         ctx.assetMgr.assetsBaseDir = "." // = resources
 
 //        changeState(MainMenuState())
@@ -162,6 +166,31 @@ class App(val ctx: KoolContext) {
         expect( ViewCell(false, 16).pack == 0x10.b )
         expect( ViewCell(false, 127).pack == 0x7f.b )
         expect( ViewCell(true, 127).pack == 0xff.b )
+    }
+
+    fun test2(choices: List<Int> = listOf(100, 200, 50, 1000)) {
+        val steps = 10000
+        val eps = 100f / steps
+        val r = Random(0)
+        val results = mutableMapOf<Int, Int>()
+        (0 until steps).forEach {
+            val c = r.choice(choices)
+            results[c] = results.getOrPut(c) { 0 } + 1
+        }
+
+        val t = choices.sum().toFloat()
+        val expectedProbs = choices.map { it / t }
+        println(expectedProbs)
+
+        val rt = results.values.sum().toFloat()
+        val resultProbs = results.map { it.key to it.value / rt }.toMap()
+        expectedProbs.forEachIndexed { i, v ->
+            expect( (v - resultProbs[i]!!).isFuzzyZero(eps) ) { "expect $v but got ${resultProbs[i]} (eps = $eps)" }
+        }
+    }
+
+    fun test3() {
+
     }
 
     private fun expect(cond: Boolean, msg: () -> String = { "assert error" }) {
