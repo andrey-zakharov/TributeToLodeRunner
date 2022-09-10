@@ -80,7 +80,9 @@ class Probabilities<T: Comparable<T>>(initial: List<String>/*, n: Int = 1*/): Bi
         sum[norA]!![dir]!![norB] = r
     }
 
-    override fun toString() = sum.map { "${it.key} = ${it.value}" }.joinToString("\n")
+    override fun toString() = sum.map { "${it.key} = ${it.value.map {
+        "   dir #${it.key} = ${it.value}" 
+    }.joinToString("\n")}" }.joinToString("\n")
 }
 
 fun Probabilities<Tile>.load(initial: List<String>) {
@@ -128,7 +130,7 @@ open class FiniteField2d(val width: Int, val height: Int) {
 
 }
 
-typealias VariableValue = Pair<Vec2i, Tile>
+//typealias VariableValue = Pair<Vec2i, Tile>
 
 @OptIn(ExperimentalTime::class)
 class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
@@ -160,7 +162,6 @@ class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
     } }
 
     private val bans = mutableMapOf<Vec2i, MutableSet<T>>() // unary constraints
-    private val decisions = mutableListOf<Pair<Vec2i, T>>()
 
     private var _batchUpdate = false
     fun batchUpdate(block: LevelGenerator<T>.() -> Unit) {
@@ -193,12 +194,19 @@ class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
     val Vec2i.isResolved get() = domain.size == 1
     val Vec2i.isCondradiction get() = domain.size == 0
 
+    private val selectStrategy = SelectNextVariable.MinDomainRandomStrategy(
+        Tile.values().size, random, { x -> x.domain }
+    ) { x -> x.sumDomain }
+//    private val selectStrategy = SelectNextVariable.MaxStrategy { x -> x.sumDomain }
+//    private val strategy = SelectNextVariable.MinStrategy<T>()
+
     init {
         reset()
     }
 
     //attempt #4
     fun reset() {
+        selectStrategy.reset()
         waitingList.clear()
         allCells.forEach {
             it.domain.clear()
@@ -246,7 +254,7 @@ class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
                 for ( (dir, n) in cell.neighbours ) {
                     if ( n.isResolved ) continue
 //                    if ( filter(n, cell) ) {
-                        updateNextVariable(n)
+                        onPropagate(n)
                         waitingList += n
 //                    }
                 }
@@ -258,7 +266,7 @@ class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
 
     // narrowing domains step, reducing original solution
     // looking for min candidate
-    fun propagate(): Boolean {
+    private fun propagate(): Boolean {
         while( waitingList.isNotEmpty() ) {
             val x = waitingList.first()
             waitingList.remove(x)
@@ -269,7 +277,7 @@ class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
             for ( (dir, n) in x.neighbours ) {
                 if ( n.isResolved ) continue
                 if ( filter(n, x, dir) ) {
-                    updateNextVariable(n)
+                    onPropagate(n)
                     waitingList += n
                 }
             }
@@ -278,22 +286,107 @@ class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
         return true
     }
 
-    private var currentSelectedNextProb = 0f
-    private var currentSelectedNext: Vec2i? = null
-    private var currentSelectedNextValue: T? = null
+    private sealed class SelectNextVariable<VariableType, ValueType> {
 
-    fun updateNextVariable(x: Vec2i) {
+        var currentSelectedNext: VariableType? = null
+        var currentSelectedNextValue: ValueType? = null
+
+        val cached get() = currentSelectedNext != null
+        open val selectedVariableValue get() = Pair(currentSelectedNext!!, currentSelectedNextValue!!)
+
+        abstract fun updateCandidate(x: VariableType)
+        open fun reset() {
+            currentSelectedNext = null
+        }
+
+         class MinStrategy<T>(private val summator: (x: Vec2i) -> Map<T, Float>): SelectNextVariable<Vec2i, T>() {
+            private var currentSelectedNextProb = 1f
+            override fun reset() {
+                super.reset()
+                currentSelectedNextProb = 1f
+            }
+            override fun updateCandidate(x: Vec2i) {
+                val sum = summator(x)
+                val minValue = sum.keys.minBy { sum[it]!! }
+                val minProb = sum[minValue]!! / sum.values.sum()
+                if ( minProb < currentSelectedNextProb ) {
+                    currentSelectedNext = x
+                    currentSelectedNextProb = minProb
+                    currentSelectedNextValue = minValue
+                    println("updated min prob: $minProb $minValue at $x sum=$sum")
+                }
+            }
+        }
+
+        class MaxStrategy<T>(private val summator: (x: Vec2i) -> Map<T, Float>): SelectNextVariable<Vec2i, T>() {
+            private var currentSelectedNextProb = 0f
+            override fun reset() {
+                super.reset()
+                currentSelectedNextProb = 0f
+            }
+            override fun updateCandidate(x: Vec2i) {
+                val sum = summator(x)
+                val minValue = sum.keys.maxBy { sum[it]!! }
+                val minProb = sum[minValue]!! / sum.values.sum()
+                if ( minProb > currentSelectedNextProb ) {
+                    currentSelectedNext = x
+                    currentSelectedNextProb = minProb
+                    currentSelectedNextValue = minValue
+                    println("updated max prob: $minProb $minValue at $x sum=$sum")
+                }
+            }
+        }
+
+        class MinDomainRandomStrategy<T: Comparable<T>>(
+            private val minDomainSize: Int,
+            private val random: Random,
+            private val domain: (x: Vec2i) -> Set<T>,
+            private val summator: (x: Vec2i) -> Map<T, Float>,
+        ): SelectNextVariable<Vec2i, T>() {
+            var currDomainSize = minDomainSize
+            override fun reset() {
+                super.reset()
+                currDomainSize = minDomainSize
+            }
+
+            override val selectedVariableValue: Pair<Vec2i, T>
+                get() {
+                    if ( currentSelectedNext == null  ) {
+                        TODO("global select")
+                    } else {
+                        //choose random value
+                        val sum = summator(currentSelectedNext!!)
+                        val sums = sum.entries.toTypedArray()
+                        if ( sums.any { it.key == Tile.LADDER }) {
+                            println(sums.joinToString(", "))
+                        }
+                        val choiceIdx = random.choice(sums.map { it.value.toInt() })
+                        var choice = sums[choiceIdx].key
+
+                        if (choice == Tile.PLAYER || choice == Tile.GUARD) {
+                            choice = Tile.EMPTY as T
+                        }
+                        return Pair(currentSelectedNext!!, choice)
+                    }
+                }
+
+            override fun updateCandidate(x: Vec2i) {
+                with(domain(x).size) {
+                    if (this < currDomainSize) {
+                        currentSelectedNext = x
+                        currDomainSize = this
+                    }
+                }
+            }
+        }
+    }
+
+
+    private fun onPropagate(x: Vec2i) {
         if ( x.domain.size > 1 ) {
             // specific - we have probabilities, so we could calc it
-            val sum = x.sumDomain
-            val minValue = sum.keys.maxBy { sum[it]!! }
-            val minProb = sum[minValue]!! / sum.values.sum()
-            if ( minProb > currentSelectedNextProb ) {
-                currentSelectedNext = x
-                currentSelectedNextProb = minProb
-                currentSelectedNextValue = minValue
-                println("updated min prob: $minProb $minValue at $x sum=$sum")
-            }
+//            val minValue = sum.keys.maxBy { sum[it]!! }
+            selectStrategy.updateCandidate(x)
         }
     }
 
@@ -304,52 +397,46 @@ class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
         }
     }
 
-    private fun selectVariable(): Vec2i {
+    private fun selectVariableValue(): Pair<Vec2i, T> {
 
-        var res = currentSelectedNext
-        currentSelectedNext = null
-        currentSelectedNextProb = 0f
+        if ( selectStrategy.cached ) {
+            val (x, b) = selectStrategy.selectedVariableValue
 
-        if ( res != null && !res.isResolved && !res.isCondradiction ) {
-
-            return res
+            if (!x.isResolved && !x.isCondradiction) {
+                val v = Pair(x, b)
+                selectStrategy.reset()
+                return v
+            }
         }
+
+        // план был такой:
+        // - шейдер тайлов
+        // - модель игры
+        // - анимации и звуки
+        // - генератор уровней
+         //   -- и вот тут эпопея
         // select by scan
         // heuristics
         // by min constraints
         // allCells.filter { it.domain.size > 1 }.minBy { it.domain.size }
         // or by max prob
         allCells.filter { it.domain.size > 1 }.forEach {
-            updateNextVariable(it)
+            onPropagate(it)
         }
 
-        res = Vec2i(currentSelectedNext!!)
-        currentSelectedNext = null
-        currentSelectedNextProb = 0f
+        val res = selectStrategy.selectedVariableValue
+        selectStrategy.reset()
         return res
     }
 
-    private fun selectValue(variable: Vec2i): T {
-//        return currentSelectedNextValue ?: TODO("update min tile")
-        val sum = variable.sumDomain
-        val sums = sum.entries.toTypedArray()
-        val choiceIdx = random.choice(sums.map { it.value.toInt() })
-        var choice = sums[choiceIdx].key
-
-        if ( choice == Tile.PLAYER || choice == Tile.GUARD ) {
-            choice = Tile.EMPTY as T
-        }
-        return choice
-    }
-
     private fun searchForSolution(assignments: Map<Vec2i, T>): Response {
-        println("waitingList = ${waitingList.size}")
+//        println("waitingList = ${waitingList.size}")
         if ( assignments.size == width * height ) return Response.Complete(assignments)
 
         if ( propagate() ) {
             do {
-                val y = selectVariable()
-                val b = selectValue(y)
+                val (y, b) = selectVariableValue()
+                //val b = selectValue(y)
 
                 val oldDomain = y.domain.toSet()
                 setVariable(y, b)
@@ -373,80 +460,10 @@ class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
         return Response.Stuck
     }
 
-    // attempt #3
-
     //Sjb={(i, a)/(j, b) is the smallest value in Dj supporting (i, a) on Rij}
     //while in AC-4 it contains all values supported by (j, b).
-    val counters = Array(height) { Array(width) { mutableMapOf<T, MutableList<VariableValue>>() } }
-    val Vec2i.minSupport get() = counters[y][x]
-
-//    fun isAllowed(a: Tile, b: Tile) = constrains[a, b, dir] > 0
-
-
-//    fun solveStart() {
-//        // as we have simple tiles map, we could numerate arcs (edges, or sides)
-//        // almost the same way as cell
-//        // total = width * (height-1) + height * (width - 1)
-//        waitingList.clear()
-////        deltas.forEach { row -> row.forEach { d -> d.clear() } }
-//
-//        allArcs.forEach { (i, j) ->
-//            val toRemove = mutableSetOf<Tile>()
-//            for ( a in i.domain ) {
-//                val vv = VariableValue(i, a)
-//                var b = nextSupport(i, j, a, Tile.values().first())
-//                if ( b == null ) { // empty support
-//                    //remove a from domain
-//                    // concurrent mod
-//                    // i.domain.remove(a)
-//                    toRemove += a
-//                    waitingList += vv
-//                } else {
-//                    j.minSupport.getOrPut(b) { mutableListOf() } += vv
-//                }
-//            }
-//
-//            if ( toRemove.isNotEmpty() ) {
-//                i.domain.removeAll(toRemove)
-//            }
-//        }
-//    }
-
-    ////
-//    private fun propagateWithSupport(): Boolean {
-//        // process unary constrains
-//
-//        // pop next
-//        var processed = 0
-//        while( waitingList.isNotEmpty() ) {
-//            val (j, b) = waitingList.first()
-//            waitingList.remove(waitingList.first())
-//            /// before its deletion (j, b) was the smallest begin support in Dj for (i, a) on Rij
-//            for (vv in j.minSupport[b] ?: emptyList()) {
-//                j.minSupport[b]?.remove(vv)
-//                val (i, a) = vv
-//                if (i.domain.contains(a)) { // if M(i, a) then
-//                    var c = nextSupport(i, j, a, b)
-//                    if (c == null) {
-//                        i.domain.remove(a)
-//                        waitingList += vv
-//                    } else {
-//                        j.minSupport.getOrPut(c) { mutableListOf() } += vv
-//                    }
-//                }
-//            }
-//        }
-//    }
-
-    // attempt #2
-    // remove inconsistent arcs
-//    fun revise(i: Vec2i, j: Vec2i): Boolean {
-//        // save delta?
-//        return i.domain.removeAll { xtile ->
-//            j.domain.none { constrains[xtile, it] > 0 }
-//        }
-//    }
-
+//    val counters = Array(height) { Array(width) { mutableMapOf<T, MutableList<Pair<Vec2i, T>>>() } }
+//    val Vec2i.minSupport get() = counters[y][x]
 
     sealed class Response {
         object Stuck : Response()
@@ -482,30 +499,12 @@ class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
 //        else Response.Complete
         return minPos
     }
-//
-//    private fun solve(): Response {
-//        return solve(setOf())
-//    }
-//
-//    private fun solve(assignments: Set<Vec2i>): Response {
-//        if ( assignments.size == width * height ) return Response.Complete
-//
-//        val cell = findCandidateToCollapse(assignments)
-//        if ( collapseToRandom(cell) ) {
-//            val result = solve(assignments + cell)
-//            if ( result == Response.Complete ) return result
-//
-//            // else
-//            assignments
-//        }
-//
-//    }
 
     // returns probabilities
     val Vec2i.sumDomain: Map<T, Float> get() = buildMap {
         // count overall dist
 
-        for ( (dir, n) in neighbours(width, height) ) {
+        for ( (dir, n) in neighbours ) {
             // reduce
             domain.forEach { a ->
                 n.domain.forEach { b ->
@@ -523,43 +522,4 @@ class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
 
     }
 
-    //make decision
-    private fun collapseToRandom(cell: Vec2i): Boolean {
-        val a = cell.domain
-        bans[cell]?.forEach { a.remove(it) }
-
-        // count overall dist
-        val occ = mutableMapOf<T, Float>().apply { putAll(cell.sumDomain) }
-        val total = occ.values.sum()
-        print("collapsing random for: $cell $a sum=$occ total=$total ")
-        var r = random.nextDouble(total.toDouble())
-        var choice = occ.keys.last()
-
-        while ( r > 0 ) {
-            choice = occ.keys.first()
-            val v = occ[choice]!!
-            r -= v
-            occ.remove(choice)
-        }
-        println("collapsed to $choice")
-
-        if ( choice == Tile.PLAYER || choice == Tile.GUARD ) {
-            choice = Tile.EMPTY as T
-        }
-
-        decisions.add(decisions.size, Pair(cell, choice))
-
-        return setVariable(cell.x, cell.y, choice)
-    }
-//
-//    private fun arcReduce(x: Vec2i, y: Vec2i, dir: Int): Boolean {
-//        var changed = false
-//        val yd = getDomain(y)
-//
-//        changed = getDomain(x).removeAll { xtile ->
-//            yd.none { constrains[xtile, it, dir] > 0 || constrains[it, xtile, dir] > 0 }
-//        }
-//
-//        return changed
-//    }
 }
