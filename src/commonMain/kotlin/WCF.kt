@@ -36,7 +36,7 @@ val neighboursStar2d = listOf(0, 2, 2, 0, 0, -2, -2, 0, 0 , 1, 1, 0, 0, -1, -1, 
 // up, right, down, left
 val neighboursNeumann2d = listOf(0, 1, 1, 0, 0, -1, -1, 0)
 
-val Neighbours = neighboursNeumann2d
+val Neighbours = neighbours7x7
 val dimSize = ceil(Neighbours.size / 2f).toInt()
 
 interface BinaryConstrains<V, R> {
@@ -52,7 +52,7 @@ fun Vec2i.neighbours(width: Int, height: Int): Sequence<Pair<Int, Vec2i>> =
     }
 
 class Probabilities<T: Comparable<T>>(initial: List<String>/*, n: Int = 1*/): BinaryConstrains<T, Int> {
-//    val totalArcs: Int
+    //    val totalArcs: Int
     val sum: MutableMap<T, MutableMap<Int, MutableMap<T, Int>>> = mutableMapOf()
 
     init {
@@ -80,8 +80,13 @@ class Probabilities<T: Comparable<T>>(initial: List<String>/*, n: Int = 1*/): Bi
         sum[norA]!![dir]!![norB] = r
     }
 
-    override fun toString() = sum.map { "${it.key} = ${it.value.map {
-        "   dir #${it.key} = ${it.value}" 
+    override fun toString() = plainPrint()
+
+    private fun plainPrint() = normalizedPrint { sum }
+
+    fun normalizedPrint(mutableMap: () -> Map<T, Map<Int, Map<T, *>>>) =
+        mutableMap().map { "${it.key} = \n${it.value.map {
+        "   dir #${it.key} = ${it.value}"
     }.joinToString("\n")}" }.joinToString("\n")
 }
 
@@ -101,24 +106,52 @@ fun Probabilities<Tile>.load(initial: List<String>) {
         }
     }
 }
-// collecting probabilities
-fun calcRestrictions(initial: List<String>) = Probabilities<Tile>(initial).apply {
+fun Probabilities<Tile>.loadOverlapped(initial: List<String>, n: Int) {
     val height = initial.size
     val width = initial.first().length
-    val N = 4
-
 //    val subTiles = Array((1+width - N) * (1+height - N)) { Array(N*N) { } }
     val subTiles = mutableListOf<Array<Tile>>()
 
-    (0 until height - N).forEach { startY ->
-        (0 until width - N).forEach { startX ->
+    (0 until height - n).forEach { startY ->
+        (0 until width - n).forEach { startX ->
+            subTiles += Array(n * n) {idx ->
+                val nx = idx % n
+                val ny = idx / n
 
-
+                Tile.byChar[initial[startY + ny][startX + nx]]!!
+            }
         }
-
     }
 
+    val sep = "+" + "-".repeat(n + 2) + "+\n"
+    println(
+        subTiles.joinToString("\n") { tile ->
+            sep +
+            tile.asIterable().chunked(n).map { r ->
+                "| " + r.map { it.char }.joinToString("") + " |"
+            }.joinToString("\n") + "\n" + sep }
+    )
+
+    subTiles.forEach {
+        load(
+            it.asIterable().chunked(n).map { list -> list.map { it.char }.joinToString("") }
+        )
+    }
+}
+fun Probabilities<Tile>.normalized() = sum.map { (x, dirs) ->
+        x to dirs.map { (dir, sums) ->
+            val total = sums.values.sum().toFloat()
+            dir to sums.map { it.key to it.value / total }.toMap()
+        }.toMap()
+    }.toMap()
+
+// collecting probabilities
+fun calcRestrictions(initial: List<String>) = Probabilities<Tile>(initial).apply {
     load(initial)
+}
+
+fun calcOverlapping(initial: List<String>) = Probabilities<Tile>(initial).apply {
+    loadOverlapped(initial, 5)
 }
 
 open class FiniteField2d(val width: Int, val height: Int) {
@@ -127,7 +160,6 @@ open class FiniteField2d(val width: Int, val height: Int) {
     val allCells = (0 until height).asSequence().map { y ->
         (0 until width).asSequence().map { x -> Vec2i(x, y) }
     }.flatMap { it }
-
 }
 
 //typealias VariableValue = Pair<Vec2i, Tile>
@@ -357,9 +389,9 @@ class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
                         //choose random value
                         val sum = summator(currentSelectedNext!!)
                         val sums = sum.entries.toTypedArray()
-                        if ( sums.any { it.key == Tile.LADDER }) {
-                            println(sums.joinToString(", "))
-                        }
+//                        if ( sums.any { it.key == Tile.LADDER }) {
+//                            println(sums.joinToString(", "))
+//                        }
                         val choiceIdx = random.choice(sums.map { it.value.toInt() })
                         var choice = sums[choiceIdx].key
 

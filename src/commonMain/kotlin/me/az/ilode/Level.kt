@@ -2,12 +2,14 @@ package me.az.ilode
 
 import LevelGenerator
 import AnimationFrames
+import calcOverlapping
 import calcRestrictions
 import de.fabmax.kool.math.MutableVec2i
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.pipeline.TexFormat
 import de.fabmax.kool.pipeline.TextureData2d
 import de.fabmax.kool.util.createUint8Buffer
+import normalized
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTime
 
@@ -86,8 +88,9 @@ fun generateGameLevel(
 
 
 
-    val contrains = calcRestrictions(exampleMap)
-    println(contrains)
+//    val contrains = calcRestrictions(exampleMap)
+    val contrains = calcOverlapping(exampleMap)
+    println(contrains.normalizedPrint { contrains.normalized() })
     val exampleWidth = exampleMap.first().length
     val exampleHeight = exampleMap.size
     val mapHeight = 2 * exampleHeight
@@ -115,18 +118,21 @@ fun generateGameLevel(
 
     println(wcf.dis("result"))
 
-    return loadGameLevel(levelId, wcf.variables.map {row ->
-        row.joinToString("") {
-            if ( it.size > 1 ) {
-                println("unobserved: $it")
+    return loadGameLevel(levelId, wcf.variables.mapIndexed { y, row ->
+        row.joinToString("") { domain ->
+            if ( domain.size > 1 ) {
+                println("unobserved: $domain")
                 Tile.EMPTY.char.toString()
             } else {
-                /*(when (it.first()) {
-                    Tile.PLAYER,
-                    Tile.GUARD -> Tile.EMPTY
-                    else -> it.first()
-                }).char.toString()*/
-                it.first().char.toString()
+
+                if ( domain.isEmpty() ) {
+                    // error
+                    println("empty domain in $y")
+                    Tile.EMPTY.char.toString()
+                } else {
+
+                    domain.first().char.toString()
+                }
             }
         }
     }, tilesAtlasIndex, holesIndex, holesAnims).apply {
