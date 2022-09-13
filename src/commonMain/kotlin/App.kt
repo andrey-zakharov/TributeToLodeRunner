@@ -7,6 +7,7 @@ import de.fabmax.kool.scene.*
 import de.fabmax.kool.scene.ui.*
 import me.az.ilode.Game
 import me.az.ilode.GameSettings
+import me.az.ilode.Tile
 import me.az.ilode.ViewCell
 import me.az.utils.b
 import me.az.utils.choice
@@ -139,6 +140,7 @@ class App(val ctx: KoolContext) {
 
     init {
         println(settings.keys)
+        test3()
         test2()
         ctx.assetMgr.assetsBaseDir = "." // = resources
 
@@ -190,6 +192,12 @@ class App(val ctx: KoolContext) {
     }
 
     fun test3() {
+        val a = arrayOf(Tile.LADDER, Tile.BRICK)
+        val b = arrayOf(Tile.LADDER, Tile.BRICK)
+        val c = arrayOf(Tile.EMPTY, Tile.PLAYER)
+        expect( a.contentHashCode() == b.contentHashCode() ) { "expect $a.hashCode = ${a.contentHashCode()} == $b.hashCode = ${b.contentHashCode()}"}
+        expect ( a.contentHashCode() != c.contentHashCode() )
+        expect ( b.contentHashCode() != c.contentHashCode())
 
     }
 

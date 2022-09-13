@@ -90,7 +90,8 @@ fun generateGameLevel(
 
 //    val contrains = calcRestrictions(exampleMap)
     val contrains = calcOverlapping(exampleMap)
-    println(contrains.normalizedPrint { contrains.normalized() })
+    //println(contrains.normalizedPrint { contrains.normalized() })
+    println(contrains.toString())
     val exampleWidth = exampleMap.first().length
     val exampleHeight = exampleMap.size
     val mapHeight = 2 * exampleHeight
@@ -98,25 +99,26 @@ fun generateGameLevel(
     val initials = buildMap {
         exampleMap.forEachIndexed { y, row ->
             row.forEachIndexed { x, c ->
-                val tile = Tile.byChar[c] ?: return@forEachIndexed
-
-                this[Vec2i((mapWidth - exampleWidth) / 2 + x, y + exampleHeight)] = tile
+                //val tile = Tile.byChar[c] ?: return@forEachIndexed
+                val pId = contrains.patternIdOfInitial(x, y)
+                this[Vec2i((mapWidth - exampleWidth) / 2 + x, y + exampleHeight)] = pId
                 //(wcf.width - exampleWidth) / 2 +
                 //(wcf.height - exampleHeight) / 2 +
             }
         }
     }
-    val wcf = LevelGenerator(mapWidth, mapHeight, contrains, initials, Tile.values())
+//    return loadGameLevel(levelId, exampleMap, tilesAtlasIndex, holesIndex, holesAnims)
+    val wcf = LevelGenerator(mapWidth, mapHeight, contrains, initials, contrains.patterns.keys.toTypedArray())
 
     // fill example
-    println(wcf.dis("after load example"))
+//    println(wcf.dis("after load example"))
 
     val dur = measureTime {
         wcf.run()
     }
     println("wcf run in $dur")
 
-    println(wcf.dis("result"))
+//    println(wcf.dis("result"))
 
     return loadGameLevel(levelId, wcf.variables.mapIndexed { y, row ->
         row.joinToString("") { domain ->
@@ -130,8 +132,9 @@ fun generateGameLevel(
                     println("empty domain in $y")
                     Tile.EMPTY.char.toString()
                 } else {
+                    contrains.patterns[domain.first()]!!.first().char.toString()
 
-                    domain.first().char.toString()
+//                    domain.first().char.toString()
                 }
             }
         }

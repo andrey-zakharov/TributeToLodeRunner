@@ -1,8 +1,10 @@
+import de.fabmax.kool.math.MutableVec2i
 import de.fabmax.kool.math.Vec2i
 import me.az.ilode.Tile
 import me.az.utils.choice
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.min
 import kotlin.random.Random
 import kotlin.time.ExperimentalTime
 
@@ -38,18 +40,20 @@ val neighboursNeumann2d = listOf(0, 1, 1, 0, 0, -1, -1, 0)
 
 val Neighbours = neighbours7x7
 val dimSize = ceil(Neighbours.size / 2f).toInt()
+// in finite field
+fun List<Int>.of(x: Vec2i, width: Int, height: Int) =
+    asSequence().chunked(2).mapIndexed { index, (dx, dy) ->
+        Pair(index, Vec2i(x.x + dx, x.y + dy))
+    }.filter { (_, it) ->
+        it.x in 0 until width && it.y in 0 until height
+    }
 
 interface BinaryConstrains<V, R> {
     operator fun get(a: V, b: V, dir: Int): R
 }
 
 fun Vec2i.neighbours(width: Int, height: Int): Sequence<Pair<Int, Vec2i>> =
-    Neighbours.asSequence().chunked(2).mapIndexed { index, (dx, dy) ->
-        Pair(index, Vec2i(this.x + dx, this.y + dy))
-    }
-    .filter { (_, it) ->
-        it.x in 0 until width && it.y in 0 until height
-    }
+    Neighbours.of(this, width, height)
 
 class Probabilities<T: Comparable<T>>(initial: List<String>/*, n: Int = 1*/): BinaryConstrains<T, Int> {
     //    val totalArcs: Int
@@ -150,9 +154,106 @@ fun calcRestrictions(initial: List<String>) = Probabilities<Tile>(initial).apply
     load(initial)
 }
 
-fun calcOverlapping(initial: List<String>) = Probabilities<Tile>(initial).apply {
-    loadOverlapped(initial, 5)
+fun calcOverlapping(initial: List<String>) = PatternRestrictions<PatternHash>(5).apply {
+    //loadOverlapped(initial, 5)
+    load(initial)
 }
+
+typealias PatternHash = Int
+// Int - index of pattern, so its domain value in some variable
+class PatternRestrictions<T>(val n: Int, val m: Int = n): BinaryConstrains<T, Int> {
+
+    val patterns = mutableMapOf<PatternHash, Array<Tile>>() // by hash
+    private val weights = mutableMapOf<PatternHash, Float>() // by pattern hash
+
+    lateinit var patternIdOfInitial: (x: Int, y:Int) -> PatternHash
+    // not array because do not size atm, make it lateinit ?
+    // up, down, left , right
+    // by hash
+    private val sockets = mutableMapOf<Int, Array<MutableSet<Int>>>()//(//Array(neighboursNeumann2d.size / 2) {// how tiles connects to each other
+
+    val uniquePatternsCount get() = patterns.size
+    // "propagator"
+    fun getSupported(patternId: Int, dir: Int) = sockets[ patternId ]?.get(dir) ?: setOf()
+
+    fun load(initial: List<String>) {
+
+        require( initial.isNotEmpty() )
+        require( initial.first().isNotEmpty() )
+        val height = initial.size
+        val width = initial.first().length
+        val patternsHash = IntArray((width-n) * (height-m)) // circular?
+        var patternIndex = 0
+        // at least
+        (0 until height - m).forEach { startY ->
+            (0 until width - n).forEach { startX ->
+                val newPattern = Array(n * m) {idx ->
+                    val nx = idx % n
+                    val ny = idx / n
+
+                    Tile.byChar[initial[startY + ny][startX + nx]]!!
+                }
+
+//                println("${newPattern.contentHashCode()}\t" + newPattern.joinToString("") { it.char.toString() })
+                // hash tile by string?
+                val hash = newPattern.contentHashCode()
+                patternsHash[patternIndex++] = hash
+                if ( !patterns.containsKey(hash) ) {
+                    patterns[hash] = newPattern
+                }
+                val up = weights.getOrPut(hash) { 0f } + 1f
+                weights[hash] = up
+            }
+        }
+
+        val totalDirs = ((2*n - 1) * (2*m - 1) - 1)
+        // find sockets for tiles
+        // not rotating, not mirroring
+        patternsHash.forEachIndexed { index, hash ->
+            val x = index % width
+            val y = index / width
+
+            ( -n + 1 until n - 1).forEach { dx ->
+                ( -m + 1 until m - 1).forEach dy@{ dy ->
+                    if ( dx == 0 && dy == 0) return@dy
+
+                    val dirIdx = (dy + m - 1) * n + (dx + n - 1)
+                    val connectedPatternIdx = (y + dy) * width + (x + dx)
+
+                    if ( connectedPatternIdx < 0 || connectedPatternIdx >= patternsHash.size) return@dy
+
+                    val connectedHash = patternsHash[connectedPatternIdx]
+                    sockets.getOrPut(hash) {
+                        Array(totalDirs) { mutableSetOf() }
+                    }[dirIdx].add(connectedHash)
+                }
+            }
+        }
+
+        patternIdOfInitial = { x, y ->
+            patternsHash[min(x, width-n-1) + min(y, height-m-1) * (width-n)]
+        }
+    }
+
+    val dirs get() = sequence {
+        var dirId = 0
+        (-n + 1 until n - 1).forEach { dx ->
+            (-m + 1 until m - 1).forEach dy@{ dy ->
+                if ( dx == 0 && dy == 0) return@dy
+                yield(Pair(dirId++, Vec2i(dx, dy)))
+            }
+        }
+    }
+
+    fun neighbours(x: Vec2i) = dirs.mapIndexed { index, d -> index to x + d.second }
+
+    override fun get(a: T, b: T, dir: Int): Int {
+        return if (sockets[a as Int]?.get(dir)?.contains(b as Int) == true) 1 else 0
+    }
+}
+
+operator fun Vec2i.plus(o: Vec2i) = Vec2i(this.x + o.x, this.y + o.y)
+
 
 open class FiniteField2d(val width: Int, val height: Int) {
     val Vec2i.idx get() = x + y * width
@@ -163,13 +264,15 @@ open class FiniteField2d(val width: Int, val height: Int) {
 }
 
 //typealias VariableValue = Pair<Vec2i, Tile>
-
+// pattern numbers
+//LevelGenerator<Int>
 @OptIn(ExperimentalTime::class)
-class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
-                                       val constrains: Probabilities<T>,
-                                       val initialAssignments: Map<Vec2i, T>,
-                                       private val initDomain: Array<T>,
-                                       seed: Int = 0) : FiniteField2d(width, height) {
+class LevelGenerator<T: Comparable<T>>(
+    width: Int, height: Int,
+    val constrains: PatternRestrictions<T>,
+    val initialAssignments: Map<Vec2i, T>,
+    private val initDomain: Array<T>,
+    seed: Int = 0) : FiniteField2d(width, height) {
     private val random = Random(seed)
     // get, set, by cell index
 
@@ -179,19 +282,6 @@ class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
     // deleted domain values
 //    val deltas = Array(height) { Array(width) { mutableMapOf<Tile, List< VariableValue >>() } }
     private val waitingList = mutableSetOf<Vec2i>()
-
-    ///tbd sequence
-    val allArcs by lazy { mutableMapOf<Vec2i, Vec2i>().apply {
-        for ( c in allCells ) {
-            for ( (dir, n) in c.neighbours ) {
-                val rev = c.idx > n.idx
-                val first = if ( rev ) n else c
-                val second = if ( rev ) c else n
-                // unique sorted TBD something less general
-                this[first] = second
-            }
-        }
-    } }
 
     private val bans = mutableMapOf<Vec2i, MutableSet<T>>() // unary constraints
 
@@ -218,7 +308,7 @@ class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
     val Vec2i.neighbours get() = this.neighbours(width, height)
     // A table M of Booleans keeps track of which values of the initial
     // domain are in the current domain or not (M(i, a)=true ⇔ a∈Di).
-    val Vec2i.domain get() = variables[y][x]
+    private val Vec2i.domain get() = variables[y][x]
     fun M(i: Vec2i, a: T) = i.domain.contains(a)
 
     //search of the smallest value greater (or equal) than b that belongs to Dj
@@ -285,10 +375,8 @@ class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
                 // on variable change
                 for ( (dir, n) in cell.neighbours ) {
                     if ( n.isResolved ) continue
-//                    if ( filter(n, cell) ) {
-                        onPropagate(n)
-                        waitingList += n
-//                    }
+                    onPropagate(n)
+                    waitingList += n
                 }
             }
             // collapsed
@@ -306,8 +394,8 @@ class LevelGenerator<T: Comparable<T>>(width: Int, height: Int,
 //            if ( y.isResolved ) continue
             if ( x.isCondradiction ) return false
 
-            for ( (dir, n) in x.neighbours ) {
-                if ( n.isResolved ) continue
+            for ( (dir, n) in constrains.neighbours(x) ) {
+
                 if ( filter(n, x, dir) ) {
                     onPropagate(n)
                     waitingList += n
