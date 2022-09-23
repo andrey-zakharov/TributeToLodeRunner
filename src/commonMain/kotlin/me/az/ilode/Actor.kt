@@ -9,6 +9,8 @@ const val MOVE_X = 4
 const val MOVE_Y = 4
 const val TILE_WIDTH    = 20
 const val TILE_HEIGHT   = 22
+const val W4 = TILE_WIDTH / 4 //10, 7, 5,
+const val H4 = TILE_HEIGHT / 4 //11, 8, 5,
 
 enum class CharType {
     RUNNER, GUARD
@@ -53,7 +55,12 @@ open class Actor(val level: GameLevel,
         val curBase = level.getBase(curTile)
 
         // collect gold
-        if ( curBase == TileLogicType.GOLD) {
+        if ( curBase == TileLogicType.GOLD && (
+                (offset.x == 0 && offset.y >= 0 && offset.y < H4) ||
+                (offset.y == 0 && offset.x >= 0 && offset.x < W4) ||
+                (block.y < level.height && level.base[block.x][block.y+1] == TileLogicType.LADDR && offset.y < H4) // gold above laddr
+            )
+        ) {
             var takeGold = false
             if ( charType == CharType.RUNNER) {
                 this as Runner

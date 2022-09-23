@@ -108,17 +108,16 @@ class MainMenuState : State<App>() {
 }
 
 class RunGameState : State<App>() {
-    var gameScene: Scene? = null
+    var gameScene: GameLevelScene? = null
     var infoScene: Scene? = null
 
     override fun enterState(app: App) {
         super.enterState(app)
         val game = Game(app.gameSettings)
-        gameScene = GameLevelScene(game, app.ctx.assetMgr, "level", app.gameSettings)
+        gameScene = GameLevelScene(game, app.ctx.assetMgr, app.gameSettings, "level")
         app.ctx.scenes += gameScene!!
-        infoScene = uiScene {
-
-        }
+        infoScene = GameUI(game, assets = app.ctx.assetMgr, app.gameSettings)
+        app.ctx.scenes += infoScene!!
     }
 
     override fun exitState(app: App) {

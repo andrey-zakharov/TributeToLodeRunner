@@ -1,15 +1,16 @@
 package me.az.ilode
 
-import LevelGenerator
 import AnimationFrames
 import calcOverlapping
-import calcRestrictions
 import de.fabmax.kool.math.MutableVec2i
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.pipeline.TexFormat
 import de.fabmax.kool.pipeline.TextureData2d
 import de.fabmax.kool.util.createUint8Buffer
-import normalized
+import org.mifek.wfc.core.Cartesian2DWfcAlgorithm
+import org.mifek.wfc.datastructures.IntArray2D
+import org.mifek.wfc.models.OverlappingCartesian2DModel
+import org.mifek.wfc.models.options.Cartesian2DModelOptions
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTime
 
@@ -41,6 +42,12 @@ enum class Tile(val char: Char, val base: TileLogicType, val act: TileLogicType,
 //        fun byChar(c: Char) = Tile.values().first { it.char == c }
         val byChar = Tile.values().associateBy { it.char }
     }
+    fun exportForGenerator() = when(this) {
+        PLAYER,
+        GUARD,
+        GOLD -> EMPTY
+        else -> this
+    }.ordinal
 }
 
 data class ViewCell (
@@ -77,6 +84,29 @@ data class ViewCell (
     }
 }
 
+fun formatPatterns(patterns: Array<IntArray>, patternSize: Int): String {
+    return patterns.mapIndexed { index, it ->
+        "$index:\nintArrayOf(\n" +
+                "\t${it.asIterable().chunked(patternSize).joinToString(",\n\t") { it.joinToString(", ") } }\n)"
+    }.joinToString("\n\n")
+}
+
+fun OverlappingCartesian2DModel.dis(algo: Cartesian2DWfcAlgorithm) {
+    val map = constructNullableOutput(algo).joinToString("\n") { row->
+        row.map {
+            when (it) {
+                null -> "." // not collapsed
+                Int.MIN_VALUE -> "!" // conflict
+                else -> Tile.values()[it].char.toString()
+            }
+        }.joinToString("")
+    }
+    println(map)
+}
+expect fun debugAlgoStart(levelId: Int, model: OverlappingCartesian2DModel, algo: Cartesian2DWfcAlgorithm)
+expect fun debugAlgo(model: OverlappingCartesian2DModel, algo: Cartesian2DWfcAlgorithm)
+expect fun debugAlgoEnd(model: OverlappingCartesian2DModel, algo: Cartesian2DWfcAlgorithm)
+
 @OptIn(ExperimentalTime::class)
 fun generateGameLevel(
     levelId: Int,
@@ -91,52 +121,102 @@ fun generateGameLevel(
 //    val contrains = calcRestrictions(exampleMap)
     val contrains = calcOverlapping(exampleMap)
     //println(contrains.normalizedPrint { contrains.normalized() })
-    println(contrains.toString())
     val exampleWidth = exampleMap.first().length
     val exampleHeight = exampleMap.size
     val mapHeight = 2 * exampleHeight
     val mapWidth = 2 * exampleWidth
-    val initials = buildMap {
-        exampleMap.forEachIndexed { y, row ->
-            row.forEachIndexed { x, c ->
-                //val tile = Tile.byChar[c] ?: return@forEachIndexed
-                val pId = contrains.patternIdOfInitial(x, y)
-                this[Vec2i((mapWidth - exampleWidth) / 2 + x, y + exampleHeight)] = pId
-                //(wcf.width - exampleWidth) / 2 +
-                //(wcf.height - exampleHeight) / 2 +
-            }
+    val patternSize = 3 // n , m
+
+    val exampleMapShiftX = (mapWidth - exampleWidth) / 2
+    val exampleMapShiftY = mapHeight - exampleHeight
+    println("input = $exampleWidth x $exampleHeight, output = $mapWidth x $mapHeight")
+    println(exampleMap.joinToString("\n"))
+    println(exampleMap.joinToString("\n") { it.map { Tile.values()[Tile.byChar[it]!!.exportForGenerator()].char }.joinToString("")})
+    println("raw patterns count: ${(exampleWidth - patternSize + 1) * (exampleHeight - patternSize + 1)}")
+
+    val initials = IntArray2D(exampleWidth, exampleHeight) { idx ->
+        val x = idx % exampleWidth
+        val y = idx / exampleWidth
+        Tile.byChar[exampleMap[y][x]]!!.exportForGenerator()
+    }
+
+    val wcf = OverlappingCartesian2DModel(initials, overlap = patternSize - 1,
+        outputWidth = mapWidth, outputHeight = mapHeight,
+        options = Cartesian2DModelOptions(
+            allowRotations = false,
+            allowHorizontalFlips = true,
+            allowVerticalFlips = false,
+            grounded = true,
+            roofed = false,
+            leftSided = false,
+            rightSided = false,
+            periodicInput = true,
+            periodicOutput = false,
+        )
+    )
+
+    // set in map
+    exampleMap.forEachIndexed { y, row ->
+        row.forEachIndexed { x, c ->
+//            println("$x $y -> ${(mapWidth - exampleWidth) / 2 + x}, ${y + mapHeight - exampleHeight}")
+            wcf.setPixel(
+                exampleMapShiftX + x, exampleMapShiftY + y,
+                Tile.byChar[exampleMap[y][x]]!!.exportForGenerator()
+            )
+            //(wcf.width - exampleWidth) / 2 +
+            //(wcf.height - exampleHeight) / 2 +
         }
     }
-//    return loadGameLevel(levelId, exampleMap, tilesAtlasIndex, holesIndex, holesAnims)
-    val wcf = LevelGenerator(mapWidth, mapHeight, contrains, initials, contrains.patterns.keys.toTypedArray())
+    println(formatPatterns(wcf.patterns.toList().toTypedArray(), patternSize))
+
+    val algo = wcf.build()
+
+    debugAlgoStart(wcf, algo)
+
+//    val wcf = LevelGenerator(mapWidth, mapHeight, contrains, initials, contrains.patterns.keys.toTypedArray())
 
     // fill example
 //    println(wcf.dis("after load example"))
 
+    algo.afterFail += {
+        println("failed")
+        //debugAlgoEnd(wcf, algo)
+    }
+
     val dur = measureTime {
-        wcf.run()
+        algo.run(seed = 0)
     }
     println("wcf run in $dur")
+    wcf.dis(algo)
 
-//    println(wcf.dis("result"))
+    val out = wcf.constructNullableOutput(algo)
+    println((0 until mapWidth).map { i -> if ( i % 10 == 0 ) i / 10 else " "}.joinToString(""))
+    println((0 until mapWidth).map { i -> (i % 10) }.joinToString(""))
 
-    return loadGameLevel(levelId, wcf.variables.mapIndexed { y, row ->
+    println( out.joinToString("\n") { row ->
+        row.joinToString("") { when(it) {
+            null -> "."
+            Int.MIN_VALUE -> "!"
+            else -> "$it"
+        } }
+    } )
+    // print original (example) level to map without filtering
+
+    exampleMap.forEachIndexed { y, row ->
+        row.forEachIndexed { x, c ->
+            out[y + exampleMapShiftY][exampleMapShiftX + x] =
+                Tile.byChar[exampleMap[y][x]]!!.ordinal
+        }
+    }
+
+    return loadGameLevel(levelId, out.mapIndexed { y, row ->
         row.joinToString("") { domain ->
-            if ( domain.size > 1 ) {
-                println("unobserved: $domain")
-                Tile.EMPTY.char.toString()
-            } else {
-
-                if ( domain.isEmpty() ) {
-                    // error
-                    println("empty domain in $y")
-                    Tile.EMPTY.char.toString()
-                } else {
-                    contrains.patterns[domain.first()]!!.first().char.toString()
-
-//                    domain.first().char.toString()
-                }
+            val tileIndex = when(domain) {
+                null -> 0 // empty
+                Int.MIN_VALUE -> 0
+                else -> domain
             }
+            Tile.values()[tileIndex].char.toString()
         }
     }, tilesAtlasIndex, holesIndex, holesAnims).apply {
 
@@ -217,6 +297,7 @@ class GameLevel(
     var runnerPos = MutableVec2i()
     val guardsPos = mutableListOf<Vec2i>()
     var gold = 0
+    val isDone get() = gold == 0
     var status = Status.LEVEL_STARTUP
 
     // store logic info
@@ -263,16 +344,17 @@ class GameLevel(
                 }
             // break dig
             } else if ( (animName == "digHoleLeftBase" || animName == "digHoleRightBase") && guard[x][y - 1] ) {
+                // break dig
                 act[x][y] = TileLogicType.BLOCK
                 this[x, y] = ViewCell(false, primaryTileSet[Tile.BRICK.frame]!!)
                 guard[x][y] = false
                 //stopSound
+                runner.sounds.stopSound("dig")
                 anims[it.key] = Pair(animName, animArray.size)
             } else {
                 this[x, y] = ViewCell(true, tileIndex)
             }
         }
-
 
         val iter = anims.iterator()
         while( iter.hasNext() ) {

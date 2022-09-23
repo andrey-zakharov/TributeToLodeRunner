@@ -57,6 +57,7 @@ kotlin {
                 implementation(DepsCommon.kotlinSerialization)
                 implementation(DepsCommon.kotlinSerializationJson)
                 implementation("com.russhwolf:multiplatform-settings-no-arg:0.9")
+                implementation("org.mifek.wfc:WFC-Kotlin:1.2.1")
             }
         }
         val jsMain by getting {

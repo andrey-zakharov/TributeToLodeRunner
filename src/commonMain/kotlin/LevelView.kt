@@ -4,10 +4,8 @@ import de.fabmax.kool.pipeline.Attribute
 import de.fabmax.kool.pipeline.TexFormat
 import de.fabmax.kool.pipeline.Texture2d
 import de.fabmax.kool.pipeline.TextureData2d
-import de.fabmax.kool.pipeline.shading.unlitShader
 import de.fabmax.kool.scene.Group
 import de.fabmax.kool.scene.mesh
-import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.createUint8Buffer
 import me.az.ilode.*
 import kotlin.experimental.and
@@ -23,7 +21,7 @@ class LevelView(
 
 ) : Group() {
     private val tileMapShader = TileMapShader(TileMapShaderConf(tilesAtlas.tileCoords.size))
-    val runnerView = ActorView( game.runner, runnerAtlas, runnerAnims, conf.tileSize)
+    val runnerView = ActorView( game.runner!!, runnerAtlas, runnerAnims, conf.tileSize)
 
     init {
 
@@ -140,6 +138,7 @@ class StatusView(val game: Game, val builder: StringDrawer) : Group() {
                 this.tileSize = tileSize
                 this.tiles = builder.atlas.tex
                 this.secondaryTiles = builder.atlas.tex
+                // TBD just by math in shader itself
                 builder.atlas.tileCoords.forEachIndexed { index, vec2i ->
                     this.tileFrames[index] = MutableVec2f(vec2i.x.toFloat(), vec2i.y.toFloat())
                 }
@@ -150,13 +149,15 @@ class StatusView(val game: Game, val builder: StringDrawer) : Group() {
 //            }
 
             onUpdate += {
-                val scores = game.runner.score.toString().padStart(7, '0')
-                val lives = game.runner.health.toString().padStart(3, '0')
-                val level = (game.level.levelId+1).toString().padStart(3, '0')
-                val text = "score$scores men$lives level$level"
-                if ( text != currentText) {
-                    tileMapShader.field = Texture2d(simpleValueTextureProps, builder.draw(text))
-                    currentText = text
+                if ( game.runner != null ) {
+                    val scores = game.runner!!.score.toString().padStart(7, '0')
+                    val lives = game.runner!!.health.toString().padStart(3, '0')
+                    val level = (game.level.levelId + 1).toString().padStart(3, '0')
+                    val text = "score$scores men$lives level$level"
+                    if (text != currentText) {
+                        tileMapShader.field = Texture2d(simpleValueTextureProps, builder.draw(text))
+                        currentText = text
+                    }
                 }
 
             }

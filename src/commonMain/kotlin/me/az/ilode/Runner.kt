@@ -78,6 +78,9 @@ class Runner(level: GameLevel) : Actor(level, CharType.RUNNER) {
         // Falling sound
         if ( state == State.STATE_FALL && level.status != GameLevel.Status.LEVEL_STARTUP ) {
 
+            playSound("fall")
+        } else {
+            sounds.stopSound("fall")
         }
         updateFrame()
 

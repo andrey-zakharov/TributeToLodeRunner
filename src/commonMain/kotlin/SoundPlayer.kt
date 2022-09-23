@@ -5,7 +5,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
-class SoundPlayer(val assets: AssetManager) {
+class SoundPlayer(private val assets: AssetManager) {
     private val sounds = mutableMapOf<String, AudioClip>()
 
     suspend fun loadSounds() {
@@ -20,7 +20,12 @@ class SoundPlayer(val assets: AssetManager) {
         }.toMap())
     }
 
-    fun playSound(s: String, looped: Boolean = false) {
-        sounds[s]?.play()
+    fun playSound(s: String, looped: Boolean = false, playSingle: Boolean = true) {
+        sounds[s]?.run {
+            if ( playSingle && !isEnded ) return
+            play()
+        }
     }
+
+    fun stopSound(s: String, delay: Float = 0f) = sounds[s]?.stop()
 }

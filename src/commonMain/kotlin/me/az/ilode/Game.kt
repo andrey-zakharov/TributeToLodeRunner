@@ -40,16 +40,18 @@ class Game(val settings: GameSettings) {
     var stopGuards = false
     var immortal = false
     var speed = settings.speed
-    lateinit var runner: Runner
+    var runner: Runner? = null
     val guards = mutableListOf<Guard>()
 
     var nextGuard = 0
     var nextMoves = 0
 
-    val gameOver get() = runner.health <= 0
+    val gameOver get() = runner?.health!! <= 0
     var gameState = GameState.GAME_START
     val isPlaying get() = gameState == GameState.GAME_RUNNING
     val isPaused get() = gameState == GameState.GAME_PAUSE
+
+    val onLevelStart = mutableListOf<(GameLevel) -> Unit>()
 
     lateinit var level: GameLevel
 
@@ -64,25 +66,29 @@ class Game(val settings: GameSettings) {
             guards.add(g)
         }
         level.status = GameLevel.Status.LEVEL_PLAYING
+        onLevelStart.forEach { it.invoke(level) }
     }
 
     fun reset() {
         nextGuard = 0
         nextMoves = 0
-        runner.reset()
+        runner?.reset()
     }
 
     fun tick() {
         when(gameState) {
             GameState.GAME_START -> {
-                if (runner.anyKeyPressed) {
+                if (runner?.anyKeyPressed == true) {
                     gameState = GameState.GAME_RUNNING
-                    if ( level.gold <= 0 ) level.showHiddenLadders()
+                    if ( level.isDone ) level.showHiddenLadders()
                 }
             }
 
             GameState.GAME_RUNNING -> {
                 playGame()
+                if ( level.isDone ) {
+                    level.showHiddenLadders()
+                }
             }
 
             GameState.GAME_RUNNER_DEAD -> {
@@ -94,11 +100,12 @@ class Game(val settings: GameSettings) {
 
     val onPlayGame = mutableListOf<Game.(level: GameLevel) -> Unit>()
 
-    fun playGame() {
-        runner.update()
+    fun playGame(): Boolean {
+        runner?.update()
         guardsUpdate()
-        level.update(runner, guards)
+        level.update(runner!!, guards)
         onPlayGame.forEach { it.invoke(this, level) }
+        return level.isDone
     }
 
     fun guardsUpdate() {
@@ -140,7 +147,7 @@ class Game(val settings: GameSettings) {
                }
 
                if ( !stopGuards ) {
-                   updateGuard(runner)
+                   updateGuard(runner!!)
                }
            }
 
@@ -148,8 +155,6 @@ class Game(val settings: GameSettings) {
             movesCount--
         }
     }
-
-
 }
 
 class GameControls(val game: Game, val inputManager: InputManager) {
@@ -167,6 +172,6 @@ enum class GameAction(
         // destroy stage
         // exit cycle
     }),
-    RESPAWN(UniversalKeyCode('r'), onRelease = { runner.alive = false })
+    RESPAWN(UniversalKeyCode('r'), onRelease = { runner?.alive = false })
 
 }
