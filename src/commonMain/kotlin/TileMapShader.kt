@@ -41,8 +41,6 @@ class TileMapShader(conf: TileMapShaderConf) : KslShader(Program(conf), Pipeline
                 val tileFrames = uniformFloat2Array("frames", conf.totalTiles)
 
                 main {
-                    val tileSetSize = float2Var(textureSize2d(tileSet).toFloat2())
-
                     // in tiles
                     val fieldSize = float2Var(textureSize2d(field).toFloat2())
 
@@ -52,6 +50,7 @@ class TileMapShader(conf: TileMapShaderConf) : KslShader(Program(conf), Pipeline
 
                     val tx = texelFetch(field, tilePos.toInt2())
                     val texelValue = int1Var((tx.r * 255f.const).toInt1())
+                    // TBD rework to Texture3d atlas
                     val isHole = (texelValue and 0x80.const) shr 7.const
                     val tileIndex = texelValue and 0x7f.const
 
@@ -69,6 +68,7 @@ class TileMapShader(conf: TileMapShaderConf) : KslShader(Program(conf), Pipeline
 
 //                        colorOutput(float3Value(0f.const, 0.5f.const, 0.5f.const))
                     }.`else` {
+                        val tileSetSize = float2Var(textureSize2d(tileSet).toFloat2())
 
 //                        colorOutput(float4Value(0f.const, 0.2f.const, 0f.const, 1f.const))
 //                    colorOutput(sampleTexture(field, uv.output) * conf.totalTiles.const.toFloat1())

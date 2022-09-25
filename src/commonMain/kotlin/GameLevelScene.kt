@@ -1,6 +1,7 @@
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.*
+import de.fabmax.kool.math.spatial.BoundingBox
 import de.fabmax.kool.scene.*
 import de.fabmax.kool.scene.animation.Animator
 import de.fabmax.kool.scene.animation.InterpolatedFloat
@@ -10,9 +11,7 @@ import de.fabmax.kool.scene.ui.*
 import de.fabmax.kool.util.Color
 import me.az.ilode.Game
 import me.az.ilode.GameSettings
-import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.min
+import me.az.utils.floor
 
 abstract class AsyncScene(name: String? = null) : Scene(name) {
     protected var sceneState = State.NEW
@@ -105,7 +104,7 @@ class GameLevelScene (
 ) : AsyncScene(name) {
     var tileSet: TileSet = TileSet.SPRITES_APPLE2
     val conf = LevelSpec()
-    val currentLevelId = 0
+    val currentLevelId = 1
     val currentLevel
         get() = levels.getLevel(currentLevelId)
 
@@ -225,30 +224,61 @@ class GameLevelScene (
         }
 
 //        +uiRoot
+        val deadZone = with(camera as OrthographicCamera) {
+            BoundingBox().apply {
+                add(Vec3f(-width / 4, -height / 4, 0f))
+                add(Vec3f(width/4, height/4, 0f))
+            }
+        }
+        val borderZone = with(camera as OrthographicCamera) {
+            val scaledMin = MutableVec3f(levelView.bounds.min)
+            val scaledMax = MutableVec3f(levelView.bounds.max)
+            levelView.transform.transform(scaledMin)
+            levelView.transform.transform(scaledMax)
 
+            BoundingBox().apply {
+                add(Vec3f( scaledMin.x + width / 2f, 0f, 0f))
+                add(Vec3f( scaledMax.x - width / 2f, scaledMax.y - height, 0f))
+            }
+        }
         // each redraw tick
         onUpdate += {
             if ( game.isPlaying ) {
                 val resultPos = MutableVec3f(levelView.runnerView.globalCenter)
+
                 with(camera as OrthographicCamera) {
+                    //camera shift
                     resultPos -= Vec3f(0f, height / 2f, 0f)
-                    if ( abs(resultPos.x - cameraPos.value.x) >= width/4 ) {
-                        resultPos.x = if (resultPos.x < 0) resultPos.x - width/4 else resultPos.x + width/4
-                    }
-                    if (abs(resultPos.y - cameraPos.value.y) >= height/4 ) {
-                        resultPos.y = if (resultPos.y < 0) resultPos.y - height/4 else resultPos.y + height/4
-                    }
-
-                    resultPos.y = max(0f, resultPos.y)
-                    resultPos.y = min(levelView.bounds.max.y - height, resultPos.y)
-                    resultPos.x = max(-levelView.bounds.size.x/2f + width / 2f, resultPos.x)
-                    resultPos.x = min(levelView.bounds.size.x/2f - width / 2f, resultPos.x)
                     // get distance from camera. if more than viewport / 4 - move
-                    resultPos.z = 0f
+                    val diff = resultPos - globalLookAt
+                    if ( !deadZone.contains(diff) ) {
+                        if ( diff.x > deadZone.max.x ) {
+                            resultPos.x = globalPos.x + diff.x - deadZone.max.x
+                        } else if ( diff.x < deadZone.min.x ) {
+                            resultPos.x = globalPos.x - (deadZone.min.x - diff.x)
+                        } else {
+                            resultPos.x = globalPos.x
 
+                        }
 
+                        if ( diff.y > deadZone.max.y ) {
+                            resultPos.y = globalPos.y + diff.y - deadZone.max.y
+                        } else if ( diff.y < deadZone.min.y ) {
+                            resultPos.y = globalPos.y - (deadZone.min.y - diff.y)
+                        } else {
+                            resultPos.y = globalPos.y
+                        }
+                    } else {
+                        resultPos.x = globalPos.x
+                        resultPos.y = globalPos.y
+                    }
 
-                    cameraPos.to.set(resultPos.x, resultPos.y, 10f)
+                    borderZone.clampToBounds(resultPos)
+//                    resultPos.z = 0f
+
+                    cameraPos.to.set(
+                        resultPos.x /*+ (ctx.inputMgr.pointerState.primaryPointer.x.toFloat() - it.viewport.width/2) / 50f*/,
+                        resultPos.y /*+ (ctx.inputMgr.pointerState.primaryPointer.y.toFloat() - it.viewport.height/2) / 50f*/, 10f)
                     cameraPos.from.set(cameraPos.value)
                     //                    cameraAnimator.progress = 0f
                     //                    cameraAnimator.speed = 1f
@@ -265,6 +295,8 @@ class GameLevelScene (
         // each game tick
         game.onPlayGame += {
             camera.position.set ( cameraAnimator.tick(ctx) )
+            camera.position.x = camera.position.x.floor
+            camera.position.y = camera.position.y.floor
             camera.lookAt.set(camera.position.x, camera.position.y, 0f)
         }
     }
@@ -272,6 +304,12 @@ class GameLevelScene (
     var lastUpdate = 0.0
 
 }
+
+private operator fun Vec3f.minus(position: Vec3f) = Vec3f(
+    this.x - position.x,
+    this.y - position.y,
+    this.z - position.z,
+)
 
 val OrthographicCamera.height get() = top - bottom
 val OrthographicCamera.width get () = right - left

@@ -104,8 +104,6 @@ fun OverlappingCartesian2DModel.dis(algo: Cartesian2DWfcAlgorithm) {
     println(map)
 }
 expect fun debugAlgoStart(levelId: Int, model: OverlappingCartesian2DModel, algo: Cartesian2DWfcAlgorithm)
-expect fun debugAlgo(model: OverlappingCartesian2DModel, algo: Cartesian2DWfcAlgorithm)
-expect fun debugAlgoEnd(model: OverlappingCartesian2DModel, algo: Cartesian2DWfcAlgorithm)
 
 @OptIn(ExperimentalTime::class)
 fun generateGameLevel(
@@ -171,7 +169,7 @@ fun generateGameLevel(
 
     val algo = wcf.build()
 
-    debugAlgoStart(wcf, algo)
+//    debugAlgoStart(levelId, wcf, algo)
 
 //    val wcf = LevelGenerator(mapWidth, mapHeight, contrains, initials, contrains.patterns.keys.toTypedArray())
 
@@ -184,12 +182,14 @@ fun generateGameLevel(
     }
 
     val dur = measureTime {
-        algo.run(seed = 0)
+        algo.run(seed = 2)
     }
     println("wcf run in $dur")
     wcf.dis(algo)
 
     val out = wcf.constructNullableOutput(algo)
+
+    // metric
     println((0 until mapWidth).map { i -> if ( i % 10 == 0 ) i / 10 else " "}.joinToString(""))
     println((0 until mapWidth).map { i -> (i % 10) }.joinToString(""))
 

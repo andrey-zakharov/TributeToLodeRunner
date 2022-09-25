@@ -3,11 +3,13 @@ package me.az.utils
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.contains
 import org.mifek.wfc.datastructures.IntArray2D
+import kotlin.math.floor
 import kotlin.properties.ReadWriteProperty
 import kotlin.random.Random
 import kotlin.reflect.KProperty
 
 val Int.b get() = toByte()
+val Float.floor: Float get() = floor(this)
 
 
 internal inline fun <reified E: Enum<E>>enumDelegate(settings: Settings,

@@ -83,13 +83,18 @@ open class Sprite(
 
     }
 
-    class SpriteShader() : KslShader(Model(), pipelineConfig) {
+
+    class SpriteShader : KslShader(Model(), pipelineConfig) {
         // or region from tex
-        var texture by texture2d("tex")
-        var textureOffset by uniform2i("texOffset")
-        var tileSize by uniform2i("tileSize")
+        var texture by texture2d(UNIFORM_TEXTURE)
+        var textureOffset by uniform2i(UNIFORM_OFFSET)
+        var tileSize by uniform2i(UNIFORM_TILESIZE)
 
         companion object {
+            private const val UNIFORM_TEXTURE = "tex"
+            private const val UNIFORM_OFFSET = "texOffset"
+            private const val UNIFORM_TILESIZE = "tileSize"
+
             val SPRITE_MESH_ATTRIBS = listOf(Attribute.POSITIONS, Attribute.TEXTURE_COORDS, Attribute.COLORS)
             private val pipelineConfig = PipelineConfig().apply {
                 blendMode = BlendMode.BLEND_PREMULTIPLIED_ALPHA
@@ -98,26 +103,28 @@ open class Sprite(
             }
         }
 
-        class Model() : KslProgram("sprite") {
+        class Model : KslProgram("sprite") {
             init {
                 val texCoords = interStageFloat2()
                 val color = interStageFloat4()
 
                 vertexStage {
                     main {
+                        val mvp = mat4Var(mvpMatrix().matrix)
                         texCoords.input set vertexAttribFloat2(Attribute.TEXTURE_COORDS.name)
                         color.input set vertexAttribFloat4(Attribute.COLORS.name)
-                        outPosition set mvpMatrix().matrix * float4Value(vertexAttribFloat3(Attribute.POSITIONS.name), 1f)
+                        outPosition set mvp * float4Value(vertexAttribFloat3(Attribute.POSITIONS.name), 1f)
                     }
                 }
                 fragmentStage {
                     main {
-                        val atlasTex = texture2d("tex")
-                        val textureOffset = uniformInt2("texOffset")
-                        val tileSize = uniformInt2("tileSize")
+
+                        val atlasTex = texture2d(UNIFORM_TEXTURE)
+                        val textureOffset = uniformInt2(UNIFORM_OFFSET)
+                        val tileSize = uniformInt2(UNIFORM_TILESIZE)
                         val atlasTexSize = textureSize2d(atlasTex).toFloat2()
                         colorOutput(texelFetch(atlasTex,
-                            (texCoords.output * tileSize.toFloat2() + textureOffset.toFloat2()).toInt2()))
+                            trunc(texCoords.output * tileSize.toFloat2() + textureOffset.toFloat2()).toInt2()))
                     }
                 }
             }

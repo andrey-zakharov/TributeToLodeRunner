@@ -8,6 +8,7 @@ import org.mifek.wfc.models.OverlappingCartesian2DModel
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.io.File
+import java.io.RandomAccessFile
 import javax.imageio.stream.FileImageOutputStream
 import kotlin.math.floor
 
@@ -85,26 +86,6 @@ var lastAssign: Int? = null
 var lastBan: Int? = null
 var afterWarmup = false
 
-@OptIn(ExperimentalUnsignedTypes::class)
-actual fun debugAlgo(
-    model: OverlappingCartesian2DModel,
-    algo: Cartesian2DWfcAlgorithm
-) {
-
-
-    writer?.writeToSequence(
-        model.constructRgbArray(algo, lastAssign).toBufferedImage(3f)
-    )
-
-}
-
-actual fun debugAlgoEnd(
-    model: OverlappingCartesian2DModel,
-    algo: Cartesian2DWfcAlgorithm
-) {
-    writer?.close()
-}
-
 actual fun debugAlgoStart(
     levelId: Int,
     model: OverlappingCartesian2DModel,
@@ -112,17 +93,21 @@ actual fun debugAlgoStart(
 ) {
 
 //    File("debug/${levelId + 1}/").createNewFile()
+    val outfile = File("/opt/debug_out/${levelId + 1}_test.gif")
+    outfile.delete()
     writer = GifSequenceWriter(
-        FileImageOutputStream(File("0_test.gif")),
+        FileImageOutputStream(outfile),
         BufferedImage.TYPE_INT_ARGB,
-        60,
+        1,
         loopContinuously = false
     )
+
     algo.afterWarmup += {
         println("after warmup")
         model.dis(algo)
         afterWarmup = true
     }
+
     algo.afterObserve += {(a, value, variable)->
         if (a.waves[value].count { it } == 0) {
 
@@ -132,11 +117,14 @@ actual fun debugAlgoStart(
     }
     algo.afterFinished += {
         println("finished")
-        debugAlgoEnd(model, algo)
+        writer?.close()
     }
     algo.afterBan += { (a: WfcAlgorithm, variable: Int, value: Int) ->
         if ( lastBan != variable ) {
-            debugAlgo(model, algo)
+            val data = model.constructRgbArray(algo, lastAssign)
+            writer?.writeToSequence(
+                data.toBufferedImage(3f)
+            )
             lastBan = variable
         }
 
