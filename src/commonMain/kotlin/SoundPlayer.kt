@@ -23,6 +23,7 @@ class SoundPlayer(private val assets: AssetManager) {
     fun playSound(s: String, looped: Boolean = false, playSingle: Boolean = true) {
         sounds[s]?.run {
             if ( playSingle && !isEnded ) return
+            if ( !isEnded ) stop() // or put over
             play()
         }
     }

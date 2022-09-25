@@ -104,7 +104,7 @@ open class Actor(val level: GameLevel,
         } else if ( act == Action.ACT_DIG && charType == CharType.RUNNER) {
             this as Runner
             if ( canDig ) {
-                playSound("dig")
+                playSound("dig", true)
                 val (digTileX, bitmap) = if ( digLeft || (action == "runLeft" && !digRight)) {
                     action = "digLeft"
                     Pair(block.x - 1, "digHoleLeft")
@@ -261,7 +261,8 @@ open class Actor(val level: GameLevel,
         frameIndex++
     }
 
-    fun playSound(sound: String) = sounds.playSound(sound)
+    fun playSound(sound: String, force: Boolean = false) = if ( force ) sounds.playSound(sound, false, false) else
+        sounds.playSound(sound, false, true)
 //    fun stopSound(sound: String) = onEvent.forEach { it.invoke(this, StopSound(sound)) }
 }
 

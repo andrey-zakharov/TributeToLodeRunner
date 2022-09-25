@@ -362,6 +362,7 @@ class GameLevel(
             val (animName, frameIndex) = entry.value
             if ( frameIndex < holesAnims.sequence[animName]!!.size ) continue
 
+            // purge old anims
             if ( animName == "digHoleLeft" || animName == "digHoleRight" ) {
                 this[entry.key] = ViewCell(false, primaryTileSet[Tile.EMPTY.frame]!!)
                 act[entry.key.x][entry.key.y] = TileLogicType.EMPTY
@@ -407,7 +408,6 @@ class GameLevel(
                 }
             }
         }
-
     }
 
     fun isBarrier(x: Int, y: Int) = !isValid(x, y) ||

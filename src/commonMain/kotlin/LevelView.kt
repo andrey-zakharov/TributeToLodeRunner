@@ -86,16 +86,9 @@ class ActorView(val actor: Actor,
             setIdentity()
             translate(
                 actor.block.x - actor.level.width/2.0 + 0.5, actor.level.height - actor.block.y - 0.5,
-//                (actor.block.x  ) + actor.offset.x,
-//                (actor.level.height/2.0 - actor.block.y ) - actor.offset.y,
-//                ((actor.block.x + 0.5) * TILE_WIDTH + actor.offset.x/* - actor.level.width / 2 */),
-//                (actor.level.height - ((actor.block.y + 0.5) * TILE_HEIGHT - actor.offset.y) /*+  / 2*/),
-//                (actor.block.x * me.az.ilode.TILE_WIDTH + actor.offset.x).toDouble(),
-//                (actor.block.y * me.az.ilode.TILE_WIDTH + actor.offset.y).toDouble(),
                 0.0)
 //            scale(1f, 1f, 1f )
             translate(actor.offset.x.toDouble()/tileSize.x, -actor.offset.y.toDouble()/tileSize.y, 0.0)
-
         }
     }
 }
