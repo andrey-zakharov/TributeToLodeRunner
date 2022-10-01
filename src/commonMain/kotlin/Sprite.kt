@@ -21,9 +21,11 @@ open class Sprite(
     private val texture: Texture2d,
     private val regionSize: Vec2i?, // how much get from texture by pixels
     name: String? = null,
-    private val mirrorTexCoordsY: Boolean = false) : Group("sprite $name group") {
+    private val mirrorTexCoordsY: Boolean = false
+) : Group("sprite $name group") {
 
     val textureOffset = MutableVec2i(Vec2i.ZERO)
+    var grayScaled: Boolean = false    // workaround GL_LUMINANCE obsolesce
 
     val spriteShader by lazy { SpriteShader() }
 
@@ -77,6 +79,7 @@ open class Sprite(
             onUpdate += {
                 spriteShader.textureOffset = this@Sprite.textureOffset
                 spriteShader.tileSize = _regionSize
+                spriteShader.grayScaled = if ( grayScaled ) 1 else 0
             }
         }
         setIdentity()
@@ -89,17 +92,19 @@ open class Sprite(
         var texture by texture2d(UNIFORM_TEXTURE)
         var textureOffset by uniform2i(UNIFORM_OFFSET)
         var tileSize by uniform2i(UNIFORM_TILESIZE)
+        var grayScaled by uniform1i(UNIFORM_GRAY)
 
         companion object {
             private const val UNIFORM_TEXTURE = "tex"
             private const val UNIFORM_OFFSET = "texOffset"
             private const val UNIFORM_TILESIZE = "tileSize"
+            private const val UNIFORM_GRAY = "gray"
 
             val SPRITE_MESH_ATTRIBS = listOf(Attribute.POSITIONS, Attribute.TEXTURE_COORDS, Attribute.COLORS)
             private val pipelineConfig = PipelineConfig().apply {
                 blendMode = BlendMode.BLEND_PREMULTIPLIED_ALPHA
                 cullMethod = CullMethod.NO_CULLING
-                depthTest = DepthCompareOp.LESS_EQUAL
+                depthTest = DepthCompareOp.DISABLED
             }
         }
 
@@ -122,9 +127,16 @@ open class Sprite(
                         val atlasTex = texture2d(UNIFORM_TEXTURE)
                         val textureOffset = uniformInt2(UNIFORM_OFFSET)
                         val tileSize = uniformInt2(UNIFORM_TILESIZE)
+                        val gray = uniformInt1(UNIFORM_GRAY)
                         val atlasTexSize = textureSize2d(atlasTex).toFloat2()
-                        colorOutput(texelFetch(atlasTex,
-                            trunc(texCoords.output * tileSize.toFloat2() + textureOffset.toFloat2()).toInt2()))
+                        val texel = texelFetch(atlasTex,
+                            trunc(texCoords.output * tileSize.toFloat2() + textureOffset.toFloat2()).toInt2()
+                        )
+                        `if`(gray gt 0.const) {
+                            colorOutput(texel.float3("xxx"))
+                        }.`else` {
+                            colorOutput(texel)
+                        }
                     }
                 }
             }

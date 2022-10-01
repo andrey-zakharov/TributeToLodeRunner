@@ -1,3 +1,5 @@
+package me.az.shaders
+
 import de.fabmax.kool.modules.ksl.KslShader
 import de.fabmax.kool.modules.ksl.blocks.mvpMatrix
 import de.fabmax.kool.modules.ksl.lang.*
@@ -8,7 +10,7 @@ class TileMapShaderConf(val totalTiles: Int) {
 
 }
 class TileMapShader(conf: TileMapShaderConf) : KslShader(Program(conf), PipelineConfig().apply {
-    blendMode = BlendMode.DISABLED
+    blendMode = BlendMode.BLEND_PREMULTIPLIED_ALPHA
     cullMethod = CullMethod.NO_CULLING
     depthTest = DepthCompareOp.DISABLED
 }) {
@@ -37,14 +39,15 @@ class TileMapShader(conf: TileMapShaderConf) : KslShader(Program(conf), Pipeline
                 val tileSet = texture2d("tiles")
                 val secondaryTileSet = texture2d("secondaryTiles")
                 val time = uniformFloat1("time")
+
                 val tileSize = uniformInt2("tileSize")
                 val tileFrames = uniformFloat2Array("frames", conf.totalTiles)
 
                 main {
                     // in tiles
                     val fieldSize = float2Var(textureSize2d(field).toFloat2())
-
                     val inField = fieldSize * uv.output
+
                     val tilePos = floor(inField)
                     val xyWithinTile = (inField - tilePos) * tileSize.toFloat2()
 
@@ -54,7 +57,7 @@ class TileMapShader(conf: TileMapShaderConf) : KslShader(Program(conf), Pipeline
                     val isHole = (texelValue and 0x80.const) shr 7.const
                     val tileIndex = texelValue and 0x7f.const
 
-                    `if` ( isHole gt 0.const ) {
+                    `if`(isHole gt 0.const) {
                         val secTileSetSize = float2Var(textureSize2d(secondaryTileSet).toFloat2())
                         val tilesInTileSet = (secTileSetSize / tileSize.toFloat2()).toInt2()
                         val y = floor(tileIndex.toFloat1() / tilesInTileSet.x.toFloat1()).toInt1()
@@ -63,21 +66,21 @@ class TileMapShader(conf: TileMapShaderConf) : KslShader(Program(conf), Pipeline
 
 //                        val d= (xyWithinTile + tileOffset.toFloat2()) / secTileSetSize
 //                        colorOutput(float3Value(d.x, 0f.const, d.y))
-                        colorOutput(texelFetch(secondaryTileSet,
-                            (xyWithinTile + tileOffset.toFloat2()).toInt2()).xyz)
-
-//                        colorOutput(float3Value(0f.const, 0.5f.const, 0.5f.const))
+                        colorOutput(
+                            texelFetch(
+                                secondaryTileSet,
+                                (xyWithinTile + tileOffset.toFloat2()).toInt2()
+                            ).xyz
+                        )
                     }.`else` {
-                        val tileSetSize = float2Var(textureSize2d(tileSet).toFloat2())
-
+//                            val tileSetSize = float2Var(textureSize2d(tileSet).toFloat2())
 //                        colorOutput(float4Value(0f.const, 0.2f.const, 0f.const, 1f.const))
 //                    colorOutput(sampleTexture(field, uv.output) * conf.totalTiles.const.toFloat1())
 //                    colorOutput(float4Value(tx.x* conf.totalTiles.const.toFloat1(), t.x * conf.totalTiles.const.toFloat1(), 0f.const, 1f.const))
-
 //                    colorOutput(float4Value(sampleTexture(field, uv.output).r * conf.totalTiles.const.toFloat1(),
 //                        tileIndex.toFloat1() / tileSetSize.x , 0f.const, 1f.const))
 //                        colorOutput(float3Value(0f.const, 0f.const, isHole.toFloat1()))
-                        colorOutput( texelFetch(tileSet, (xyWithinTile + tileFrames[tileIndex]).toInt2()) )
+                        colorOutput(texelFetch(tileSet, (xyWithinTile + tileFrames[tileIndex]).toInt2()))
                     }
                 }
             }

@@ -8,7 +8,10 @@ import de.fabmax.kool.scene.Group
 import de.fabmax.kool.scene.mesh
 import de.fabmax.kool.util.createUint8Buffer
 import me.az.ilode.*
+import me.az.shaders.TileMapShader
+import me.az.shaders.TileMapShaderConf
 import kotlin.experimental.and
+import kotlin.math.sqrt
 
 class LevelView(
     game: Game, level: GameLevel, conf: LevelSpec,
@@ -51,7 +54,7 @@ class LevelView(
 //                field = Texture2d(simpleValueTextureProps, level.updateTileMap())
             }
 
-            onUpdate += {
+            onUpdate +=  {
                 tileMapShader.time =  it.time.toFloat()
                 if ( level.dirty ) {
                     tileMapShader.field = Texture2d(simpleValueTextureProps, level.updateTileMap())
@@ -64,7 +67,6 @@ class LevelView(
         game.guards.forEach {
             +ActorView(it, guardAtlas, guardAnims, conf.tileSize)
         }
-
     }
 }
 

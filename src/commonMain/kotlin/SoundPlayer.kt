@@ -29,4 +29,6 @@ class SoundPlayer(private val assets: AssetManager) {
     }
 
     fun stopSound(s: String, delay: Float = 0f) = sounds[s]?.stop()
+
+    operator fun get(s: String) = sounds[s]
 }

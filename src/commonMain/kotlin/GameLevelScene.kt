@@ -2,16 +2,20 @@ import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.*
 import de.fabmax.kool.math.spatial.BoundingBox
+import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.*
-import de.fabmax.kool.scene.animation.Animator
-import de.fabmax.kool.scene.animation.InterpolatedFloat
-import de.fabmax.kool.scene.animation.InterpolatedValue
-import de.fabmax.kool.scene.animation.SquareAnimator
+import de.fabmax.kool.scene.animation.*
 import de.fabmax.kool.scene.ui.*
 import de.fabmax.kool.util.Color
 import me.az.ilode.Game
 import me.az.ilode.GameSettings
+import me.az.ilode.GameState
+import me.az.ilode.SCORE_COUNTER
+import me.az.shaders.MaskShader
 import me.az.utils.floor
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sqrt
 
 abstract class AsyncScene(name: String? = null) : Scene(name) {
     protected var sceneState = State.NEW
@@ -104,10 +108,11 @@ class GameLevelScene (
 ) : AsyncScene(name) {
     var tileSet: TileSet = TileSet.SPRITES_APPLE2
     val conf = LevelSpec()
-    val currentLevelId = 1
+    val currentLevelId = 2
     val currentLevel
         get() = levels.getLevel(currentLevelId)
 
+    private lateinit var bg: Texture2d
     private var tilesAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet, "tiles"))
     private var runnerAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet, "runner"))
     private var guardAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet, "guard"))
@@ -139,24 +144,34 @@ class GameLevelScene (
         progress = 0f
         speed = 1f
     }
+    private val shatterRadiusAnim = LinearAnimator(InterpolatedFloat(1f, 0f)).apply {
+        duration = 60f
+    }
+    val currentShutter get() = shatterRadiusAnim.value.value
 
     lateinit var levelView: LevelView
+    //cam
+    val visibleWidth get() = visibleTilesX*conf.tileSize.x
+    val visibleHeight get() = visibleTilesY * conf.tileSize.y
+
+    private val createCamera get() = OrthographicCamera("plain").apply {
+        projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
+        isClipToViewport = false
+        isKeepAspectRatio = true
+        val hw = visibleWidth / 2f
+        top = visibleHeight * 1f
+        bottom = 0f
+        left = -hw
+        right = hw
+        clipFar = 10f
+        clipNear = 0.1f
+    }
 
     init {
 
-        camera = OrthographicCamera("plain").apply {
+        camera = createCamera.apply {
             projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
-            isClipToViewport = false
-            isKeepAspectRatio = true
-            val hw = (visibleTilesX / 2f)*conf.tileSize.x
-            top = visibleTilesY * conf.tileSize.y * 1f
-            bottom = 0f
-            left = -hw
-            right = hw
-            clipFar = 10f
-            clipNear = 0.1f
         }
-
     }
 
     override suspend fun AssetManager.loadResources(ctx: KoolContext) {
@@ -171,6 +186,7 @@ class GameLevelScene (
 
         sounds.loadSounds()
         levels.load(LevelSet.CLASSIC)
+        bg = loadAndPrepareTexture("images/cover.jpg", simpleTextureProps)
 
     }
 
@@ -180,10 +196,31 @@ class GameLevelScene (
 
     override fun setup(ctx: KoolContext) {
 
+
+        game.onStatusChanged += {
+            when(it) {
+                GameState.GAME_START -> startIntro()
+                GameState.GAME_RUNNING -> stopIntro()
+                GameState.GAME_FINISH -> {
+                    sounds.playSound("pass")
+                    val scoreDuration = sounds["pass"]?.duration?.div((SCORE_COUNTER + 1)) ?: 0
+                    startOutro()
+                }
+                else -> Unit
+            }
+        }
         game.levelStartup(currentLevel, guardAnims)
         game.runner!!.sounds = sounds
         for ( g in game.guards ) {
             g.sounds = sounds
+        }
+
+        +sprite(bg).apply {
+            grayScaled = true
+            val imageMinSide = min(bg.loadedTexture!!.width, bg.loadedTexture!!.height)
+            val camSide = max((camera as OrthographicCamera).width, (camera as OrthographicCamera).height)
+            scale(camSide / imageMinSide)
+            // paralax TBD
         }
 
         +RunnerController(ctx.inputMgr, game.runner!!)
@@ -193,8 +230,38 @@ class GameLevelScene (
 
         // views
         levelView = LevelView(game, currentLevel, conf, tilesAtlas, holeAtlas, runnerAtlas, runnerAnims, guardAtlas, guardAnims)
-        +levelView
+        val off = OffscreenRenderPass2d(levelView, renderPassConfig {
+            this.name = "bg"
+            width = visibleWidth
+            height = visibleHeight
 
+            addColorTexture {
+                colorFormat = TexFormat.RGBA
+            }
+        }).apply {
+            camera = createCamera.apply {
+                projCorrectionMode = Camera.ProjCorrectionMode.OFFSCREEN
+            }
+            clearColor = Color(0.00f, 0.00f, 0.00f, 0.00f)
+            //?
+            this.camera.position.set(this@GameLevelScene.camera.position)
+        }
+        //mask
+        +textureMesh {
+            generate {
+                rect {
+                    size.set(visibleWidth.toFloat(), visibleHeight.toFloat())
+                    origin.set(-width/2, 0f, 0f)
+                    mirrorTexCoordsY()
+                }
+            }
+            shader = MaskShader { color { textureColor(off.colorTexture) } }
+            (shader as MaskShader).visibleRadius = ( sqrt(visibleWidth.toFloat() * visibleWidth + visibleHeight * visibleHeight) / 2f )
+            onUpdate += {
+                (shader as MaskShader).visibleRadius = currentShutter
+            }
+        }
+        addOffscreenPass(off)
         val uiRoot = UiRoot(this).apply {
             theme = UiTheme.LIGHT
             isFillViewport = true
@@ -204,12 +271,13 @@ class GameLevelScene (
                 layoutSpec.setSize(full(), dps(100f), full())
                 //layoutSpec.setOrigin(zero(), zero(), uns(0f))
                 onUpdate += {
-                    text = "%.3f %.3f\n%.3f %.3f".format(
+                    /*text = "%.3f %.3f\n%.3f %.3f".format(
                         levelView.runnerView.globalCenter.x - cameraPos.to.x,
                         levelView.runnerView.globalCenter.y - cameraPos.to.y,
                         camera.position.x,
                         camera.position.y
-                    )
+                    )*/
+                    text = "%.1f %.1f %.1f".format(shatterRadiusAnim.value.from, currentShutter, shatterRadiusAnim.value.to)
                 }
             }
 
@@ -222,8 +290,7 @@ class GameLevelScene (
                 requestLayout()
             }
         }
-
-//        +uiRoot
+        +uiRoot
         val deadZone = with(camera as OrthographicCamera) {
             BoundingBox().apply {
                 add(Vec3f(-width / 4, -height / 4, 0f))
@@ -243,6 +310,7 @@ class GameLevelScene (
         }
         // each redraw tick
         onUpdate += {
+            shatterRadiusAnim.tick( it.ctx )
             if ( game.isPlaying ) {
                 val resultPos = MutableVec3f(levelView.runnerView.globalCenter)
 
@@ -285,9 +353,8 @@ class GameLevelScene (
                 }
             }
 
-
             if ( (it.time - lastUpdate) * 1000 >= gameSettings.speed.msByPass ) {
-                game.tick()
+                game.tick(it.ctx)
                 lastUpdate = it.time
             }
         }
@@ -303,6 +370,26 @@ class GameLevelScene (
 
     var lastUpdate = 0.0
 
+    private fun startOutro() =
+        shatterRadiusAnim.apply {
+            speed = 1f
+            progress = 0f
+            value.from = levelView.bounds.circumcircleRadius
+            value.to = 0f
+        }
+
+    private fun startIntro() =
+        shatterRadiusAnim.apply {
+            speed = 1f
+            progress = 0f
+            value.from = 0f
+            value.to = levelView.bounds.circumcircleRadius
+        }
+
+    private fun stopIntro() = shatterRadiusAnim.apply {
+        progress = 1f
+    }
+
 }
 
 private operator fun Vec3f.minus(position: Vec3f) = Vec3f(
@@ -313,3 +400,6 @@ private operator fun Vec3f.minus(position: Vec3f) = Vec3f(
 
 val OrthographicCamera.height get() = top - bottom
 val OrthographicCamera.width get () = right - left
+val BoundingBox.width get() = max.x - min.x
+val BoundingBox.height get() = max.y - min.y
+val BoundingBox.circumcircleRadius get() = sqrt(width * width + height * height) / 2

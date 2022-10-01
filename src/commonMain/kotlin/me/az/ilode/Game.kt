@@ -7,8 +7,13 @@ import TileSet
 import com.russhwolf.settings.*
 import de.fabmax.kool.InputManager
 import de.fabmax.kool.KeyCode
+import de.fabmax.kool.KoolContext
 import de.fabmax.kool.UniversalKeyCode
+import de.fabmax.kool.scene.animation.InterpolatedFloat
+import de.fabmax.kool.scene.animation.LinearAnimator
 import me.az.utils.enumDelegate
+import org.mifek.wfc.utils.EventHandler
+import kotlin.math.sqrt
 import kotlin.random.Random
 
 
@@ -28,8 +33,9 @@ class GameSettings(val settings: Settings) {
     var version: LevelSet by enumDelegate(settings, defaultValue = LevelSet.CLASSIC)
     val startLevel: Int by settings.int(defaultValue = 0)
     var speed: GameSpeed by enumDelegate(settings, defaultValue = GameSpeed.SPEED_SLOW)
+    var introDuration by settings.float(defaultValue = 60f)
 }
-
+const val SCORE_COUNTER = 15 // how much scores bumbs in finish anim
 const val SCORE_COMPLETE = 1500
 const val SCORE_GOLD     = 250
 const val SCORE_FALL     = 75
@@ -47,15 +53,21 @@ class Game(val settings: GameSettings) {
     var nextMoves = 0
 
     val gameOver get() = runner?.health!! <= 0
-    var gameState = GameState.GAME_START
+    private var gameState = GameState.GAME_START
+        set(value) {
+            field = value
+            onStatusChanged.forEach { it.invoke(field) }
+        }
     val isPlaying get() = gameState == GameState.GAME_RUNNING
     val isPaused get() = gameState == GameState.GAME_PAUSE
 
+    val onStatusChanged = mutableListOf<(GameState) -> Unit>()
     val onLevelStart = mutableListOf<(GameLevel) -> Unit>()
 
     lateinit var level: GameLevel
 
     fun levelStartup(level: GameLevel, guardAnims: AnimationFrames) {
+        gameState = GameState.GAME_START
         this.level = level
         // playStartAnim
         runner = Runner(level)
@@ -73,12 +85,13 @@ class Game(val settings: GameSettings) {
         nextGuard = 0
         nextMoves = 0
         runner?.reset()
+        gameState = GameState.GAME_START
     }
 
-    fun tick() {
+    fun tick( ctx: KoolContext ) {
         when(gameState) {
             GameState.GAME_START -> {
-                if (runner?.anyKeyPressed == true) {
+                if ( runner?.anyKeyPressed == true) {
                     gameState = GameState.GAME_RUNNING
                     if ( level.isDone ) level.showHiddenLadders()
                 }
@@ -89,12 +102,27 @@ class Game(val settings: GameSettings) {
                 if ( level.isDone ) {
                     level.showHiddenLadders()
                 }
+
+                if ( level.isDone && runner?.block?.y == 0 && runner?.offset?.y == 0) {
+                    // enter state
+                    gameState = GameState.GAME_FINISH
+                }
+            }
+            GameState.GAME_FINISH -> {
+                // stop all sprites anims
+                // play mode == PLAY
+                runner?.addScore(SCORE_COMPLETE)
+                gameState = GameState.GAME_FINISH_SCORE_COUNT
+
+
             }
 
             GameState.GAME_RUNNER_DEAD -> {
 //                stopSound
             }
-            else -> {}
+            else -> {
+                println(gameState)
+            }
         }
     }
 
