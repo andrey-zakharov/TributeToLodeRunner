@@ -1,12 +1,16 @@
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
+import de.fabmax.kool.UniversalKeyCode
 import de.fabmax.kool.math.*
 import de.fabmax.kool.math.spatial.BoundingBox
+import de.fabmax.kool.modules.ksl.KslUnlitShader
+import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.*
 import de.fabmax.kool.scene.animation.*
-import de.fabmax.kool.scene.ui.*
+
 import de.fabmax.kool.util.Color
+import de.fabmax.kool.util.Viewport
 import me.az.ilode.Game
 import me.az.ilode.GameSettings
 import me.az.ilode.GameState
@@ -144,10 +148,13 @@ class GameLevelScene (
         progress = 0f
         speed = 1f
     }
-    private val shatterRadiusAnim = LinearAnimator(InterpolatedFloat(1f, 0f)).apply {
-        duration = 60f
+    private val shatterRadiusAnim = LinearAnimator(InterpolatedFloat(0f, 1f)).apply {
+        duration = 30f
     }
     val currentShutter get() = shatterRadiusAnim.value.value
+    val uiShiftX = MutableStateValue(0f)
+    val uiShiftY = MutableStateValue(0f)
+    val debug = MutableStateValue("")
 
     lateinit var levelView: LevelView
     //cam
@@ -230,8 +237,10 @@ class GameLevelScene (
 
         // views
         levelView = LevelView(game, currentLevel, conf, tilesAtlas, holeAtlas, runnerAtlas, runnerAnims, guardAtlas, guardAnims)
+        game.startGame()
         val off = OffscreenRenderPass2d(levelView, renderPassConfig {
             this.name = "bg"
+
             width = visibleWidth
             height = visibleHeight
 
@@ -244,7 +253,7 @@ class GameLevelScene (
             }
             clearColor = Color(0.00f, 0.00f, 0.00f, 0.00f)
             //?
-            this.camera.position.set(this@GameLevelScene.camera.position)
+//            this.camera.position.set(this@GameLevelScene.camera.position)
         }
         //mask
         +textureMesh {
@@ -258,63 +267,35 @@ class GameLevelScene (
             shader = MaskShader { color { textureColor(off.colorTexture) } }
             (shader as MaskShader).visibleRadius = ( sqrt(visibleWidth.toFloat() * visibleWidth + visibleHeight * visibleHeight) / 2f )
             onUpdate += {
-                (shader as MaskShader).visibleRadius = currentShutter
+                (shader as MaskShader).visibleRadius = shatterRadiusAnim.tick( it.ctx )
             }
         }
         addOffscreenPass(off)
-        val uiRoot = UiRoot(this).apply {
-            theme = UiTheme.LIGHT
-            isFillViewport = true
 
-            +label("debug") {
-
-                layoutSpec.setSize(full(), dps(100f), full())
-                //layoutSpec.setOrigin(zero(), zero(), uns(0f))
-                onUpdate += {
-                    /*text = "%.3f %.3f\n%.3f %.3f".format(
-                        levelView.runnerView.globalCenter.x - cameraPos.to.x,
-                        levelView.runnerView.globalCenter.y - cameraPos.to.y,
-                        camera.position.x,
-                        camera.position.y
-                    )*/
-                    text = "%.1f %.1f %.1f".format(shatterRadiusAnim.value.from, currentShutter, shatterRadiusAnim.value.to)
-                }
-            }
-
-            onUpdate += {
-                (camera as OrthographicCamera).run {
-                    val origin = MutableVec3f(50f, 0f, 0f)
-//                        projectScreen(Vec3f(-1f, -1f, 0f), it.viewport, ctx, origin )
-                    content.layoutSpec.setOrigin(uns(origin.x, false), uns(origin.y, false), zero())
-                }
-                requestLayout()
-            }
-        }
-        +uiRoot
-        val deadZone = with(camera as OrthographicCamera) {
+        val deadZone = with(off.camera as OrthographicCamera) {
             BoundingBox().apply {
-                add(Vec3f(-width / 4, -height / 4, 0f))
-                add(Vec3f(width/4, height/4, 0f))
+                add(Vec3f(-this@with.width / 4, -this@with.height / 4, 0f))
+                add(Vec3f(this@with.width/4, this@with.height/4, 0f))
             }
         }
-        val borderZone = with(camera as OrthographicCamera) {
+        val borderZone = with(off.camera as OrthographicCamera) {
             val scaledMin = MutableVec3f(levelView.bounds.min)
             val scaledMax = MutableVec3f(levelView.bounds.max)
             levelView.transform.transform(scaledMin)
             levelView.transform.transform(scaledMax)
 
             BoundingBox().apply {
-                add(Vec3f( scaledMin.x + width / 2f, 0f, 0f))
-                add(Vec3f( scaledMax.x - width / 2f, scaledMax.y - height, 0f))
+                add(Vec3f( scaledMin.x + this@with.width / 2f, 0f, 0f))
+                add(Vec3f( scaledMax.x - this@with.width / 2f, scaledMax.y - this@with.height, 0f))
             }
         }
         // each redraw tick
-        onUpdate += {
-            shatterRadiusAnim.tick( it.ctx )
+        onUpdate += { ev ->
+
             if ( game.isPlaying ) {
                 val resultPos = MutableVec3f(levelView.runnerView.globalCenter)
 
-                with(camera as OrthographicCamera) {
+                with(off.camera as OrthographicCamera) {
                     //camera shift
                     resultPos -= Vec3f(0f, height / 2f, 0f)
                     // get distance from camera. if more than viewport / 4 - move
@@ -353,28 +334,55 @@ class GameLevelScene (
                 }
             }
 
-            if ( (it.time - lastUpdate) * 1000 >= gameSettings.speed.msByPass ) {
-                game.tick(it.ctx)
-                lastUpdate = it.time
+            if ( (ev.time - lastUpdate) * 1000 >= gameSettings.speed.msByPass ) {
+                game.tick(ev.ctx)
+                lastUpdate = ev.time
             }
+
+//            (camera as? OrthographicCamera)?.let { cam ->
+//                cam.left = 0f
+//                cam.top = 0f
+//                cam.right = ev.renderPass.viewport.width.toFloat()
+//                cam.bottom = -ev.renderPass.viewport.height.toFloat()
+//            }
         }
 
         // each game tick
         game.onPlayGame += {
-            camera.position.set ( cameraAnimator.tick(ctx) )
-            camera.position.x = camera.position.x.floor
-            camera.position.y = camera.position.y.floor
-            camera.lookAt.set(camera.position.x, camera.position.y, 0f)
+            with(off.camera) {
+                position.set ( cameraAnimator.tick(ctx) )
+                lookAt.set(position.x, position.y, 0f)
+            }
         }
     }
 
     var lastUpdate = 0.0
 
+    fun setupUi(scope: UiScope) = with(scope) {
+        modifier
+            .width(Grow(1f, max = WrapContent))
+            .height(WrapContent)
+            .margin(start = 25.dp, top = 25.dp, bottom = 60.dp)
+            .layout(ColumnLayout)
+            .alignX(AlignmentX.Start)
+            .alignY(AlignmentY.Top)
+        Row {
+            Text(debug.use()) {
+                modifier
+                    .width(WrapContent)
+                    .height(WrapContent)
+                onUpdate += {
+                    debug.set("%.1f %.1f %.1f".format(shatterRadiusAnim.value.from, currentShutter, shatterRadiusAnim.value.to))
+                }
+            }
+        }
+    }
+
     private fun startOutro() =
         shatterRadiusAnim.apply {
             speed = 1f
             progress = 0f
-            value.from = levelView.bounds.circumcircleRadius
+            value.from = levelView.globalBounds.circumcircleRadius
             value.to = 0f
         }
 
@@ -383,11 +391,12 @@ class GameLevelScene (
             speed = 1f
             progress = 0f
             value.from = 0f
-            value.to = levelView.bounds.circumcircleRadius
+            value.to = levelView.globalBounds.circumcircleRadius
         }
 
     private fun stopIntro() = shatterRadiusAnim.apply {
-        progress = 1f
+//        progress = 1f
+        speed = 100f
     }
 
 }
@@ -403,3 +412,14 @@ val OrthographicCamera.width get () = right - left
 val BoundingBox.width get() = max.x - min.x
 val BoundingBox.height get() = max.y - min.y
 val BoundingBox.circumcircleRadius get() = sqrt(width * width + height * height) / 2
+val Group.globalBounds: BoundingBox get() {
+    val scaledMin = MutableVec3f(bounds.min)
+    val scaledMax = MutableVec3f(bounds.max)
+
+    transform.transform(scaledMin)
+    transform.transform(scaledMax)
+    return BoundingBox().apply {
+        add(scaledMin)
+        add(scaledMax)
+    }
+}

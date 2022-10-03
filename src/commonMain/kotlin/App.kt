@@ -1,10 +1,13 @@
 import com.russhwolf.settings.Settings
+import de.fabmax.kool.InputManager
 import de.fabmax.kool.KoolContext
+import de.fabmax.kool.UniversalKeyCode
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.math.isFuzzyZero
+import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.*
-import de.fabmax.kool.scene.ui.*
+import de.fabmax.kool.util.Viewport
 import me.az.ilode.Game
 import me.az.ilode.GameSettings
 import me.az.ilode.Tile
@@ -53,34 +56,33 @@ class MainMenuState : State<App>() {
 
     var startnewGame = false
 
-    val mainMenu = uiScene {scene ->
-        +container("main menu container") {
-//            layoutSpec.setOrigin(dps(50f), dps(50f), dps(0f) )
-            layoutSpec.setSize(full(), full(), full())
+    val mainMenu = Ui2Scene {
+        +UiSurface {
+            modifier
+                .width(WrapContent)
+                .padding(start = (10f * -1f).dp)
+                .height(Grow.Std)
+                .background(background = null)
 
-            var y = -90f
-            val centered = Gravity(Alignment.CENTER, Alignment.CENTER)
-            +button("new game") {
-                layoutSpec.setOrigin(zero(), dps(y), zero())
-                layoutSpec.setSize(full(), dps(30f), full())
-                textAlignment = centered
-                onClick += { _ , _ , _ ->
-                    startnewGame = true
-                }
+            Button("new game") {
+                modifier
+                    .width(30f.dp)
+                    .textAlign(AlignmentX.Center, AlignmentY.Center)
+                    .onClick {
+                        startnewGame = true
+                    }
             }
 
-            y-= 30f
-            +label("level: ") {
-                layoutSpec.setOrigin(zero(), dps(y), zero())
-                layoutSpec.setSize(full(), dps(30f), full())
-                textAlignment = centered
+            Button("level: ") {
+                modifier
+                    .width(30f.dp)
+                    .textAlign(AlignmentX.Center, AlignmentY.Center)
             }
 
-            y-= 30f
-            +label( "exit" ) {
-                layoutSpec.setOrigin(zero(), dps(y), zero())
-                layoutSpec.setSize(full(), dps(30f), full())
-                textAlignment = centered
+            Button( "exit" ) {
+                modifier
+                    .width(30f.dp)
+                    .textAlign(AlignmentX.Center, AlignmentY.Center)
             }
         }
 
@@ -110,6 +112,8 @@ class MainMenuState : State<App>() {
 class RunGameState : State<App>() {
     var gameScene: GameLevelScene? = null
     var infoScene: Scene? = null
+    var debugScene: Scene? = null
+    var listener: InputManager.KeyEventListener? = null
 
     override fun enterState(app: App) {
         super.enterState(app)
@@ -118,12 +122,73 @@ class RunGameState : State<App>() {
         app.ctx.scenes += gameScene!!
         infoScene = GameUI(game, assets = app.ctx.assetMgr, app.gameSettings)
         app.ctx.scenes += infoScene!!
+        debugScene = Ui2Scene {
+            +UiSurface {
+                gameScene?.setupUi(this)
+                val w = Viewport()
+                app.ctx.getWindowViewport(w)
+
+                modifier
+                    .width(500.dp)
+                    .height(WrapContent)
+                    .margin(top = 10.dp, bottom = 10.dp)
+                    .padding(horizontal = sizes.gap, vertical = sizes.largeGap)
+                    .layout(ColumnLayout)
+                    .alignX(AlignmentX.Start)
+                    .alignY(AlignmentY.Top)
+/*                Row {
+
+                    Slider(gameScene!!.uiShiftX.use(), -w.width/2f, w.width/2f) {
+                        modifier
+                            .width(300.dp)
+                            .onChange { gameScene!!.uiShiftX.set(it) }
+                            .onChangeEnd {
+                                //gameScene?.
+                            }
+                    }
+
+                    Button("reset X") {
+                        modifier
+                            .margin(start = 5.dp)
+                            .onClick += {
+                                gameScene?.uiShiftX?.set(0f)
+                            }
+                    }
+                }
+                Row {
+
+                    Slider(gameScene!!.uiShiftY.use(), -w.height/2f, w.height/2f) {
+                        modifier
+                            .width(300.dp)
+                            .onChange { gameScene!!.uiShiftY.set(it) }
+                            .onChangeEnd {
+                                //gameScene?.
+                            }
+                    }
+                }*/
+            }
+        }
+
+        listener = app.ctx.inputMgr.registerKeyListener(UniversalKeyCode('d'), "toggle debug") {
+            when {
+                debugScene == null -> Unit
+                it.isPressed -> if ( app.ctx.scenes.contains(debugScene) ) {
+                    app.ctx.scenes -= debugScene!!
+                } else {
+                    app.ctx.scenes += debugScene!!
+                }
+            }
+        }
+
+        app.ctx.scenes += debugScene!!
     }
 
     override fun exitState(app: App) {
         super.exitState(app)
+        listener?.run { app.ctx.inputMgr.removeKeyListener(this) }
         gameScene?.run { app.ctx.scenes -= this }
         infoScene?.run { app.ctx.scenes -= this }
+        debugScene?.run { app.ctx.scenes -= this }
     }
 
     override fun update(app: App): State<App>? {

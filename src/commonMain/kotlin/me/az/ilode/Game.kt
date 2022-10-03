@@ -67,7 +67,6 @@ class Game(val settings: GameSettings) {
     lateinit var level: GameLevel
 
     fun levelStartup(level: GameLevel, guardAnims: AnimationFrames) {
-        gameState = GameState.GAME_START
         this.level = level
         // playStartAnim
         runner = Runner(level)
@@ -80,6 +79,8 @@ class Game(val settings: GameSettings) {
         level.status = GameLevel.Status.LEVEL_PLAYING
         onLevelStart.forEach { it.invoke(level) }
     }
+
+    fun startGame() { gameState = GameState.GAME_START }
 
     fun reset() {
         nextGuard = 0

@@ -1,6 +1,5 @@
 package me.az.shaders
 
-import de.fabmax.kool.modules.ksl.KslShader
 import de.fabmax.kool.modules.ksl.KslUnlitShader
 import de.fabmax.kool.modules.ksl.blocks.convertColorSpace
 import de.fabmax.kool.modules.ksl.blocks.fragmentColorBlock
@@ -14,12 +13,13 @@ open class MaskShader(cfg: Config, model: KslProgram = MaskModel(cfg)) : KslUnli
 
     constructor(block: Config.() -> Unit) : this(Config().apply(block))
 
-    class MaskModel(cfg: Config) : KslProgram("Unlit Shader") {
+    class MaskModel(cfg: Config) : KslProgram("Mask Shader") {
         val uv = interStageFloat2("uv")
         init {
             vertexStage {
                 main {
                     val mvp = mat4Var(mvpMatrix().matrix)
+                    uv.input set vertexAttribFloat2(Attribute.TEXTURE_COORDS.name)
                     if (cfg.isInstanced) {
                         mvp *= instanceAttribMat4(Attribute.INSTANCE_MODEL_MAT.name)
                     }
@@ -29,10 +29,11 @@ open class MaskShader(cfg: Config, model: KslProgram = MaskModel(cfg)) : KslUnli
             fragmentStage {
                 main {
                     val darkRadius = uniformFloat1("radius")
-                    val tex = texture2d(cfg.colorCfg.colorName)
+                    val tex = texture2d(cfg.colorCfg.primaryTexture?.textureName!!)
                     val texSize = float2Var(textureSize2d(tex).toFloat2())
 
-                    `if` ( length(texSize * (uv.output - 0.5f.const2)) ge darkRadius ) {
+                    val centered = uv.output - 0.5f.const2
+                    `if` ( length(texSize * centered) ge darkRadius ) {
                         colorOutput(0f.const4)
 
                     }.`else` {
