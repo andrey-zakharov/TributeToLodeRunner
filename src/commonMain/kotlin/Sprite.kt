@@ -8,7 +8,7 @@ import de.fabmax.kool.scene.Group
 import de.fabmax.kool.scene.Scene
 import de.fabmax.kool.scene.mesh
 // represent both simple texture2d or frame in atlas
-fun Scene.sprite(texture: Texture2d,
+fun sprite(texture: Texture2d,
                  name: String? = null,
                  spriteSize: Vec2i? = null,
                  regionSize: Vec2i? = null,
@@ -54,12 +54,7 @@ open class Sprite(
 
     private fun buildMesh() {
         removeAllChildren()
-
-        // texture should be loaded
-//        require(texture.loadingState == Texture.LoadingState.LOADED) { "texture in sprite $name (${texture.name}) not loaded" }
-//
-//        val fullTexSize = Vec2i( texture.loadedTexture!!.width, texture.loadedTexture!!.height )
-
+        setIdentity()
         +mesh(SpriteShader.SPRITE_MESH_ATTRIBS, name) {
             generate {
                 rect {
@@ -82,8 +77,6 @@ open class Sprite(
                 spriteShader.grayScaled = if ( grayScaled ) 1 else 0
             }
         }
-        setIdentity()
-
     }
 
 
@@ -123,7 +116,6 @@ open class Sprite(
                 }
                 fragmentStage {
                     main {
-
                         val atlasTex = texture2d(UNIFORM_TEXTURE)
                         val textureOffset = uniformInt2(UNIFORM_OFFSET)
                         val tileSize = uniformInt2(UNIFORM_TILESIZE)

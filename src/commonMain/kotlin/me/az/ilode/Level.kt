@@ -7,6 +7,8 @@ import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.pipeline.TexFormat
 import de.fabmax.kool.pipeline.TextureData2d
 import de.fabmax.kool.util.createUint8Buffer
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import org.mifek.wfc.core.Cartesian2DWfcAlgorithm
 import org.mifek.wfc.datastructures.IntArray2D
 import org.mifek.wfc.models.OverlappingCartesian2DModel
@@ -111,7 +113,8 @@ fun generateGameLevel(
     exampleMap: List<String>,
     tilesAtlasIndex: Map<String, Int>,
     holesIndex: MutableMap<String, Int>,
-    holesAnims: AnimationFrames
+    holesAnims: AnimationFrames,
+    scope: CoroutineScope,
 ): GameLevel {
 
 
@@ -152,75 +155,87 @@ fun generateGameLevel(
             periodicOutput = false,
         )
     )
+    return loadGameLevel(levelId, Array<String>(wcf.outputHeight) { y ->
+        (0 until wcf.outputWidth).joinToString("") { x ->
+            val exampleX = x - exampleMapShiftX
+            val exampleY = y - exampleMapShiftY
+            val tileIndex =
+                if (exampleX in 0 until exampleWidth && exampleY in 0 until exampleHeight) exampleMap[exampleY][exampleX]
+                else Tile.values()[0].char
+            tileIndex.toString()
+        }
+    }.toList(), tilesAtlasIndex, holesIndex, holesAnims).apply {
 
-    // set in map
-    exampleMap.forEachIndexed { y, row ->
-        row.forEachIndexed { x, c ->
+        scope.launch {
+            // set in map
+            exampleMap.forEachIndexed { y, row ->
+                row.forEachIndexed { x, c ->
 //            println("$x $y -> ${(mapWidth - exampleWidth) / 2 + x}, ${y + mapHeight - exampleHeight}")
-            wcf.setPixel(
-                exampleMapShiftX + x, exampleMapShiftY + y,
-                Tile.byChar[exampleMap[y][x]]!!.exportForGenerator()
-            )
-            //(wcf.width - exampleWidth) / 2 +
-            //(wcf.height - exampleHeight) / 2 +
-        }
-    }
-    println(formatPatterns(wcf.patterns.toList().toTypedArray(), patternSize))
-
-    val algo = wcf.build()
-
-//    debugAlgoStart(levelId, wcf, algo)
-
-//    val wcf = LevelGenerator(mapWidth, mapHeight, contrains, initials, contrains.patterns.keys.toTypedArray())
-
-    // fill example
-//    println(wcf.dis("after load example"))
-
-    algo.afterFail += {
-        println("failed")
-        //debugAlgoEnd(wcf, algo)
-    }
-
-    val dur = measureTime {
-        algo.run(seed = 2)
-    }
-    println("wcf run in $dur")
-    wcf.dis(algo)
-
-    val out = wcf.constructNullableOutput(algo)
-
-    // metric
-    println((0 until mapWidth).map { i -> if ( i % 10 == 0 ) i / 10 else " "}.joinToString(""))
-    println((0 until mapWidth).map { i -> (i % 10) }.joinToString(""))
-
-    println( out.joinToString("\n") { row ->
-        row.joinToString("") { when(it) {
-            null -> "."
-            Int.MIN_VALUE -> "!"
-            else -> "$it"
-        } }
-    } )
-    // print original (example) level to map without filtering
-
-    exampleMap.forEachIndexed { y, row ->
-        row.forEachIndexed { x, c ->
-            out[y + exampleMapShiftY][exampleMapShiftX + x] =
-                Tile.byChar[exampleMap[y][x]]!!.ordinal
-        }
-    }
-
-    return loadGameLevel(levelId, out.mapIndexed { y, row ->
-        row.joinToString("") { domain ->
-            val tileIndex = when(domain) {
-                null -> 0 // empty
-                Int.MIN_VALUE -> 0
-                else -> domain
+                    wcf.setPixel(
+                        exampleMapShiftX + x, exampleMapShiftY + y,
+                        Tile.byChar[exampleMap[y][x]]!!.exportForGenerator()
+                    )
+                    //(wcf.width - exampleWidth) / 2 +
+                    //(wcf.height - exampleHeight) / 2 +
+                }
             }
-            Tile.values()[tileIndex].char.toString()
-        }
-    }, tilesAtlasIndex, holesIndex, holesAnims).apply {
+//            println(formatPatterns(wcf.patterns.toList().toTypedArray(), patternSize))
 
+            val algo = wcf.build()
+
+            algo.afterFail += {
+                println("failed")
+            }
+
+            val dur = measureTime {
+                algo.run(seed = 2)
+            }
+            println("wcf run in $dur")
+            wcf.dis(algo)
+
+            val out = wcf.constructNullableOutput(algo)
+
+            // metric
+            println((0 until mapWidth).map { i -> if ( i % 10 == 0 ) i / 10 else " "}.joinToString(""))
+            println((0 until mapWidth).map { i -> (i % 10) }.joinToString(""))
+
+            println( out.joinToString("\n") { row ->
+                row.joinToString("") { when(it) {
+                    null -> "."
+                    Int.MIN_VALUE -> "!"
+                    else -> "$it"
+                } }
+            } )
+            // print original (example) level to map without filtering
+
+            exampleMap.forEachIndexed { y, row ->
+                row.forEachIndexed { x, c ->
+                    out[y + exampleMapShiftY][exampleMapShiftX + x] =
+                        Tile.byChar[exampleMap[y][x]]!!.ordinal
+                }
+            }
+
+            out.forEachIndexed { y, row ->
+                row.forEachIndexed { x, cellIdx ->
+                    if ( cellIdx == null ) return@forEachIndexed
+                    if (x - exampleMapShiftX in 0 until exampleWidth &&
+                        y - exampleMapShiftY in 0 until exampleHeight
+                    ) return@forEachIndexed
+                    val tile = Tile.values()[cellIdx]
+
+                    act[x][y] = tile.act
+                    base[x][y] = tile.base
+
+                    set(x, y, ViewCell(false, tilesAtlasIndex[
+                            if ( tile.base == TileLogicType.HLADR || tile.frame.isEmpty() )
+                                Tile.EMPTY.frame
+                            else tile.frame
+                    ]!!))
+                }
+            }
+        }
     }
+
 
 }
 
@@ -270,11 +285,7 @@ fun loadGameLevel(
                 )
             }
         }
-        for (x in 0 until this.width ) {
-            this.act[x][this.height-1] = TileLogicType.SOLID
-            this.base[x][this.height-1] = TileLogicType.SOLID
-            this[x, this.height-1] = ViewCell(false, tilesAtlasIndex["ground"]!!)
-        }
+
     }
 }
 
@@ -307,6 +318,13 @@ class GameLevel(
     val anims = mutableMapOf<Vec2i, Pair<String, Int>>() // pos -> anim name, current frame index in anim
     var dirty = false
 
+    init {
+        for (x in 0 until this.width ) {
+            this.act[x][this.height-1] = TileLogicType.SOLID
+            this.base[x][this.height-1] = TileLogicType.SOLID
+            this[x, this.height-1] = ViewCell(false, primaryTileSet["ground"]!!)
+        }
+    }
     fun update(runner: Runner, guards: List<Guard>) {
 //        anims.takeIf { it.isNotEmpty() }?.run { println(this) }
         anims.forEach {
@@ -381,11 +399,13 @@ class GameLevel(
 
     operator fun get(at: Vec2i) = get(at.x, at.y)
     operator fun set(at: Vec2i, v: ViewCell) = set(at.x, at.y, v)
-    operator fun set(at: Vec2i, t: Tile) {
-        if (isValid(at)) {
-            set(at.x, at.y, ViewCell(get(at.x, at.y)!!.hole, primaryTileSet[t.frame]!!))
+    operator fun set(x: Int, y: Int, t: Tile) {
+        if (isValid(x, y)) {
+            set(x, y, ViewCell(get(x, y)?.hole ?: false, primaryTileSet[t.frame] ?: 0))
         }
     }
+    operator fun set(at: Vec2i, t: Tile) = set(at.x, at.y, t)
+
 
     fun getAct(at: Vec2i) = act[at.x][at.y]
     fun getBase(at: Vec2i) = base[at.x][at.y]

@@ -25,6 +25,8 @@ class LevelView(
 ) : Group() {
     private val tileMapShader = TileMapShader(TileMapShaderConf(tilesAtlas.tileCoords.size))
     val runnerView = ActorView( game.runner!!, runnerAtlas, runnerAnims, conf.tileSize)
+    val widthInPx = conf.tileSize.x * level.width
+    val heightInPx = conf.tileSize.y * level.height
 
     init {
 

@@ -134,8 +134,8 @@ class RunGameState : State<App>() {
                     .margin(top = 10.dp, bottom = 10.dp)
                     .padding(horizontal = sizes.gap, vertical = sizes.largeGap)
                     .layout(ColumnLayout)
-                    .alignX(AlignmentX.Start)
-                    .alignY(AlignmentY.Top)
+                    .alignX(AlignmentX.Center)
+                    .alignY(AlignmentY.Bottom)
 /*                Row {
 
                     Slider(gameScene!!.uiShiftX.use(), -w.width/2f, w.width/2f) {
@@ -187,8 +187,11 @@ class RunGameState : State<App>() {
         super.exitState(app)
         listener?.run { app.ctx.inputMgr.removeKeyListener(this) }
         gameScene?.run { app.ctx.scenes -= this }
+        gameScene = null
         infoScene?.run { app.ctx.scenes -= this }
+        infoScene = null
         debugScene?.run { app.ctx.scenes -= this }
+        debugScene = null
     }
 
     override fun update(app: App): State<App>? {
@@ -204,12 +207,14 @@ class App(val ctx: KoolContext) {
 
     init {
         println(settings.keys)
+
         test3()
         test2()
         ctx.assetMgr.assetsBaseDir = "." // = resources
 
 //        changeState(MainMenuState())
         changeState(RunGameState())
+
 
         ctx.onRender += {
             val newState = state?.update(this)

@@ -6,17 +6,22 @@ import de.fabmax.kool.math.spatial.BoundingBox
 import de.fabmax.kool.modules.ksl.KslUnlitShader
 import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.*
+import de.fabmax.kool.pipeline.FullscreenShaderUtil.generateFullscreenQuad
 import de.fabmax.kool.scene.*
 import de.fabmax.kool.scene.animation.*
 
 import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.Viewport
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.MainScope
 import me.az.ilode.Game
 import me.az.ilode.GameSettings
 import me.az.ilode.GameState
 import me.az.ilode.SCORE_COUNTER
 import me.az.shaders.MaskShader
 import me.az.utils.floor
+import kotlin.coroutines.CoroutineContext
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -109,14 +114,19 @@ class GameLevelScene (
     val gameSettings: GameSettings,
     name: String? = null,
 
-) : AsyncScene(name) {
+) : AsyncScene(name), CoroutineScope {
     var tileSet: TileSet = TileSet.SPRITES_APPLE2
     val conf = LevelSpec()
     val currentLevelId = 2
     val currentLevel
         get() = levels.getLevel(currentLevelId)
 
+    protected val job = Job()
+    override val coroutineContext: CoroutineContext
+        get() = job
+
     private lateinit var bg: Texture2d
+    private lateinit var off: OffscreenRenderPass2d
     private var tilesAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet, "tiles"))
     private var runnerAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet, "runner"))
     private var guardAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet, "guard"))
@@ -127,7 +137,7 @@ class GameLevelScene (
     private var holeAnims = AnimationFrames("hole")
 
     private val sounds = SoundPlayer(assets)
-    private val levels = LevelsRep(assets, tilesAtlas, holeAtlas, holeAnims)
+    private val levels = LevelsRep(assets, tilesAtlas, holeAtlas, holeAnims, this)
 
 
     class InterpolatedVec3f(val from: MutableVec3f, val `to`: MutableVec3f) : InterpolatedValue<Vec3f>(from) {
@@ -152,13 +162,11 @@ class GameLevelScene (
         duration = 30f
     }
     val currentShutter get() = shatterRadiusAnim.value.value
-    val uiShiftX = MutableStateValue(0f)
-    val uiShiftY = MutableStateValue(0f)
     val debug = MutableStateValue("")
 
     lateinit var levelView: LevelView
     //cam
-    val visibleWidth get() = visibleTilesX*conf.tileSize.x
+    val visibleWidth get() = visibleTilesX * conf.tileSize.x
     val visibleHeight get() = visibleTilesY * conf.tileSize.y
 
     private val createCamera get() = OrthographicCamera("plain").apply {
@@ -175,8 +183,8 @@ class GameLevelScene (
     }
 
     init {
-
         camera = createCamera.apply {
+
             projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
         }
     }
@@ -203,15 +211,22 @@ class GameLevelScene (
 
     override fun setup(ctx: KoolContext) {
 
+//        +sprite(bg).apply {
+//            grayScaled = true
+//            val imageMinSide = min(bg.loadedTexture!!.width, bg.loadedTexture!!.height)
+//            val camSide = max((camera as OrthographicCamera).width, (camera as OrthographicCamera).height)
+//            scale(camSide / imageMinSide)
+//            // paralax TBD
+//        }
 
         game.onStatusChanged += {
             when(it) {
-                GameState.GAME_START -> startIntro()
-                GameState.GAME_RUNNING -> stopIntro()
+                GameState.GAME_START -> startIntro(ctx)
+                GameState.GAME_RUNNING -> stopIntro(ctx)
                 GameState.GAME_FINISH -> {
                     sounds.playSound("pass")
                     val scoreDuration = sounds["pass"]?.duration?.div((SCORE_COUNTER + 1)) ?: 0
-                    startOutro()
+                    startOutro(ctx)
                 }
                 else -> Unit
             }
@@ -222,14 +237,6 @@ class GameLevelScene (
             g.sounds = sounds
         }
 
-        +sprite(bg).apply {
-            grayScaled = true
-            val imageMinSide = min(bg.loadedTexture!!.width, bg.loadedTexture!!.height)
-            val camSide = max((camera as OrthographicCamera).width, (camera as OrthographicCamera).height)
-            scale(camSide / imageMinSide)
-            // paralax TBD
-        }
-
         +RunnerController(ctx.inputMgr, game.runner!!)
         +lineMesh("x") { addLine(Vec3f.ZERO, Vec3f(1f, 0f, 0f), Color.RED) }
         +lineMesh("y") { addLine(Vec3f.ZERO, Vec3f(0f, 1f, 0f), Color.GREEN) }
@@ -237,36 +244,46 @@ class GameLevelScene (
 
         // views
         levelView = LevelView(game, currentLevel, conf, tilesAtlas, holeAtlas, runnerAtlas, runnerAnims, guardAtlas, guardAnims)
-        game.startGame()
-        val off = OffscreenRenderPass2d(levelView, renderPassConfig {
+        +levelView
+        off = OffscreenRenderPass2d(levelView, renderPassConfig {
             this.name = "bg"
 
-            width = visibleWidth
-            height = visibleHeight
-
+            setSize(visibleWidth, visibleHeight)
+            setDepthTexture(false)
             addColorTexture {
                 colorFormat = TexFormat.RGBA
+                minFilter = FilterMethod.NEAREST
+                magFilter = FilterMethod.NEAREST
             }
         }).apply {
             camera = createCamera.apply {
                 projCorrectionMode = Camera.ProjCorrectionMode.OFFSCREEN
+                isKeepAspectRatio = true
             }
             clearColor = Color(0.00f, 0.00f, 0.00f, 0.00f)
-            //?
-//            this.camera.position.set(this@GameLevelScene.camera.position)
         }
+
+/*        onRenderScene += { renderCtx ->
+            val offW = mainRenderPass.viewport.width
+            val offH = mainRenderPass.viewport.height
+            if ( (offW > 0 && off.viewport.width != offW) || (offH > 0 && off.viewport.height != offH)) {
+//                off.resize(offW, offH, renderCtx)
+            }
+        }*/
+
         //mask
+
         +textureMesh {
             generate {
                 rect {
-                    size.set(visibleWidth.toFloat(), visibleHeight.toFloat())
-                    origin.set(-width/2, 0f, 0f)
+                    size.set(visibleWidth.toFloat() / visibleHeight.toFloat(), 1f)
+                    origin.set(-width/2f, 0f, 0f)
                     mirrorTexCoordsY()
                 }
             }
             shader = MaskShader { color { textureColor(off.colorTexture) } }
-            (shader as MaskShader).visibleRadius = ( sqrt(visibleWidth.toFloat() * visibleWidth + visibleHeight * visibleHeight) / 2f )
             onUpdate += {
+
                 (shader as MaskShader).visibleRadius = shatterRadiusAnim.tick( it.ctx )
             }
         }
@@ -338,13 +355,6 @@ class GameLevelScene (
                 game.tick(ev.ctx)
                 lastUpdate = ev.time
             }
-
-//            (camera as? OrthographicCamera)?.let { cam ->
-//                cam.left = 0f
-//                cam.top = 0f
-//                cam.right = ev.renderPass.viewport.width.toFloat()
-//                cam.bottom = -ev.renderPass.viewport.height.toFloat()
-//            }
         }
 
         // each game tick
@@ -354,6 +364,10 @@ class GameLevelScene (
                 lookAt.set(position.x, position.y, 0f)
             }
         }
+
+        game.startGame() ///< wierd stuff - model depends on view?
+
+
     }
 
     var lastUpdate = 0.0
@@ -378,23 +392,23 @@ class GameLevelScene (
         }
     }
 
-    private fun startOutro() =
+    private fun startOutro(ctx: KoolContext) =
         shatterRadiusAnim.apply {
             speed = 1f
             progress = 0f
-            value.from = levelView.globalBounds.circumcircleRadius
+            value.from = (sqrt((visibleWidth* visibleWidth + visibleHeight * visibleHeight).toDouble()) / 2).toFloat()
             value.to = 0f
         }
 
-    private fun startIntro() =
+    private fun startIntro(ctx: KoolContext) =
         shatterRadiusAnim.apply {
             speed = 1f
             progress = 0f
             value.from = 0f
-            value.to = levelView.globalBounds.circumcircleRadius
+            value.to = (sqrt((visibleWidth* visibleWidth + visibleHeight * visibleHeight).toDouble()) / 2).toFloat()
         }
 
-    private fun stopIntro() = shatterRadiusAnim.apply {
+    private fun stopIntro(ctx: KoolContext) = shatterRadiusAnim.apply {
 //        progress = 1f
         speed = 100f
     }
@@ -409,6 +423,8 @@ private operator fun Vec3f.minus(position: Vec3f) = Vec3f(
 
 val OrthographicCamera.height get() = top - bottom
 val OrthographicCamera.width get () = right - left
+val OrthographicCamera.circumcircleRadius get() = sqrt(width * width + height * height) / 2
+val Viewport.circumcircleRadius: Float get() = (sqrt((width * width + height * height).toDouble()) / 2f).toFloat()
 val BoundingBox.width get() = max.x - min.x
 val BoundingBox.height get() = max.y - min.y
 val BoundingBox.circumcircleRadius get() = sqrt(width * width + height * height) / 2

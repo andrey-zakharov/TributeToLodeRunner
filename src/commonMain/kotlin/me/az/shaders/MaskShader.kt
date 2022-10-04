@@ -7,6 +7,7 @@ import de.fabmax.kool.modules.ksl.blocks.mvpMatrix
 import de.fabmax.kool.modules.ksl.lang.*
 import de.fabmax.kool.pipeline.Attribute
 import de.fabmax.kool.pipeline.BlendMode
+import de.fabmax.kool.pipeline.FullscreenShaderUtil.fullscreenQuadVertexStage
 
 open class MaskShader(cfg: Config, model: KslProgram = MaskModel(cfg)) : KslUnlitShader(cfg, model) {
     var visibleRadius by uniform1f("radius") // in pixels
@@ -32,6 +33,7 @@ open class MaskShader(cfg: Config, model: KslProgram = MaskModel(cfg)) : KslUnli
                     val tex = texture2d(cfg.colorCfg.primaryTexture?.textureName!!)
                     val texSize = float2Var(textureSize2d(tex).toFloat2())
 
+                    colorOutput(float4Value(texSize.x, texSize.y, 0f.const, 1f.const))
                     val centered = uv.output - 0.5f.const2
                     `if` ( length(texSize * centered) ge darkRadius ) {
                         colorOutput(0f.const4)

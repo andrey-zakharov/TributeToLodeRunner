@@ -1,4 +1,5 @@
 import de.fabmax.kool.AssetManager
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.*
 import me.az.ilode.GameLevel
@@ -14,7 +15,9 @@ class LevelsRep(
     private val assets: AssetManager,
     private val tileSet: ImageAtlas,
     val holeAtlas: ImageAtlas,
-    val holeAnims: AnimationFrames) {
+    val holeAnims: AnimationFrames,
+    val scope: CoroutineScope
+) {
 
     val levels = mutableListOf <List<String>>()
     val loadedLevels = mutableMapOf<Int, GameLevel>()
@@ -55,7 +58,7 @@ class LevelsRep(
     fun getLevel(id: Int, generated: Boolean = true): GameLevel {
         return loadedLevels.getOrPut(id) {
             if ( generated )
-                generateGameLevel(id, levels[id], tileSet.nameIndex, holeAtlas.nameIndex, holeAnims)
+                generateGameLevel(id, levels[id], tileSet.nameIndex, holeAtlas.nameIndex, holeAnims, scope)
             else
                 loadGameLevel(id, levels[id], tileSet.nameIndex, holeAtlas.nameIndex, holeAnims)
         }
