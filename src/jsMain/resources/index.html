@@ -1,10 +1,29 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>JS Client</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Tribute to Lode Runner</title>
+    <style>
+        body {
+            background-color: black;
+            border: 0;
+            padding: 0;
+            margin: 0;
+        }
+        canvas {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+    </style>
 </head>
 <body>
+<!-- tabindex is required to make canvas focusable, needed to get per-canvas key events -->
+<canvas id="glCanvas" tabindex="1">
+    Your browser doesn't appear to support the
+    <code>&lt;canvas&gt;</code> element.
+</canvas>
+
 <script src="Infinner.js"></script>
 </body>
 </html>

@@ -33,9 +33,11 @@ open class MaskShader(cfg: Config, model: KslProgram = MaskModel(cfg)) : KslUnli
                     val tex = texture2d(cfg.colorCfg.primaryTexture?.textureName!!)
                     val texSize = float2Var(textureSize2d(tex).toFloat2())
 
-                    colorOutput(float4Value(texSize.x, texSize.y, 0f.const, 1f.const))
+                    //colorOutput(float4Value(texSize.x, texSize.y, 0f.const, 1f.const))
+                    val div = 4f.const
                     val centered = uv.output - 0.5f.const2
-                    `if` ( length(texSize * centered) ge darkRadius ) {
+
+                    `if` ( length(floor(texSize * centered / div)) ge darkRadius / div) {
                         colorOutput(0f.const4)
 
                     }.`else` {

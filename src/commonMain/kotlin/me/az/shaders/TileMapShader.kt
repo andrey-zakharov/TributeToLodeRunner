@@ -64,14 +64,14 @@ class TileMapShader(conf: TileMapShaderConf) : KslShader(Program(conf), Pipeline
                         val x = tileIndex - y * tilesInTileSet.x
                         val tileOffset = int2Value(x, y) * tileSize
 
-                        val d= xyWithinTile / tileSize.toFloat2()
-                        colorOutput(float3Value(d.x, 0f.const, d.y))
-//                        colorOutput(
-//                            texelFetch(
-//                                secondaryTileSet,
-//                                (xyWithinTile + tileOffset.toFloat2()).toInt2()
-//                            )
-//                        )
+//                        val d= xyWithinTile / tileSize.toFloat2()
+//                        colorOutput(float3Value(d.x, 0f.const, d.y))
+                        colorOutput(
+                            texelFetch(
+                                secondaryTileSet,
+                                (xyWithinTile + tileOffset.toFloat2()).toInt2()
+                            )
+                        )
                     }.`else` {
 //                            val tileSetSize = float2Var(textureSize2d(tileSet).toFloat2())
 //                        colorOutput(float4Value(0f.const, 0.2f.const, 0f.const, 1f.const))

@@ -159,7 +159,7 @@ class GameLevelScene (
         speed = 1f
     }
     private val shatterRadiusAnim = LinearAnimator(InterpolatedFloat(0f, 1f)).apply {
-        duration = 30f
+        duration = 10f
     }
     val currentShutter get() = shatterRadiusAnim.value.value
     val debug = MutableStateValue("")
@@ -168,6 +168,7 @@ class GameLevelScene (
     //cam
     val visibleWidth get() = visibleTilesX * conf.tileSize.x
     val visibleHeight get() = visibleTilesY * conf.tileSize.y
+    var debugAnim = false
 
     private val createCamera get() = OrthographicCamera("plain").apply {
         projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
@@ -187,6 +188,7 @@ class GameLevelScene (
 
             projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
         }
+
     }
 
     override suspend fun AssetManager.loadResources(ctx: KoolContext) {
@@ -211,13 +213,13 @@ class GameLevelScene (
 
     override fun setup(ctx: KoolContext) {
 
-//        +sprite(bg).apply {
-//            grayScaled = true
-//            val imageMinSide = min(bg.loadedTexture!!.width, bg.loadedTexture!!.height)
-//            val camSide = max((camera as OrthographicCamera).width, (camera as OrthographicCamera).height)
-//            scale(camSide / imageMinSide)
-//            // paralax TBD
-//        }
+        +sprite(bg).apply {
+            grayScaled = true
+            val imageMinSide = min(bg.loadedTexture!!.width, bg.loadedTexture!!.height)
+            val camSide = max((camera as OrthographicCamera).width, (camera as OrthographicCamera).height)
+            scale(camSide / imageMinSide)
+            // paralax TBD
+        }
 
         game.onStatusChanged += {
             when(it) {
@@ -244,7 +246,7 @@ class GameLevelScene (
 
         // views
         levelView = LevelView(game, currentLevel, conf, tilesAtlas, holeAtlas, runnerAtlas, runnerAnims, guardAtlas, guardAnims)
-        +levelView
+//        +levelView
         off = OffscreenRenderPass2d(levelView, renderPassConfig {
             this.name = "bg"
 
@@ -273,18 +275,23 @@ class GameLevelScene (
 
         //mask
 
-        +textureMesh {
-            generate {
-                rect {
-                    size.set(visibleWidth.toFloat() / visibleHeight.toFloat(), 1f)
-                    origin.set(-width/2f, 0f, 0f)
-                    mirrorTexCoordsY()
+        +group {
+            +textureMesh {
+                generate {
+                    rect {
+                        size.set(visibleWidth.toFloat(), visibleHeight.toFloat())
+                        origin.set(-width/2f, 0f, 0f)
+                        mirrorTexCoordsY()
+                    }
+                }
+                shader = MaskShader { color { textureColor(off.colorTexture) } }
+                onUpdate += {
+                    (shader as MaskShader).visibleRadius = shatterRadiusAnim.tick( it.ctx )
                 }
             }
-            shader = MaskShader { color { textureColor(off.colorTexture) } }
             onUpdate += {
-
-                (shader as MaskShader).visibleRadius = shatterRadiusAnim.tick( it.ctx )
+                //this.setIdentity()
+                //this.scale(min(it.viewport.width / visibleWidth.toFloat(), it.viewport.height / visibleHeight.toFloat()))
             }
         }
         addOffscreenPass(off)
@@ -352,7 +359,7 @@ class GameLevelScene (
             }
 
             if ( (ev.time - lastUpdate) * 1000 >= gameSettings.speed.msByPass ) {
-                game.tick(ev.ctx)
+                game.tick(ev)
                 lastUpdate = ev.time
             }
         }
@@ -367,7 +374,10 @@ class GameLevelScene (
 
         game.startGame() ///< wierd stuff - model depends on view?
 
-
+        ctx.inputMgr.registerKeyListener(UniversalKeyCode('a'), "play anim step") {
+            if ( it.isReleased )
+                game.playAnims = true
+        }
     }
 
     var lastUpdate = 0.0

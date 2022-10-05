@@ -9,6 +9,7 @@ import de.fabmax.kool.InputManager
 import de.fabmax.kool.KeyCode
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.UniversalKeyCode
+import de.fabmax.kool.pipeline.RenderPass
 import de.fabmax.kool.scene.animation.InterpolatedFloat
 import de.fabmax.kool.scene.animation.LinearAnimator
 import me.az.utils.enumDelegate
@@ -51,6 +52,8 @@ class Game(val settings: GameSettings) {
 
     var nextGuard = 0
     var nextMoves = 0
+    var playAnims = false
+    var playGuards = false
 
     val gameOver get() = runner?.health!! <= 0
     private var gameState = GameState.GAME_START
@@ -89,7 +92,7 @@ class Game(val settings: GameSettings) {
         gameState = GameState.GAME_START
     }
 
-    fun tick( ctx: KoolContext ) {
+    fun tick( ev: RenderPass.UpdateEvent ) {
         when(gameState) {
             GameState.GAME_START -> {
                 if ( runner?.anyKeyPressed == true) {
@@ -99,7 +102,7 @@ class Game(val settings: GameSettings) {
             }
 
             GameState.GAME_RUNNING -> {
-                playGame()
+                playGame(ev)
                 if ( level.isDone ) {
                     level.showHiddenLadders()
                 }
@@ -129,10 +132,13 @@ class Game(val settings: GameSettings) {
 
     val onPlayGame = mutableListOf<Game.(level: GameLevel) -> Unit>()
 
-    fun playGame(): Boolean {
+    fun playGame(ev: RenderPass.UpdateEvent): Boolean {
         runner?.update()
-        guardsUpdate()
-        level.update(runner!!, guards)
+        if ( playGuards ) guardsUpdate()
+//        if ( playAnims ) {
+            level.update(runner!!, guards)
+//            playAnims = false
+//        }
         onPlayGame.forEach { it.invoke(this, level) }
         return level.isDone
     }
