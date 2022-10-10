@@ -8,12 +8,11 @@ import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.*
 import de.fabmax.kool.util.Viewport
-import me.az.ilode.Game
-import me.az.ilode.GameSettings
-import me.az.ilode.Tile
-import me.az.ilode.ViewCell
+import me.az.ilode.*
 import me.az.utils.b
+import me.az.utils.buildStateMachine
 import me.az.utils.choice
+import me.az.view.GameControls
 import kotlin.random.Random
 
 val simpleTextureProps = TextureProps(TexFormat.RGBA,
@@ -42,7 +41,7 @@ sealed class State <T> {
     abstract fun update(obj: T): State<T>?
 }
 
-class MainMenuState : State<App>() {
+object MainMenuState : State<App>() {
     var cachedTex: TextureData? = null
     val bgTex = Texture2d( simpleTextureProps ) {assets ->
         if ( cachedTex == null ) {
@@ -103,13 +102,13 @@ class MainMenuState : State<App>() {
 
         if ( startnewGame ) {
             startnewGame = false
-            return RunGameState()
+            return RunGameState
         }
         return null
     }
 }
 
-class RunGameState : State<App>() {
+object RunGameState : State<App>() {
     var gameScene: GameLevelScene? = null
     var infoScene: Scene? = null
     var debugScene: Scene? = null
@@ -118,24 +117,19 @@ class RunGameState : State<App>() {
     override fun enterState(app: App) {
         super.enterState(app)
         val game = Game(app.gameSettings)
-        gameScene = GameLevelScene(game, app.ctx.assetMgr, app.gameSettings, "level")
+
+        gameScene = GameLevelScene(game, app.ctx.assetMgr, app.gameSettings, "level").apply {
+            +GameControls(game, app.ctx.inputMgr)
+        }
+
         app.ctx.scenes += gameScene!!
         infoScene = GameUI(game, assets = app.ctx.assetMgr, app.gameSettings)
         app.ctx.scenes += infoScene!!
         debugScene = Ui2Scene {
             +UiSurface {
-                gameScene?.setupUi(this)
-                val w = Viewport()
-                app.ctx.getWindowViewport(w)
 
-                modifier
-                    .width(500.dp)
-                    .height(WrapContent)
-                    .margin(top = 10.dp, bottom = 10.dp)
-                    .padding(horizontal = sizes.gap, vertical = sizes.largeGap)
-                    .layout(ColumnLayout)
-                    .alignX(AlignmentX.Center)
-                    .alignY(AlignmentY.Bottom)
+                gameScene?.setupUi(this)
+
 /*                Row {
 
                     Slider(gameScene!!.uiShiftX.use(), -w.width/2f, w.width/2f) {
@@ -186,11 +180,11 @@ class RunGameState : State<App>() {
     override fun exitState(app: App) {
         super.exitState(app)
         listener?.run { app.ctx.inputMgr.removeKeyListener(this) }
-        gameScene?.run { app.ctx.scenes -= this }
+        gameScene?.run { app.ctx.scenes -= this;  dispose(app.ctx) }
         gameScene = null
-        infoScene?.run { app.ctx.scenes -= this }
+        infoScene?.run { app.ctx.scenes -= this; dispose(app.ctx) }
         infoScene = null
-        debugScene?.run { app.ctx.scenes -= this }
+        debugScene?.run { app.ctx.scenes -= this; dispose(app.ctx) }
         debugScene = null
     }
 
@@ -199,11 +193,40 @@ class RunGameState : State<App>() {
     }
 }
 
+enum class AppEvent {
+    RunGame, MainMenu
+}
 class App(val ctx: KoolContext) {
     val settings = Settings()
     val gameSettings = GameSettings(settings)
 
     var state: State<App>? = null
+
+    val fsm = buildStateMachine<AppEvent>("mainmenu") {
+        state("mainmenu") {
+            onEnter {
+
+            }
+
+            onExit {
+
+            }
+
+            edge("play game") {
+
+            }
+        }
+
+        state("play game") {
+            onEnter {
+
+            }
+
+            onExit {
+
+            }
+        }
+    }
 
     init {
         println(settings.keys)
@@ -213,7 +236,7 @@ class App(val ctx: KoolContext) {
         ctx.assetMgr.assetsBaseDir = "." // = resources
 
 //        changeState(MainMenuState())
-        changeState(RunGameState())
+        changeState(RunGameState)
 
 
         ctx.onRender += {
@@ -225,7 +248,7 @@ class App(val ctx: KoolContext) {
         test1()
     }
 
-    fun changeState(newState: State<App>) {
+    private fun changeState(newState: State<App>) {
         state?.exitState(this)
         state = newState
         state?.enterState(this)

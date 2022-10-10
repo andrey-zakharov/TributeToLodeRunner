@@ -217,7 +217,7 @@ fun generateGameLevel(
 
             out.forEachIndexed { y, row ->
                 row.forEachIndexed { x, cellIdx ->
-                    if ( cellIdx == null ) return@forEachIndexed
+                    if ( cellIdx == null || cellIdx == Int.MIN_VALUE ) return@forEachIndexed
                     if (x - exampleMapShiftX in 0 until exampleWidth &&
                         y - exampleMapShiftY in 0 until exampleHeight
                     ) return@forEachIndexed
@@ -310,6 +310,7 @@ class GameLevel(
     var gold = 0
     val isDone get() = gold == 0
     var status = Status.LEVEL_STARTUP
+    val bottomTileY = height - 1
 
     // store logic info
     val act = Array(width) { Array(height) { TileLogicType.EMPTY } }
@@ -325,7 +326,7 @@ class GameLevel(
             this[x, this.height-1] = ViewCell(false, primaryTileSet["ground"]!!)
         }
     }
-    fun update(runner: Runner, guards: List<Guard>) {
+    fun update(runner: Runner2, guards: List<Guard>) {
 //        anims.takeIf { it.isNotEmpty() }?.run { println(this) }
         anims.forEach {
             val x = it.key.x
@@ -431,19 +432,24 @@ class GameLevel(
     }
 
     fun isBarrier(x: Int, y: Int) = !isValid(x, y) ||
-        act[x][y] == TileLogicType.BLOCK || act[x][y] == TileLogicType.SOLID ||
+        act[x][y] == TileLogicType.BLOCK ||
+        act[x][y] == TileLogicType.SOLID ||
         act[x][y] == TileLogicType.TRAP
     fun isBarrier(at: Vec2i) = isBarrier(at.x, at.y)
+    //tbd to tiles itself?
+    fun isPassableForDown(x: Int, y: Int) = isValid(x, y) &&
+            act[x][y] != TileLogicType.BLOCK &&
+            act[x][y] != TileLogicType.SOLID
 
-    fun isLadder(x: Int, y: Int, hidden: Boolean) = isValid(x, y) && (
+    fun isLadder(x: Int, y: Int, hidden: Boolean = this.isDone) = isValid(x, y) && (
         act[x][y] == TileLogicType.LADDR || (base[x][y] == TileLogicType.HLADR && hidden)
     )
-    fun isLadder(at: Vec2i, hidden: Boolean) = isLadder(at.x, at.y, hidden)
+    fun isLadder(at: Vec2i, hidden: Boolean = this.isDone) = isLadder(at.x, at.y, hidden)
 
     fun isFloor(x: Int, y: Int, useBase: Boolean = false, useGuard: Boolean = true): Boolean {
         val check = if ( useBase ) { base } else { act }
         return !isValid(x, y) || check[x][y] == TileLogicType.BLOCK || check[x][y] == TileLogicType.SOLID ||
-                check[x][y] == TileLogicType.LADDR || (useGuard && guard[x][y])
+                check[x][y] == TileLogicType.LADDR || (useGuard && hasGuard(x, y))
     }
     fun isFloor(at: Vec2i, useBase: Boolean = false, useGuard: Boolean = true) = isFloor(at.x, at.y, useBase, useGuard)
 

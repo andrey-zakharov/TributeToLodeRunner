@@ -5,15 +5,14 @@ import GameSpeed
 import LevelSet
 import TileSet
 import com.russhwolf.settings.*
-import de.fabmax.kool.InputManager
-import de.fabmax.kool.KeyCode
-import de.fabmax.kool.KoolContext
-import de.fabmax.kool.UniversalKeyCode
+import de.fabmax.kool.*
 import de.fabmax.kool.pipeline.RenderPass
+import de.fabmax.kool.scene.Node
 import de.fabmax.kool.scene.animation.InterpolatedFloat
 import de.fabmax.kool.scene.animation.LinearAnimator
 import me.az.utils.enumDelegate
 import org.mifek.wfc.utils.EventHandler
+import kotlin.jvm.JvmInline
 import kotlin.math.sqrt
 import kotlin.random.Random
 
@@ -47,13 +46,13 @@ class Game(val settings: GameSettings) {
     var stopGuards = false
     var immortal = false
     var speed = settings.speed
-    var runner: Runner? = null
+    var runner: Runner2 = Runner2(this)
     val guards = mutableListOf<Guard>()
 
     var nextGuard = 0
     var nextMoves = 0
     var playAnims = false
-    var playGuards = false
+    var playGuards = true
 
     val gameOver get() = runner?.health!! <= 0
     private var gameState = GameState.GAME_START
@@ -67,47 +66,49 @@ class Game(val settings: GameSettings) {
     val onStatusChanged = mutableListOf<(GameState) -> Unit>()
     val onLevelStart = mutableListOf<(GameLevel) -> Unit>()
 
-    lateinit var level: GameLevel
+    var level: GameLevel? = null
 
     fun levelStartup(level: GameLevel, guardAnims: AnimationFrames) {
         this.level = level
         // playStartAnim
-        runner = Runner(level)
+//        runner = Runner(level)
         guards.clear()
         level.guardsPos.forEach {
             val g = Guard(level, anims = guardAnims)
             g.startLevel(level, it)
             guards.add(g)
         }
+        runner.startLevel(level)
         level.status = GameLevel.Status.LEVEL_PLAYING
         onLevelStart.forEach { it.invoke(level) }
     }
 
     fun startGame() { gameState = GameState.GAME_START }
+    fun abortGame() { gameState = GameState.GAME_RUNNER_DEAD }
 
     fun reset() {
         nextGuard = 0
         nextMoves = 0
-        runner?.reset()
+//        runner?.reset()
         gameState = GameState.GAME_START
     }
 
     fun tick( ev: RenderPass.UpdateEvent ) {
         when(gameState) {
             GameState.GAME_START -> {
-                if ( runner?.anyKeyPressed == true) {
+                if (runner.anyKeyPressed) {
                     gameState = GameState.GAME_RUNNING
-                    if ( level.isDone ) level.showHiddenLadders()
+                    if (level?.isDone == true) level?.showHiddenLadders()
                 }
             }
 
             GameState.GAME_RUNNING -> {
                 playGame(ev)
-                if ( level.isDone ) {
-                    level.showHiddenLadders()
+                if (level?.isDone == true) {
+                    level?.showHiddenLadders()
                 }
 
-                if ( level.isDone && runner?.block?.y == 0 && runner?.offset?.y == 0) {
+                if ( runner.success ) {
                     // enter state
                     gameState = GameState.GAME_FINISH
                 }
@@ -130,17 +131,20 @@ class Game(val settings: GameSettings) {
         }
     }
 
-    val onPlayGame = mutableListOf<Game.(level: GameLevel) -> Unit>()
+    val onPlayGame = mutableListOf<Game.(level: GameLevel, ev: RenderPass.UpdateEvent) -> Unit>()
 
     fun playGame(ev: RenderPass.UpdateEvent): Boolean {
-        runner?.update()
-        if ( playGuards ) guardsUpdate()
+        return level?.run {
+            runner.update(ev)
+            if (playGuards) guardsUpdate()
 //        if ( playAnims ) {
-            level.update(runner!!, guards)
+            level?.update(runner, guards)
 //            playAnims = false
 //        }
-        onPlayGame.forEach { it.invoke(this, level) }
-        return level.isDone
+
+            onPlayGame.forEach { it.invoke(this@Game, this, ev) }
+            return isDone
+        } ?: false
     }
 
     fun guardsUpdate() {
@@ -153,7 +157,7 @@ class Game(val settings: GameSettings) {
             nextMoves ++
         }
 
-        var movesCount = if ( level.status == GameLevel.Status.LEVEL_STARTUP ) {
+        var movesCount = if ( level?.status == GameLevel.Status.LEVEL_STARTUP ) {
             guards.size
         } else {
             Guard.guardsMoves[guards.size][nextMoves]
@@ -190,23 +194,11 @@ class Game(val settings: GameSettings) {
             movesCount--
         }
     }
+
+    fun getGuard(x: Int, y: Int) = guards.first { it.block.x == x && it.block.y == y }
 }
+typealias KeyMod = Int
 
-class GameControls(val game: Game, val inputManager: InputManager) {
-
-}
-
-enum class GameAction(
-    val keyCode: KeyCode, // or no
-    val onPress: Game.(InputManager.KeyEvent) -> Unit = {},
-    val onRelease: Game.(InputManager.KeyEvent) -> Unit
-) {
-    BACK(InputManager.KEY_BACKSPACE, onRelease = {
-        // stopAudio
-        // destroy chars
-        // destroy stage
-        // exit cycle
-    }),
-    RESPAWN(UniversalKeyCode('r'), onRelease = { runner?.alive = false })
-
-}
+data class InputSpec(val code: KeyCode, val modificatorBitMask: Int)
+fun KeyCode.toInputSpec(vararg mod: KeyMod) = InputSpec(this, mod.sum())
+fun Char.toInputSpec(vararg mod: KeyMod) = LocalKeyCode(this).toInputSpec(*mod)

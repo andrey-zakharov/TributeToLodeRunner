@@ -29,7 +29,7 @@ class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharTyp
         frameIndex = 0
     }
 
-    fun updateGuard(runner: Runner) {
+    fun updateGuard(runner: Runner2) {
         val x = block.x
         val y = block.y
         val curTile = Vec2i(block)
@@ -129,8 +129,8 @@ class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharTyp
         }
 
         if ( block.x != x || block.y != y ) {
-            level.guard[x][y] = false
-            level.guard[block.x][block.y] = true
+            level.guard[x][y] = false // field.removeGuard
+            level.guard[block.x][block.y] = true // field.addGuard
         }
 
         updateFrame()
@@ -150,7 +150,7 @@ class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharTyp
         }
     }
 
-    private fun bestMove(runner: Runner): Action {
+    private fun bestMove(runner: Actor2): Action {
         val maxTileY = level.height - 1
         var x = block.x
         val y = block.y
@@ -189,19 +189,19 @@ class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharTyp
         return scanFloor(runner)
     }
 
-    class GuardAi {
+    class GuardAiContext {
         var bestRating = 255
         var bestPath = Action.ACT_NONE
         var leftEnd: Int = -1
         var rightEnd: Int = -1
     }
 
-    private fun scanFloor(runner: Runner): Action {
+    private fun scanFloor(runner: Actor2): Action {
         var x = block.x
         val y = block.y
         val maxTileX = level.width - 1
         val maxTileY = level.height - 1
-        val guardAi = GuardAi()
+        val guardAi = GuardAiContext()
 
         // calculate left limit
         guardAi.leftEnd = block.x
@@ -284,7 +284,7 @@ class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharTyp
         return guardAi.bestPath
     }
 
-    private fun scanDown(x: Int, curPath: Action, guardAi: GuardAi, runner: Runner) {
+    private fun scanDown(x: Int, curPath: Action, guardAi: GuardAiContext, runner: Actor2) {
         val maxTileX = level.width - 1
         val maxTileY = level.height - 1
         var y = block.y
@@ -327,7 +327,7 @@ class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharTyp
         }
     }
 
-    private fun scanUp(x: Int, curPath: Action, guardAi: GuardAi, runner: Runner) {
+    private fun scanUp(x: Int, curPath: Action, guardAi: GuardAiContext, runner: Actor2) {
         var y = block.y
         while ( y > 0 && level.base[x][y] == TileLogicType.LADDR ) {
             y--

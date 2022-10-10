@@ -1,11 +1,14 @@
 import de.fabmax.kool.math.MutableVec2f
 import de.fabmax.kool.math.Vec2i
+import de.fabmax.kool.modules.ksl.KslUnlitShader
 import de.fabmax.kool.pipeline.Attribute
 import de.fabmax.kool.pipeline.TexFormat
 import de.fabmax.kool.pipeline.Texture2d
 import de.fabmax.kool.pipeline.TextureData2d
 import de.fabmax.kool.scene.Group
+import de.fabmax.kool.scene.colorMesh
 import de.fabmax.kool.scene.mesh
+import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.createUint8Buffer
 import me.az.ilode.*
 import me.az.shaders.TileMapShader
@@ -24,7 +27,8 @@ class LevelView(
 
 ) : Group() {
     private val tileMapShader = TileMapShader(TileMapShaderConf(tilesAtlas.tileCoords.size))
-    val runnerView = ActorView( game.runner!!, runnerAtlas, runnerAnims, conf.tileSize)
+//    val runnerView = ActorView( game.runner!!, runnerAtlas, runnerAnims, conf.tileSize)
+    val runnerView = Actor2View( game.runner!!, runnerAtlas, runnerAnims, conf.tileSize)
     val widthInPx = conf.tileSize.x * level.width
     val heightInPx = conf.tileSize.y * level.height
 
@@ -97,6 +101,33 @@ class ActorView(val actor: Actor,
     }
 }
 
+class Actor2View(val actor: Actor2,
+                val atlas: ImageAtlas,
+                val animations: AnimationFrames,
+                val tileSize: Vec2i
+) : Sprite(tileSize, atlas.tex, tileSize) {
+
+
+    init {
+        onUpdate += {
+            actor.level?.run {
+
+                val sequence = animations.sequence[actor.action.id]?: throw NullPointerException(actor.action.id)
+                actor.frameIndex %= sequence.size
+                textureOffset.set(atlas.getTexOffset(sequence[actor.frameIndex]))
+
+                setIdentity()
+                translate(
+                    actor.x - width / 2.0 + 0.5, height - actor.y - 0.5,
+                    0.0
+                )
+//            scale(1f, 1f, 1f )
+                translate(actor.ox.toDouble() / tileSize.x, -actor.oy.toDouble() / tileSize.y, 0.0)
+            }
+        }
+    }
+}
+
 class StringDrawer(val atlas: ImageAtlas, val map: Map<Char, Int>, val fallbackChar: Int = 0) {
     val buf = createUint8Buffer(1000)
 
@@ -121,11 +152,22 @@ class StatusView(val game: Game, val builder: StringDrawer) : Group() {
     init {
 
         val tileSize = Vec2i(builder.atlas.spec.tileWidth, builder.atlas.spec.tileHeight)
+        val toolbarWidth = 28f * tileSize.x
+        val toolbarHeight = tileSize.y.toFloat()
 
+        +colorMesh {
+            generate {
+                rect {
+                    size.set(toolbarWidth, toolbarHeight)
+                    origin.set(-width/2, 0f, 0f)
+                }
+            }
+            shader = KslUnlitShader { color { constColor(Color.BLACK) } }
+        }
         +mesh(listOf(Attribute.POSITIONS, Attribute.TEXTURE_COORDS)) {
             generate {
                 rect {
-                    size.set(28f * tileSize.x, tileSize.y.toFloat())
+                    size.set(toolbarWidth, toolbarHeight)
 //                    size.set(12f, 20f)
                     origin.set(-width/2, 0f, 0f)
                 }
@@ -141,15 +183,11 @@ class StatusView(val game: Game, val builder: StringDrawer) : Group() {
                 }
             }
 
-//            shader = unlitShader {
-//
-//            }
-
             onUpdate += {
-                if ( game.runner != null ) {
-                    val scores = game.runner!!.score.toString().padStart(7, '0')
-                    val lives = game.runner!!.health.toString().padStart(3, '0')
-                    val level = (game.level.levelId + 1).toString().padStart(3, '0')
+                if ( game.level != null ) {
+                    val scores = game.runner.score.toString().padStart(7, '0')
+                    val lives = game.runner.health.toString().padStart(3, '0')
+                    val level = (game.level!!.levelId + 1).toString().padStart(3, '0')
                     val text = "score$scores men$lives level$level"
                     if (text != currentText) {
                         tileMapShader.field = Texture2d(simpleValueTextureProps, builder.draw(text))

@@ -1,11 +1,31 @@
 package me.az.ilode
 
+import de.fabmax.kool.math.MutableVec2i
 import de.fabmax.kool.math.Vec2i
 
 
 const val START_HEALTH = 5
 const val MAX_HEALTH = 100
+val Controllable.anyKeyPressed get() = digLeft || digRight || inputVec.x != 0 || inputVec.y != 0
 
+class Runner2(game: Game) : Actor2(game), Controllable {
+    var health = START_HEALTH
+    var score = 0
+    val success: Boolean get() = y == 0 && oy == 0 && game.level?.isDone == true
+    fun startLevel(level: GameLevel) {
+        block.x = level.runnerPos.x
+        block.y = level.runnerPos.y
+        offset.x = 0
+        offset.y = 0
+    }
+
+    fun addScore(points: Int) {
+        score += points
+    }
+
+
+
+}
 class Runner(level: GameLevel) : Actor(level, CharType.RUNNER) {
     val stance = Array(4) { false } // up, right, down, left
 

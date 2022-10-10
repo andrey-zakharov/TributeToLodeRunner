@@ -15,10 +15,7 @@ import de.fabmax.kool.util.Viewport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
-import me.az.ilode.Game
-import me.az.ilode.GameSettings
-import me.az.ilode.GameState
-import me.az.ilode.SCORE_COUNTER
+import me.az.ilode.*
 import me.az.shaders.MaskShader
 import me.az.utils.floor
 import kotlin.coroutines.CoroutineContext
@@ -185,10 +182,8 @@ class GameLevelScene (
 
     init {
         camera = createCamera.apply {
-
             projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
         }
-
     }
 
     override suspend fun AssetManager.loadResources(ctx: KoolContext) {
@@ -234,12 +229,12 @@ class GameLevelScene (
             }
         }
         game.levelStartup(currentLevel, guardAnims)
-        game.runner!!.sounds = sounds
+        game.runner.sounds = sounds
         for ( g in game.guards ) {
             g.sounds = sounds
         }
 
-        +RunnerController(ctx.inputMgr, game.runner!!)
+        +Runner2Controller(ctx.inputMgr, game.runner)
         +lineMesh("x") { addLine(Vec3f.ZERO, Vec3f(1f, 0f, 0f), Color.RED) }
         +lineMesh("y") { addLine(Vec3f.ZERO, Vec3f(0f, 1f, 0f), Color.GREEN) }
         +lineMesh("z") { addLine(Vec3f.ZERO, Vec3f(0f, 0f, 1f), Color.BLUE) }
@@ -264,14 +259,6 @@ class GameLevelScene (
             }
             clearColor = Color(0.00f, 0.00f, 0.00f, 0.00f)
         }
-
-/*        onRenderScene += { renderCtx ->
-            val offW = mainRenderPass.viewport.width
-            val offH = mainRenderPass.viewport.height
-            if ( (offW > 0 && off.viewport.width != offW) || (offH > 0 && off.viewport.height != offH)) {
-//                off.resize(offW, offH, renderCtx)
-            }
-        }*/
 
         //mask
 
@@ -365,7 +352,7 @@ class GameLevelScene (
         }
 
         // each game tick
-        game.onPlayGame += {
+        game.onPlayGame += {level, ev ->
             with(off.camera) {
                 position.set ( cameraAnimator.tick(ctx) )
                 lookAt.set(position.x, position.y, 0f)
@@ -388,15 +375,19 @@ class GameLevelScene (
             .height(WrapContent)
             .margin(start = 25.dp, top = 25.dp, bottom = 60.dp)
             .layout(ColumnLayout)
-            .alignX(AlignmentX.Start)
-            .alignY(AlignmentY.Top)
+            .alignX(AlignmentX.End)
+            .alignY(AlignmentY.Bottom)
         Row {
             Text(debug.use()) {
                 modifier
                     .width(WrapContent)
                     .height(WrapContent)
                 onUpdate += {
-                    debug.set("%.1f %.1f %.1f".format(shatterRadiusAnim.value.from, currentShutter, shatterRadiusAnim.value.to))
+                    debug.set("%.1f %.1f %.1f\n%d %d\n%d %d x %d %d\n%s[ %d ]".format(shatterRadiusAnim.value.from, currentShutter, shatterRadiusAnim.value.to,
+                        game.runner.inputVec.x ?: "<no runner>", game.runner.inputVec.y ?: "<no runner>",
+                        game.runner.x, game.runner.ox, game.runner.y, game.runner.oy,
+                        game.runner.action.id, game.runner.frameIndex
+                    ))
                 }
             }
         }

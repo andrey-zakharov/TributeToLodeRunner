@@ -11,6 +11,8 @@ const val TILE_WIDTH    = 20
 const val TILE_HEIGHT   = 22
 const val W4 = TILE_WIDTH / 4 //10, 7, 5,
 const val H4 = TILE_HEIGHT / 4 //11, 8, 5,
+const val W2 = TILE_WIDTH / 2 //20, 15, 10,
+const val H2 = TILE_HEIGHT / 2 //20, 15, 10,
 
 enum class CharType {
     RUNNER, GUARD
@@ -30,7 +32,7 @@ enum class Action {
 }
 
 open class Actor(val level: GameLevel,
-                 val charType: CharType,
+                 private val charType: CharType,
                  ) {
     var alive: Boolean = true
     var state: State = State.STATE_STOP
@@ -50,7 +52,7 @@ open class Actor(val level: GameLevel,
     lateinit var sounds: SoundPlayer
 
     fun move(act: Action) {
-        val hladr = level.gold == 0
+        val hladr = level.isDone
         val curTile = block
         val curBase = level.getBase(curTile)
 
