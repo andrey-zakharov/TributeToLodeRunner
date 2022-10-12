@@ -113,8 +113,7 @@ class Actor2View(val actor: Actor2,
             actor.level?.run {
 
                 val sequence = animations.sequence[actor.action.id]?: throw NullPointerException(actor.action.id)
-                actor.frameIndex %= sequence.size
-                textureOffset.set(atlas.getTexOffset(sequence[actor.frameIndex]))
+                textureOffset.set(atlas.getTexOffset(sequence[actor.frameIndex % sequence.size]))
 
                 setIdentity()
                 translate(

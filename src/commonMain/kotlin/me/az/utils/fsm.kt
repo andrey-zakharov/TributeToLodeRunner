@@ -105,7 +105,7 @@ class StackedStateEdge<E>(val targetState: String, val replace: Boolean = true )
 
     //Invoke when you go down the edge to another state
     fun enterEdge(retrieveState: (String) -> StackedState<E>): StackedState<E> {
-        actionList.forEach { it(this) }
+        actionList.forEach { it(this@StackedStateEdge) }
         return retrieveState(targetState) // if get from actionList returns, dynamically, we could dynamic decide -\
         // go left -> edge check: isBar -> leftBar, isEmpty -> leftRun
     }
@@ -113,16 +113,17 @@ class StackedStateEdge<E>(val targetState: String, val replace: Boolean = true )
 }
 
 open class StackedState<E>(val name: String) {
+
     private val stateEnterAction = mutableListOf<(StackedState<E>) -> Unit>()
     private val stateExitAction = mutableListOf<(StackedState<E>) -> Unit>()
-    private val stateActions = mutableListOf<(E) -> Boolean>()
+    private val stateActions = mutableListOf<E.() -> String?>()
+    private val edgeList = mutableListOf<StackedStateEdge<E>>()
     //Add an action which will be called when the state is entered
     fun onEnter(action: (StackedState<E>) -> Unit) = stateEnterAction.add(action)
     fun onExit(action: (StackedState<E>) -> Unit) = stateExitAction.add(action)
-    // return true if need to pop, false if all ok
-    fun onUpdate(action: E.() -> Boolean) = stateActions.add(action)
 
-    private val edgeList = mutableListOf<StackedStateEdge<E>>()
+    // return next state obj or self
+    fun onUpdate(action: E.() -> String?) = stateActions.add(action)
     open fun suspendState() = exitState()
     open fun wakeupState() = enterState()
 
@@ -133,10 +134,10 @@ open class StackedState<E>(val name: String) {
         edgeList.add(edge)
     }
 
-    fun accept(event: E) = edgeList.firstOrNull { it.canHandleEvent(event) }
-    fun enterState() { println("-> ${name}"); stateEnterAction.forEach { it(this) } }
-    fun exitState() { println( "<- ${name}" ); stateExitAction.reversed().forEach { it(this) } }
-    fun update(event: E) = stateActions.any { it(event) }
+    fun accept(event: E) = edgeList.firstOrNull { it.targetState != this.name && it.canHandleEvent(event) }
+    fun enterState() { println("-> $name"); stateEnterAction.forEach { it(this) } }
+    fun exitState() { println( "<- $name" ); stateExitAction.reversed().forEach { it(this) } }
+    fun update(event: E) = stateActions.firstNotNullOfOrNull { it(event) }
 }
 
 class StackedStateMachine<E>(private val initialState: String) {
@@ -163,12 +164,15 @@ class StackedStateMachine<E>(private val initialState: String) {
         val edge = currentState?.accept(event)
 
         if (edge is StackedStateEdge<E> && edge.targetState != currentStateName) {
-            val newState = edge.enterEdge { getState(it) }
+            val newState = with(edge) { enterEdge { getState(it) } }
             pushState(newState, edge.replace )
         }
 
-        if ( currentState?.update(event) == true ) {
-            popState()
+        currentState?.update(event)?.run {
+            if (this != currentState?.name) {
+                pushState(getState(this), true)
+            }
+//            popState()
         }
     }
 
@@ -187,6 +191,15 @@ class StackedStateMachine<E>(private val initialState: String) {
         if ( states.isEmpty() ) states.add(initialState)
         currentState?.wakeupState()
         return currentStateName
+    }
+    fun reset(force: Boolean = true) {
+        // with exit states?
+        if ( force ) {
+            states.clear()
+            states.add(initialState)
+        } else {
+            TODO("no soft reset")
+        }
     }
 }
 

@@ -103,24 +103,6 @@ open class Actor(val level: GameLevel,
                 action = action.replace("fall", "bar")
             }
 
-        } else if ( act == Action.ACT_DIG && charType == CharType.RUNNER) {
-            this as Runner
-            if ( canDig ) {
-                playSound("dig", true)
-                val (digTileX, bitmap) = if ( digLeft || (action == "runLeft" && !digRight)) {
-                    action = "digLeft"
-                    Pair(block.x - 1, "digHoleLeft")
-                } else {
-                    action = "digRight"
-                    Pair(block.x + 1, "digHoleRight")
-                }
-                level.act[digTileX][block.y + 1] = TileLogicType.EMPTY
-                level.anims[Vec2i(digTileX, block.y)] = Pair(bitmap, 0)
-                level.anims[Vec2i(digTileX, block.y + 1)] = Pair("${bitmap}Base", 0)
-                state = State.STATE_MOVE
-                offset.x = 0
-            }
-
         } else if ( act == Action.ACT_UP && !(level.isBarrier(upTile) && offset.y == 0)) {
             if ( level.isLadder(curTile, hladr) || (level.isLadder(downTile, hladr) && offset.y > 0)) {
                 if ( action != "runUpDown" ) {

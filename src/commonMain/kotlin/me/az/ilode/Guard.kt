@@ -2,6 +2,7 @@ package me.az.ilode
 
 import AnimationFrames
 import de.fabmax.kool.math.Vec2i
+import de.fabmax.kool.math.randomI
 import kotlin.math.abs
 
 class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharType.GUARD) {
@@ -362,4 +363,15 @@ class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharTyp
             guardAi.bestPath = curPath
         }
     }
+}
+
+
+class Guard2(game: Game) : Actor2(game) {
+    var hasGold = 0
+    override fun takeGold(): Boolean =
+        if (hasGold == 0) {
+            hasGold = randomI(0, 26) + 12
+            true
+        } else false
+
 }

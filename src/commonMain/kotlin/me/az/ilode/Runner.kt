@@ -2,13 +2,16 @@ package me.az.ilode
 
 import de.fabmax.kool.math.MutableVec2i
 import de.fabmax.kool.math.Vec2i
+import de.fabmax.kool.pipeline.RenderPass
+import me.az.utils.StackedStateMachine
+import me.az.utils.buildStateMachine
 
 
 const val START_HEALTH = 5
 const val MAX_HEALTH = 100
 val Controllable.anyKeyPressed get() = digLeft || digRight || inputVec.x != 0 || inputVec.y != 0
 
-class Runner2(game: Game) : Actor2(game), Controllable {
+class Runner2(game: Game) : Actor2(game, false), Controllable {
     var health = START_HEALTH
     var score = 0
     val success: Boolean get() = y == 0 && oy == 0 && game.level?.isDone == true
@@ -19,12 +22,44 @@ class Runner2(game: Game) : Actor2(game), Controllable {
         offset.y = 0
     }
 
+    override val fsm by lazy {
+        val stopState = StopState(this@Runner2)
+        buildStateMachine(stopState.name) {
+            this += stopState
+            this += RunLeft(this@Runner2)
+            this += RunRight(this@Runner2)
+            this += RunUp(this@Runner2)
+            this += RunDown(this@Runner2)
+            this += BarLeft(this@Runner2)
+            this += BarRight(this@Runner2)
+            this += DigRight(this@Runner2)
+            this += DigLeft(this@Runner2)
+            // need something better
+            this += FallState(this@Runner2, false)
+        }
+    }
+
+    //Page 276 misc.c (book)
+    fun ok2Dig(nx: Int): Boolean {
+        return level.isBlock(nx, y + 1) && level.isEmpty(nx, y)
+    }
+
     fun addScore(points: Int) {
         score += points
     }
 
+    override fun takeGold(): Boolean {
+        sounds.playSound("getGold")
+        level.gold --
+        addScore(SCORE_GOLD)
 
-
+        if ( level.gold == 0 ) {
+//                    playSound("goldFinish${(level.levelId - 1) % 6 + 1}")
+            sounds.playSound("goldFinish")
+            level.showHiddenLadders()
+        }
+        return true
+    }
 }
 class Runner(level: GameLevel) : Actor(level, CharType.RUNNER) {
     val stance = Array(4) { false } // up, right, down, left
