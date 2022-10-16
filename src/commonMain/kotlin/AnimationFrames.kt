@@ -17,5 +17,6 @@ class AnimationFrames(
                 sequence[it] = (frames[it]!! as JsonArray).map { it.jsonPrimitive.int }
             }
         }
+        println("loaded anims: ${sequence.map { "${it.key} len: ${it.value.size}" }.joinToString("\n")}")
     }
 }

@@ -130,7 +130,6 @@ open class StackedState<E>(val name: String) {
     fun edge(targetState: String, replace: Boolean = true, init: StackedStateEdge<E>.() -> Unit) {
         val edge = StackedStateEdge<E>(targetState, replace)
         edge.init()
-
         edgeList.add(edge)
     }
 

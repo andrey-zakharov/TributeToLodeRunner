@@ -1,21 +1,24 @@
 package me.az.ilode
 
-import AnimationFrames
 import GameSpeed
 import LevelSet
-import SoundPlayer
 import TileSet
-import com.russhwolf.settings.*
-import de.fabmax.kool.*
+import com.russhwolf.settings.Settings
+import com.russhwolf.settings.boolean
+import com.russhwolf.settings.float
+import com.russhwolf.settings.int
+import de.fabmax.kool.KeyCode
+import de.fabmax.kool.LocalKeyCode
 import de.fabmax.kool.modules.ui2.MutableStateValue
 import de.fabmax.kool.pipeline.RenderPass
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import me.az.utils.StackedState
 import me.az.utils.buildStateMachine
 import me.az.utils.enumDelegate
 import kotlin.coroutines.CoroutineContext
-import kotlin.jvm.JvmInline
-import kotlin.random.Random
 
 
 class GameSettings(val settings: Settings) {
