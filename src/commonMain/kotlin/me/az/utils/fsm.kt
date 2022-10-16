@@ -134,16 +134,25 @@ open class StackedState<E>(val name: String) {
         edgeList.add(edge)
     }
 
-    fun accept(event: E) = edgeList.firstOrNull { it.targetState != this.name && it.canHandleEvent(event) }
-    fun enterState() { println("-> $name"); stateEnterAction.forEach { it(this) } }
-    fun exitState() { println( "<- $name" ); stateExitAction.reversed().forEach { it(this) } }
+    fun beforeUpdate(event: E) = edgeList.firstOrNull { it.targetState != this.name && it.canHandleEvent(event) }
+    fun enterState() = stateEnterAction.forEach { it(this) }
+    fun exitState() = stateExitAction.reversed().forEach { it(this) }
     fun update(event: E) = stateActions.firstNotNullOfOrNull { it(event) }
 }
 
 class StackedStateMachine<E>(private val initialState: String) {
-    private val states = mutableListOf(initialState)
-    val currentStateName get() = states.current()
-    val currentState get() = states.current()?.run { stateList[this] }
+
+    fun debugOn() {
+        stateList.forEach { with(it.value) {
+            onEnter { println("-> $name"); }
+            onExit { println( "<- $name" ); }
+        } }
+    }
+
+    private val states = mutableListOf<String>()
+    val currentStateName get() = states.current()!!
+    val currentState get() = stateList[states.current()!!]!!
+    val onStateChanged = mutableListOf<StackedState<E>.() -> Unit>()
 
     // builder
     private val stateList = mutableMapOf<String, StackedState<E>>()
@@ -157,11 +166,11 @@ class StackedStateMachine<E>(private val initialState: String) {
         state.init()
         this += state
     }
-    fun getState(name: String): StackedState<E> = stateList.get(name) ?: throw NoSuchElementException(name)
+    fun getState(name: String): StackedState<E> = stateList[name] ?: throw NoSuchElementException(name)
 
     fun update(event: E) {
 
-        val edge = currentState?.accept(event)
+        val edge = currentState?.beforeUpdate(event)
 
         if (edge is StackedStateEdge<E> && edge.targetState != currentStateName) {
             val newState = with(edge) { enterEdge { getState(it) } }
@@ -169,13 +178,17 @@ class StackedStateMachine<E>(private val initialState: String) {
         }
 
         currentState?.update(event)?.run {
-            if (this != currentState?.name) {
+            if (this != currentStateName) {
                 pushState(getState(this), true)
             }
 //            popState()
         }
     }
 
+    // forcefully set state
+    fun setState(stateName: String) {
+        pushState(getState(stateName), true)
+    }
     fun pushState(newState: StackedState<E>, replace: Boolean = false) {
         if ( replace ) {
             states.pop()?.run { getState(this).exitState() }
@@ -185,11 +198,14 @@ class StackedStateMachine<E>(private val initialState: String) {
 
         states.push(newState.name)
         newState.enterState()
+        onStateChanged.forEach { it(newState) }
     }
     fun popState(): String? {
-        val old = states.pop()?.run { getState(this).exitState() }
+        val old = states.pop()?.run { getState(this) }.also { it?.exitState() }
         if ( states.isEmpty() ) states.add(initialState)
         currentState?.wakeupState()
+        if ( old?.name != currentStateName )
+            onStateChanged.forEach { it(currentState!!) }
         return currentStateName
     }
     fun reset(force: Boolean = true) {
@@ -197,6 +213,7 @@ class StackedStateMachine<E>(private val initialState: String) {
         if ( force ) {
             states.clear()
             states.add(initialState)
+            onStateChanged.forEach { it(currentState) }
         } else {
             TODO("no soft reset")
         }
@@ -206,5 +223,6 @@ class StackedStateMachine<E>(private val initialState: String) {
 fun<E> buildStateMachine(initialState: String, init: StackedStateMachine<E>.() -> Unit): StackedStateMachine<E> {
     val machine = StackedStateMachine<E>(initialState)
     machine.init()
+//    machine.reset(true)
     return machine
 }

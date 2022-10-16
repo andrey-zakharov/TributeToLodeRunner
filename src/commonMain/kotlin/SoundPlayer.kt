@@ -5,6 +5,15 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
+interface AudioContext {
+    val pan: Int // for node pos x, y
+//    val x: Float
+//    val y: Float
+    val clip: AudioClip
+    fun play()
+    fun stop()
+}
+
 class SoundPlayer(private val assets: AssetManager) {
     private val sounds = mutableMapOf<String, AudioClip>()
 
@@ -18,6 +27,10 @@ class SoundPlayer(private val assets: AssetManager) {
             val ext = ((it.value as JsonObject)["type"] as JsonPrimitive).content
             it.key to assets.loadAudioClip("$soundsDir/$name.$ext")
         }.toMap())
+
+        sounds.forEach { (name, clip) ->
+
+        }
     }
 
     fun playSound(s: String, looped: Boolean = false, playSingle: Boolean = true) {

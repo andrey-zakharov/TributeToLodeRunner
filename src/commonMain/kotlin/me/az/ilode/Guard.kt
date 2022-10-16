@@ -1,13 +1,30 @@
 package me.az.ilode
 
-import AnimationFrames
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.math.randomI
+import format
 import kotlin.math.abs
+import kotlin.random.Random
 
-class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharType.GUARD) {
+class GuardAiController(val guard: Controllable, val runner: Runner) {
+
+}
+class Guard(game: Game, private val random: Random = Random.Default) : Actor(game) {
     var hasGold = 0
     var inHole = false
+
+    private fun randomRangeGenerator(min: Int, max:Int, random: Random = this.random): Sequence<Int> {
+        val current = mutableListOf<Int>()
+        var i = 0
+        return generateSequence {
+            if ( current.size == 0 || i % current.size == 0 ) {
+                // restart random sequence
+                current.clear()
+                current.addAll((min until max).shuffled(random))
+            }
+            current[i++ % current.size]
+        }
+    }
 
     companion object {
         // old AI?
@@ -22,136 +39,181 @@ class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharTyp
         var nextGuard = 0
     }
 
-    fun startLevel(level: GameLevel, guardPos: Vec2i) {
-        block.set(guardPos)
-        offset.x = 0
-        offset.y = 0
-        action = "runLeft"
-        frameIndex = 0
+    init {
+        game.onLevelStart += {
+            action = ActorSequence.RunRight
+        }
     }
 
-    fun updateGuard(runner: Runner2) {
-        val x = block.x
-        val y = block.y
-        val curTile = Vec2i(block)
-        val hladr = level.gold == 0
-        val upTile =    Vec2i( block.x, block.y - 1)
-        val downTile =  Vec2i( block.x, block.y + 1)
-        val leftTile =  Vec2i( block.x - 1, block.y)
-        val rightTile = Vec2i( block.x + 1, block.y)
+    override fun takeGold(): Boolean =
+        if (hasGold == 0) {
+            hasGold = randomI(0, 26) + 12
+            true
+        } else false
 
-        // inevitable
-        if (level[curTile]?.hole == true || inHole) {
-            // release gold
-            if ( level[curTile]?.hole == true && hasGold > 0 ) {
-                level.base[upTile.x][upTile.y] = TileLogicType.GOLD
-                level[upTile] = Tile.GOLD
-                hasGold = -10
+    override val shouldNotFall: Boolean
+        get() = super.shouldNotFall || inHole // when running up from hole
+    fun updateGuard(runner: Runner) {
+        if ( fsm.currentState is ActorState.ControllableState ) {
+            val nextAct = bestMove(runner)
+//            println("best act = $nextAct")
+            val neiGuard = when (nextAct) {
+                Action.ACT_UP -> Vec2i(x, y - 1)
+                Action.ACT_DOWN -> Vec2i(x, y + 1)
+                Action.ACT_RIGHT -> Vec2i(x + 1, y)
+                Action.ACT_LEFT -> Vec2i(x - 1, y)
+                else -> null
             }
 
-            // process guard in hole
-            if ( offset.y == 0 && !inHole ) {
-                inHole = true
-                action = action.replace("fall", "shake")
-                runner.addScore(SCORE_FALL)
-                playSound("trap")
-            } else if (action.startsWith("shake")) {
-                if ( frameIndex == anims.sequence[action]!!.size - 1 ) {
-                    action = "runUpDown"
+            if (neiGuard != null && !level.hasGuard(neiGuard)) {
+//                    move(nextAct)
+                inputVec.x = when (nextAct) {
+                    Action.ACT_RIGHT -> 1
+                    Action.ACT_LEFT -> -1
+                    else -> 0
                 }
+                inputVec.y = when (nextAct) {
+                    Action.ACT_DOWN -> 1
+                    Action.ACT_UP -> -1
+                    else -> 0
+                }
+            } else {
+                inputVec.x = 0
+                inputVec.y = 0
             }
+//            }
+            //}
+        }
 
-            if ( action == "runUpDown" ) {
-                if ( level[curTile]?.hole == true ) {
-                    offset.x = 0
-                    offset.y -= MOVE_Y
-                    if ( offset.y <= 0 ) {
-                        block.y --
-                        offset.y += TILE_HEIGHT
-                    }
-                } else {
-                    offset.x = 0
-                    offset.y -= MOVE_Y
-                    if ( offset.y <= 0 ) {
-                        offset.y = 0
-                        if ( !level.isBarrier(leftTile) && (x > runner.block.x || level.isBarrier(rightTile)) ) {
-                            action = "runLeft"
-                        } else if ( !level.isBarrier(rightTile) ) {
-                            action = "runRight"
+        val oldx = x
+        val oldy = y
+        //update fsm
+        super.update()
+
+        if ( fsm.currentState is ActorState.MovementState ) dropGold()
+        if ( level.isBlock(x, y) ) fsm.setState(ActorSequence.Reborn.id)
+
+        if ( oldx != x || oldy != y ) {
+//            println("${fsm.currentStateName} $frameIndex $oldx -> ${block.x} $oldy -> ${block.y}")
+            level.guard[oldx][oldy] = false // field.removeGuard
+            level.guard[x][y] = true // field.addGuard
+        }
+
+        if ( fsm.currentState is ActorState.ControllableState ) {
+            if (inHole && !level.isHole(x, y) && !level.isHole(x, y + 1)) inHole = false
+        }
+    }
+
+    override val fsm by lazy {
+        super.fsm.apply {
+            this += InHole(this@Guard)
+            this += Shake(this@Guard, ActorSequence.ShakeLeft)
+            this += Shake(this@Guard, ActorSequence.ShakeRight)
+
+            state(ActorSequence.Reborn.id) {
+                onEnter {
+                    val gen = randomRangeGenerator(0, level.width).iterator()
+                    for ( bornY in 1 until level.height ) {
+                        val bornX = gen.next()
+                        if ( level.isEmpty(bornX, bornY) ) {
+                            block.x = bornX
+                            block.y = bornY
+
+                            action = ActorSequence.Reborn
+                            // play this state until anim ends
+                            break
                         }
                     }
                 }
-            }
-
-            if ( action == "runLeft" ) {
-                offset.x -= MOVE_X
-                if ( offset.x < 0 ) {
-                    block.x --
-                    offset.x += TILE_WIDTH
-                    inHole = false
+                edge(ActorState.StopState.name) {
+                    validWhen { sequenceSize != 0 && frameIndex >= sequenceSize }
                 }
-            } else if (action == "runRight") {
-                offset.x += MOVE_X
-                if ( offset.x >= TILE_WIDTH / 2 ) {
-                    block.x ++
-                    offset.x -= TILE_WIDTH
-                    inHole = false
+                onUpdate {
+                    frameIndex++
+                    null
+                }
+                onExit {
+                    sounds.playSound("born");
                 }
             }
-            state = State.STATE_MOVE
 
-        } else if ( action == "reborn") {
-            if ( anims.sequence[action]!!.size - 1 == frameIndex ) {
-                playSound("reborn")
-                action = "runLeft"
-                frameIndex = 1
-            }
-        // AI actions
-        } else {
-            if ( state == State.STATE_FALL || level.status == GameLevel.Status.LEVEL_STARTUP ) {
-                move(Action.ACT_NONE)
-            } else {
-                val nextAct = bestMove(runner)
-
-                val neiGuard = when(nextAct) {
-                    Action.ACT_UP -> upTile
-                    Action.ACT_RIGHT -> rightTile
-                    Action.ACT_DOWN -> downTile
-                    Action.ACT_LEFT -> leftTile
-                    else -> null
+            getState(ActorState.FallState.name).apply {
+                edge(InHole.name) {
+                    validWhen { level.isHole(x, y) }
                 }
+            }
 
-                if ( neiGuard != null && !level.hasGuard(neiGuard) ) {
-                    move(nextAct)
+            debugOn()
+        }
+
+    }
+
+    class InHole(actor: Guard) : ActorState(actor, null, name) {
+        companion object { const val name = "inhole"}
+        init {
+            onEnter { with(actor) {
+                if (hasGold > 0) {
+                    println("has gold: empty: ${level.isEmpty(x, y - 1)}")
+                    if (level.isEmpty(x, y - 1)) {
+                        level.dropGold(x, y - 1)
+                        hasGold = 0
+                    } else {
+                        // disappered from level
+                        level.gold --
+                    }
+                }
+            }}
+
+            BehaviorMoveDown { // on center
+                offset.y = 0
+                sounds.playSound("trap")
+                when(action) {
+                    ActorSequence.FallRight -> ActorSequence.ShakeRight
+                    else -> ActorSequence.ShakeLeft
+                }.id
+            }
+        }
+    }
+
+    class Shake(actor: Guard, animName: ActorSequence) : ActorState(actor, animName, animName.id) {
+        init {
+            onEnter { actor.inHole = true }
+            onUpdate {
+                if ( frameIndex < sequenceSize ) {
+
                 } else {
-                    move(Action.ACT_NONE)
+                    println("done")
+                    return@onUpdate RunUp.name
+                }
+
+                frameIndex++
+                null
+            }
+        }
+    }
+
+    private fun dropGold(): Boolean {
+        when {
+            hasGold > 1 -> hasGold -- // // count > 1,  don't drop it only decrease count
+            hasGold == 1 -> { //drop gold
+                if ( level.isEmpty(x, y) && level.isFloor(x, y + 1, useGuard = false) ) {
+                    level.dropGold( x, y )
+                    hasGold = -1
+                    return true
                 }
             }
+            hasGold < 0 -> hasGold++
         }
-
-        if ( block.x != x || block.y != y ) {
-            level.guard[x][y] = false // field.removeGuard
-            level.guard[block.x][block.y] = true // field.addGuard
-        }
-
-        updateFrame()
+        return false
     }
 
-    fun tryDropGold() {
-        if ( hasGold > 1 ) {
-            hasGold --
-        } else if ( hasGold == 1 ) {
-            if ( level.isEmpty(block) && level.isFloor(block.x, block.y + 1, true, false)) {
-                level.base[block.x][block.y] = TileLogicType.GOLD
-                level[block] = Tile.GOLD
-                hasGold = -1
+    private fun bestMove(runner: Actor): Action {
+        if ( inHole ) { // for controllable state
+            if ( level.isHole(x, y) ) {
+                return Action.ACT_UP
             }
-        } else if ( hasGold < 0 ) {
-            hasGold ++
         }
-    }
 
-    private fun bestMove(runner: Actor2): Action {
         val maxTileY = level.height - 1
         var x = block.x
         val y = block.y
@@ -197,7 +259,7 @@ class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharTyp
         var rightEnd: Int = -1
     }
 
-    private fun scanFloor(runner: Actor2): Action {
+    private fun scanFloor(runner: Actor): Action {
         var x = block.x
         val y = block.y
         val maxTileX = level.width - 1
@@ -285,7 +347,7 @@ class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharTyp
         return guardAi.bestPath
     }
 
-    private fun scanDown(x: Int, curPath: Action, guardAi: GuardAiContext, runner: Actor2) {
+    private fun scanDown(x: Int, curPath: Action, guardAi: GuardAiContext, runner: Actor) {
         val maxTileX = level.width - 1
         val maxTileY = level.height - 1
         var y = block.y
@@ -328,7 +390,7 @@ class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharTyp
         }
     }
 
-    private fun scanUp(x: Int, curPath: Action, guardAi: GuardAiContext, runner: Actor2) {
+    private fun scanUp(x: Int, curPath: Action, guardAi: GuardAiContext, runner: Actor) {
         var y = block.y
         while ( y > 0 && level.base[x][y] == TileLogicType.LADDR ) {
             y--
@@ -363,15 +425,10 @@ class Guard(level: GameLevel, val anims: AnimationFrames) : Actor(level, CharTyp
             guardAi.bestPath = curPath
         }
     }
-}
 
+    fun isReborn() = action == ActorSequence.Reborn
 
-class Guard2(game: Game) : Actor2(game) {
-    var hasGold = 0
-    override fun takeGold(): Boolean =
-        if (hasGold == 0) {
-            hasGold = randomI(0, 26) + 12
-            true
-        } else false
-
+    override fun toString() = "guard %d+%d x %d+%d state=%s gold=%d inhole=%s".format(
+        x, ox, y, oy, fsm.currentStateName, hasGold, inHole
+    )
 }

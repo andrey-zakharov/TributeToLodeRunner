@@ -7,7 +7,6 @@ import de.fabmax.kool.math.isFuzzyZero
 import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.*
-import de.fabmax.kool.util.Viewport
 import me.az.ilode.*
 import me.az.utils.b
 import me.az.utils.buildStateMachine
@@ -118,7 +117,7 @@ object RunGameState : State<App>() {
         super.enterState(app)
         val game = Game(app.gameSettings)
 
-        gameScene = GameLevelScene(game, app.ctx.assetMgr, app.gameSettings, "level").apply {
+        gameScene = GameLevelScene(game, app.ctx.assetMgr, app.gameSettings, "level", true).apply {
             +GameControls(game, app.ctx.inputMgr)
         }
 
@@ -191,6 +190,7 @@ object RunGameState : State<App>() {
     override fun update(app: App): State<App>? {
         return null
     }
+
 }
 
 enum class AppEvent {
@@ -229,7 +229,6 @@ class App(val ctx: KoolContext) {
     }
 
     init {
-        println(settings.keys)
 
         test3()
         test2()

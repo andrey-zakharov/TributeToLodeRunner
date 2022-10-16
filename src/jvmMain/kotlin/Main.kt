@@ -1,5 +1,5 @@
 import de.fabmax.kool.createDefaultContext
-fun main() {
+suspend fun main() {
     val ctx = createDefaultContext()
     val app = App(ctx)
 }

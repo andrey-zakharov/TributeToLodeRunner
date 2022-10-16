@@ -1,7 +1,6 @@
 package me.az.ilode
 
 import AnimationFrames
-import calcOverlapping
 import de.fabmax.kool.math.MutableVec2i
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.pipeline.TexFormat
@@ -19,23 +18,35 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.measureTime
 // game rules: allowing entrance for each base block
 // enter from up, down, ...
+const val ENTER_ALL = 0
 const val ENTER_UP = 1
 const val ENTER_RIGHT = 2
 const val ENTER_DOWN = 4
 const val ENTER_LEFT = 8
+const val ENTER_NONE = ENTER_DOWN + ENTER_UP + ENTER_LEFT + ENTER_RIGHT
 // bitset of states... accept state.
-enum class TileLogicType {
+enum class TileLogicType(
+    private val collision: Int = ENTER_ALL //full = ENTER_DOWN + ENTER_UP + ENTER_LEFT + ENTER_RIGHT
+) {
     EMPTY, // any state, except running above
-    BLOCK,
-    SOLID,
+    BLOCK(ENTER_NONE),
+    SOLID(ENTER_NONE),
     LADDR,
-    BAR,
-    TRAP,
+    BAR, // special case about falling
+    TRAP(ENTER_LEFT + ENTER_RIGHT + ENTER_DOWN),
     HLADR,
-    GOLD,
+    GOLD;
+
+    // is pass blocked
+    // 0 and any > 0 - block?
+    //
+    fun block(dir: Int) = (collision or dir) xor collision == 0
 }
 
 /// named by frame names
+// prob states for cells,
+// hladdr -> laddr on level complete
+// digHole -> fillHole -> block
 enum class Tile(val char: Char, val base: TileLogicType, val act: TileLogicType, val frameName: String? = null) {
     EMPTY(' ', TileLogicType.EMPTY, TileLogicType.EMPTY ),
     BRICK('#', TileLogicType.BLOCK, TileLogicType.BLOCK ), // Normal Brick
@@ -127,8 +138,8 @@ fun generateGameLevel(
 
     val exampleWidth = exampleMap.first().length
     val exampleHeight = exampleMap.size
-    val mapHeight = 2 * exampleHeight
-    val mapWidth = 2 * exampleWidth
+    val mapHeight = exampleHeight // * 2
+    val mapWidth = exampleWidth // * 2
     val patternSize = 3 // n , m
 
     val exampleMapShiftX = (mapWidth - exampleWidth) / 2
@@ -252,64 +263,27 @@ fun loadGameLevel(
     tilesAtlasIndex: Map<String, Int>,
     holesIndex: MutableMap<String, Int>,
     holesAnims: AnimationFrames
-): GameLevel {
-    return GameLevel(levelId, map.first().length, map.size + 1, tilesAtlasIndex, holesIndex, holesAnims).apply {
+) = GameLevel(levelId, map, tilesAtlasIndex, holesIndex, holesAnims)
 
-        val maxGuards = 5
-        // for load
-
-        map.forEachIndexed { y, row ->
-            row.forEachIndexed { x, cell ->
-                var guard = false
-
-                val tile = Tile.byChar[cell]!!
-
-                when(tile) {
-                    Tile.PLAYER -> {
-                        runnerPos.x = x
-                        runnerPos.y = y
-                    }
-                    Tile.GUARD -> {
-                        if ( guardsPos.size < maxGuards ) {
-                            guard = true
-                            guardsPos.add(Vec2i(x, y))
-                        }
-                    }
-                    Tile.GOLD -> {
-                        gold ++
-                    }
-                    else -> Unit
-                }
-
-                this.act[x][y] = tile.act
-                this.base[x][y] = tile.base
-                this.guard[x][y] = guard
-                this[x, y] = ViewCell(false, tilesAtlasIndex[
-                        if ( tile.base == TileLogicType.HLADR || tile.frame.isEmpty() )
-                            Tile.EMPTY.frame
-                        else tile.frame
-                ]!!
-                )
-            }
-        }
-
-    }
-}
 data class Anim( val pos: Vec2i, val name: String, var currentFrame: Int = 0 )
 
 class GameLevel(
     val levelId: Int,
-    val width: Int,
-    val height: Int,
+    private val map: List<String>,
     private val primaryTileSet: Map<String, Int>, // index
     private val holesTileSet: Map<String, Int>,
     val holesAnims: AnimationFrames
 ) {
 
+    val maxGuards = 5
+    // for load
+    val width = map.first().length
+    val height = map.size + 1 // ground
     enum class Status {
         LEVEL_STARTUP,
         LEVEL_PAUSED,
-        LEVEL_PLAYING
+        LEVEL_PLAYING,
+        LEVEL_DONE
     }
     // store view info
     val buf = createUint8Buffer(width * height)
@@ -318,9 +292,10 @@ class GameLevel(
     var gold = 0
     val isDone get() = gold == 0
     var status = Status.LEVEL_STARTUP
-    val bottomTileY = height - 1
 
     // store logic info
+    // prob overridable cell, so special getter -
+    // get cell = if ( !act ) base
     val act = Array(width) { Array(height) { TileLogicType.EMPTY } }
     val base = Array(width) { Array(height) { TileLogicType.EMPTY } }
     val guard = Array(width) { Array(height) { false } }
@@ -329,13 +304,10 @@ class GameLevel(
 
     init {
         println("creating level $levelId $width x $height")
-        for (x in 0 until this.width ) {
-            this.act[x][this.height-1] = TileLogicType.SOLID
-            this.base[x][this.height-1] = TileLogicType.SOLID
-            this[x, this.height-1] = ViewCell(false, primaryTileSet["ground"]!!)
-        }
+
+        reset()
     }
-    fun update(runner: Runner2, guards: List<Guard>) {
+    fun update(runner: Runner) {
 //        anims.takeIf { it.isNotEmpty() }?.run { println(this) }
         val iter = anims.iterator()
         val toAdd = mutableListOf<Anim>()
@@ -352,8 +324,9 @@ class GameLevel(
                     // break dig
                     act[x][y] = TileLogicType.BLOCK
                     this[x, y] = ViewCell(false, primaryTileSet[Tile.BRICK.frame]!!)
-                    guard[x][y] = false
-                    runner.stop()
+                    guard[x][y] = false //?
+                    runner.sounds.stopSound("dig")
+//                    runner.stop() //?
                     iter.remove()
                     continue
                 } else {
@@ -366,19 +339,6 @@ class GameLevel(
                 if ( animName == "fillHole" ) {
                     this[pos] = ViewCell(false, primaryTileSet[Tile.BRICK.frame]!!)
                     act[x][y] = TileLogicType.BLOCK
-                    guard[x][y] = false
-                    // check runner death
-                    if ( runner.x == x || runner.y == y ) {
-                        runner.alive = false
-                    }
-
-                    if ( guards.isNotEmpty() ) {
-                        guards.firstOrNull { gp -> gp.block.x == x && gp.block.y == y }?.run {
-                            alive = false
-                            runner.addScore(SCORE_DIES)
-                        }
-                    }
-
                 }
 
                 if ( animName == "digHoleLeftBase" || animName == "digHoleRightBase" ) {
@@ -416,12 +376,81 @@ class GameLevel(
     }
     operator fun set(at: Vec2i, t: Tile) = set(at.x, at.y, t)
 
+    fun getAround(at: Vec2i) = getAround(at.x, at.y)
+    fun getAround(x: Int, y: Int) = NeighbourhoodTopology.NeighborhoodNeumann2d.neighbours(x, y)
 
     fun getAct(at: Vec2i) = act[at.x][at.y]
     fun getBase(at: Vec2i) = base[at.x][at.y]
 
-    private fun isValid(x: Int, y: Int) = x >= 0 && x < width && y >= 0 && y < height
+    fun isValid(x: Int, y: Int) = x >= 0 && x < width && y >= 0 && y < height
     private fun isValid(at: Vec2i) = isValid(at.x, at.y)
+
+    fun reset() {
+        hideHiddenLadders()
+        stopAllAnims()
+        gold = 0
+        guardsPos.clear()
+
+        map.forEachIndexed { y, row ->
+            row.forEachIndexed { x, cell ->
+                var guard = false
+
+                val tile = Tile.byChar[cell]!!
+
+                when(tile) {
+                    Tile.PLAYER -> {
+                        runnerPos.x = x
+                        runnerPos.y = y
+                    }
+                    Tile.GUARD -> {
+                        if ( guardsPos.size < maxGuards ) {
+                            guard = true
+                            guardsPos.add(Vec2i(x, y))
+                        }
+                    }
+                    Tile.GOLD -> {
+                        gold ++
+                    }
+                    else -> Unit
+                }
+
+                this.act[x][y] = tile.act
+                this.base[x][y] = tile.base
+                this.guard[x][y] = guard
+                this[x, y] = ViewCell(false, primaryTileSet[
+                        if ( tile.base == TileLogicType.HLADR || tile.frame.isEmpty() )
+                            Tile.EMPTY.frame
+                        else tile.frame
+                ]!!
+                )
+            }
+        }
+
+        for (x in 0 until this.width ) {
+            this.act[x][this.height-1] = TileLogicType.SOLID
+            this.base[x][this.height-1] = TileLogicType.SOLID
+            this[x, this.height-1] = ViewCell(false, primaryTileSet["ground"]!!)
+        }
+
+        guard.forEach { row-> row.forEachIndexed { index, _ -> row[index] = false } }
+        guardsPos.forEach {
+            guard[it.x][it.y] = true
+        }
+        dirty = true
+    }
+
+    private fun stopAllAnims() {
+        val i = anims.iterator()
+        while( i.hasNext() ) {
+            val a = i.next()
+            // tbd make FSM
+            if ( a.name == "fillHole" || a.name == "digHoleLeftBase" || a.name == "digHoleRightBase") {
+                this[a.pos] = ViewCell(false, primaryTileSet[Tile.BRICK.frame]!!)
+                act[a.pos.x][a.pos.y] = TileLogicType.BLOCK
+            }
+            i.remove()
+        }
+    }
 
     fun updateTileMap(): TextureData2d {
 //        println("updating field($width x $height)")
@@ -432,23 +461,46 @@ class GameLevel(
         for ( y in 0 until height ) {
             for ( x in 0 until width) {
                 if ( base[x][y] == TileLogicType.HLADR ) {
-                    base[x][y] = TileLogicType.LADDR
                     act[x][y] = TileLogicType.LADDR
                     this[x, y] = ViewCell(false, primaryTileSet[Tile.LADDER.frame]!!)
                 }
             }
         }
+        status = Status.LEVEL_DONE
+    }
+    private fun hideHiddenLadders() {
+        for ( y in 0 until height ) {
+            for ( x in 0 until width) {
+                if ( base[x][y] == TileLogicType.HLADR ) {
+                    base[x][y] = TileLogicType.LADDR
+                    act[x][y] = TileLogicType.EMPTY
+                    this[x, y] = ViewCell(false, primaryTileSet[Tile.EMPTY.frame]!!)
+                }
+            }
+        }
+    }
+
+    // not safe
+    fun dropGold(x: Int, y: Int) {
+        base[x][y] = TileLogicType.GOLD
+        set(x, y, Tile.GOLD)
+    }
+    fun takeGold(x: Int, y: Int) {
+        base[x][y] = TileLogicType.EMPTY
+        set(x, y, Tile.EMPTY)
     }
 
     // for dig
+    fun isHole(x: Int, y: Int) = isValid(x, y) && base[x][y] == TileLogicType.BLOCK && act[x][y] == TileLogicType.EMPTY
     fun isBlock(x: Int, y: Int) = isValid(x, y) && act[x][y] == TileLogicType.BLOCK
 
-    fun isBarrier(x: Int, y: Int) = !isValid(x, y) ||
-        act[x][y] == TileLogicType.BLOCK ||
-        act[x][y] == TileLogicType.SOLID ||
-        act[x][y] == TileLogicType.TRAP
+    fun isBarrier(x: Int, y: Int) = !isValid(x, y) || act[x][y].run {
+        this == TileLogicType.BLOCK || this == TileLogicType.SOLID || this == TileLogicType.TRAP
+    }
     fun isBarrier(at: Vec2i) = isBarrier(at.x, at.y)
     //tbd to tiles itself?
+    fun isPassableForUp(x: Int, y: Int,) = isValid(x, y) &&
+            !act[x][y].block(ENTER_UP)
     fun isPassableForDown(x: Int, y: Int) = isValid(x, y) &&
             act[x][y] != TileLogicType.BLOCK &&
             act[x][y] != TileLogicType.SOLID
@@ -478,4 +530,15 @@ class GameLevel(
     fun hasGuard(x: Int, y: Int) = isValid(x, y) && guard[x][y]
     fun hasGuard(at: Vec2i) = hasGuard(at.x, at.y)
 
+}
+
+sealed class NeighbourhoodTopology {
+    abstract fun neighbours(x: Int, y: Int): Sequence<Int>
+    object NeighborhoodNeumann2d: NeighbourhoodTopology() {
+        val indx = arrayOf( 0, -1, -1, 0, 1, 0, 0, 1 )
+        override fun neighbours(x: Int, y: Int) =
+            indx.asSequence().chunked(2).flatMap { (dx, dy) ->
+                sequenceOf(x + dx, y + dy)
+            }
+    }
 }

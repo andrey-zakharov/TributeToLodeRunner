@@ -14,7 +14,6 @@ import me.az.ilode.*
 import me.az.shaders.TileMapShader
 import me.az.shaders.TileMapShaderConf
 import kotlin.experimental.and
-import kotlin.math.sqrt
 
 class LevelView(
     game: Game, level: GameLevel, conf: LevelSpec,
@@ -28,7 +27,7 @@ class LevelView(
 ) : Group() {
     private val tileMapShader = TileMapShader(TileMapShaderConf(tilesAtlas.tileCoords.size))
 //    val runnerView = ActorView( game.runner!!, runnerAtlas, runnerAnims, conf.tileSize)
-    val runnerView = Actor2View( game.runner!!, runnerAtlas, runnerAnims, conf.tileSize)
+    val runnerView = ActorView( game.runner, runnerAtlas, runnerAnims, conf.tileSize)
     val widthInPx = conf.tileSize.x * level.width
     val heightInPx = conf.tileSize.y * level.height
 
@@ -65,6 +64,7 @@ class LevelView(
                 if ( level.dirty ) {
                     tileMapShader.field = Texture2d(simpleValueTextureProps, level.updateTileMap())
                     level.dirty = false
+//                    println("level updated")
                 }
             }
         }
@@ -76,32 +76,7 @@ class LevelView(
     }
 }
 
-
 class ActorView(val actor: Actor,
-                val atlas: ImageAtlas,
-                val animations: AnimationFrames,
-                val tileSize: Vec2i
-) : Sprite(tileSize, atlas.tex, tileSize) {
-
-
-    init {
-        onUpdate += {
-
-            val sequence = animations.sequence[actor.action]!!
-            actor.frameIndex %= sequence.size
-            textureOffset.set(atlas.getTexOffset(sequence[actor.frameIndex]))
-
-            setIdentity()
-            translate(
-                actor.block.x - actor.level.width/2.0 + 0.5, actor.level.height - actor.block.y - 0.5,
-                0.0)
-//            scale(1f, 1f, 1f )
-            translate(actor.offset.x.toDouble()/tileSize.x, -actor.offset.y.toDouble()/tileSize.y, 0.0)
-        }
-    }
-}
-
-class Actor2View(val actor: Actor2,
                 val atlas: ImageAtlas,
                 val animations: AnimationFrames,
                 val tileSize: Vec2i
@@ -113,6 +88,7 @@ class Actor2View(val actor: Actor2,
             actor.level?.run {
 
                 val sequence = animations.sequence[actor.action.id]?: throw NullPointerException(actor.action.id)
+                if ( actor.sequenceSize == 0 ) actor.sequenceSize = sequence.size
                 textureOffset.set(atlas.getTexOffset(sequence[actor.frameIndex % sequence.size]))
 
                 setIdentity()

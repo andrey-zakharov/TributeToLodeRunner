@@ -3,10 +3,8 @@ import de.fabmax.kool.KoolContext
 import de.fabmax.kool.UniversalKeyCode
 import de.fabmax.kool.math.*
 import de.fabmax.kool.math.spatial.BoundingBox
-import de.fabmax.kool.modules.ksl.KslUnlitShader
 import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.*
-import de.fabmax.kool.pipeline.FullscreenShaderUtil.generateFullscreenQuad
 import de.fabmax.kool.scene.*
 import de.fabmax.kool.scene.animation.*
 
@@ -14,24 +12,24 @@ import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.Viewport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.yield
 import me.az.ilode.*
 import me.az.shaders.MaskShader
-import me.az.utils.floor
+import me.az.view.GameControls
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
 abstract class AsyncScene(name: String? = null) : Scene(name) {
-    protected var sceneState = State.NEW
+    private var sceneState = State.NEW
     init {
         onRenderScene += {
             checkState(it)
         }
     }
 
-    fun checkState(ctx: KoolContext) {
+    private fun checkState(ctx: KoolContext) {
         if (sceneState == State.NEW) {
             // load resources (async from AssetManager CoroutineScope)
             sceneState = State.LOADING
@@ -110,20 +108,22 @@ class GameLevelScene (
     val assets: AssetManager,
     val gameSettings: GameSettings,
     name: String? = null,
+    private val startNewGame: Boolean = false,
 
 ) : AsyncScene(name), CoroutineScope {
     var tileSet: TileSet = TileSet.SPRITES_APPLE2
     val conf = LevelSpec()
-    val currentLevelId = 2
-    val currentLevel
-        get() = levels.getLevel(currentLevelId)
+    private val currentLevel get() = levels.getLevel(gameSettings.currentLevel, false)
+    private val immortal = MutableStateValue(game.state.immortal).also {
+        it.onChange { v -> game.state.immortal = v } // save to settings
+    }
 
     protected val job = Job()
     override val coroutineContext: CoroutineContext
         get() = job
 
     private lateinit var bg: Texture2d
-    private lateinit var off: OffscreenRenderPass2d
+    private var off: OffscreenRenderPass2d? = null
     private var tilesAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet, "tiles"))
     private var runnerAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet, "runner"))
     private var guardAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet, "guard"))
@@ -156,16 +156,16 @@ class GameLevelScene (
         speed = 1f
     }
     private val shatterRadiusAnim = LinearAnimator(InterpolatedFloat(0f, 1f)).apply {
-        duration = 10f
+        duration = 1f
     }
     val currentShutter get() = shatterRadiusAnim.value.value
     val debug = MutableStateValue("")
 
-    lateinit var levelView: LevelView
+    var levelView: LevelView? = null
+    var mask: Group? = null
     //cam
     val visibleWidth get() = visibleTilesX * conf.tileSize.x
     val visibleHeight get() = visibleTilesY * conf.tileSize.y
-    var debugAnim = false
 
     private val createCamera get() = OrthographicCamera("plain").apply {
         projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
@@ -208,6 +208,11 @@ class GameLevelScene (
 
     override fun setup(ctx: KoolContext) {
 
+        if ( startNewGame ) {
+            game.runner.startNewGame()
+        }
+        game.runner.sounds = sounds
+
         +sprite(bg).apply {
             grayScaled = true
             val imageMinSide = min(bg.loadedTexture!!.width, bg.loadedTexture!!.height)
@@ -216,155 +221,233 @@ class GameLevelScene (
             // paralax TBD
         }
 
-        game.onStatusChanged += {
-            when(it) {
-                GameState.GAME_START -> startIntro(ctx)
-                GameState.GAME_RUNNING -> stopIntro(ctx)
-                GameState.GAME_FINISH -> {
-                    sounds.playSound("pass")
-                    val scoreDuration = sounds["pass"]?.duration?.div((SCORE_COUNTER + 1)) ?: 0
+        game.onStateChanged += {
+            println("GameScene. gameState = $name")
+            when(name) {
+                "start" -> {
+                    // timer to demo, or run
+                    startIntro(ctx)
+                }
+                "run" -> stopIntro(ctx)
+                "finish" -> {
+                    sounds.playSound("goldFinish")
                     startOutro(ctx)
+                }
+
+                "dead" -> {
+                    startOutro(ctx)
+                }
+                "prevlevel" -> {
+                    if ( shatterRadiusAnim.speed == 0f ) startOutro(ctx)
+                    gameSettings.currentLevel -= 1
+                    if ( gameSettings.currentLevel < 0 ) gameSettings.currentLevel += levels.levels.size
+
+                }
+                "nextlevel" -> {
+                    // black
+                    if ( shatterRadiusAnim.speed == 0f ) startOutro(ctx)
+                    gameSettings.currentLevel += 1
+                    println("nextlevel: ${gameSettings.currentLevel} ${levels.levels.size}")
+                    if ( gameSettings.currentLevel >= levels.levels.size ) {
+                        // finish game
+                    }
+                }
+                "newlevel" -> {
+                    game.level = currentLevel
+                    addLevelView(ctx)
+                    for ( g in game.guards ) {
+                        g.sounds = sounds
+                    }
                 }
                 else -> Unit
             }
         }
-        game.levelStartup(currentLevel, guardAnims)
-        game.runner.sounds = sounds
-        for ( g in game.guards ) {
-            g.sounds = sounds
-        }
 
-        +Runner2Controller(ctx.inputMgr, game.runner)
+        game.reset()
+
+        +RunnerController(ctx.inputMgr, game.runner)
         +lineMesh("x") { addLine(Vec3f.ZERO, Vec3f(1f, 0f, 0f), Color.RED) }
         +lineMesh("y") { addLine(Vec3f.ZERO, Vec3f(0f, 1f, 0f), Color.GREEN) }
         +lineMesh("z") { addLine(Vec3f.ZERO, Vec3f(0f, 0f, 1f), Color.BLUE) }
+    }
+
+    private fun addLevelView(ctx: KoolContext) {
+        removeLevelView(ctx)
 
         // views
-        levelView = LevelView(game, currentLevel, conf, tilesAtlas, holeAtlas, runnerAtlas, runnerAnims, guardAtlas, guardAnims)
-//        +levelView
-        off = OffscreenRenderPass2d(levelView, renderPassConfig {
-            this.name = "bg"
+        levelView = LevelView(
+            game,
+            currentLevel,
+            conf,
+            tilesAtlas,
+            holeAtlas,
+            runnerAtlas,
+            runnerAnims,
+            guardAtlas,
+            guardAnims
+        ).also {
+            off = OffscreenRenderPass2d(it, renderPassConfig {
+                this.name = "bg"
 
-            setSize(visibleWidth, visibleHeight)
-            setDepthTexture(false)
-            addColorTexture {
-                colorFormat = TexFormat.RGBA
-                minFilter = FilterMethod.NEAREST
-                magFilter = FilterMethod.NEAREST
+                setSize(visibleWidth, visibleHeight)
+                setDepthTexture(false)
+                addColorTexture {
+                    colorFormat = TexFormat.RGBA
+                    minFilter = FilterMethod.NEAREST
+                    magFilter = FilterMethod.NEAREST
+                }
+            }).apply {
+                camera = createCamera.apply {
+                    projCorrectionMode = Camera.ProjCorrectionMode.OFFSCREEN
+                }
+                clearColor = Color(0.00f, 0.00f, 0.00f, 0.00f)
             }
-        }).apply {
-            camera = createCamera.apply {
-                projCorrectionMode = Camera.ProjCorrectionMode.OFFSCREEN
-                isKeepAspectRatio = true
-            }
-            clearColor = Color(0.00f, 0.00f, 0.00f, 0.00f)
         }
 
-        //mask
+        println(levelView)
 
-        +group {
+        //mask
+        mask = group {
             +textureMesh {
                 generate {
                     rect {
                         size.set(visibleWidth.toFloat(), visibleHeight.toFloat())
-                        origin.set(-width/2f, 0f, 0f)
+                        origin.set(-width / 2f, 0f, 0f)
                         mirrorTexCoordsY()
                     }
                 }
-                shader = MaskShader { color { textureColor(off.colorTexture) } }
+                shader = MaskShader { color { textureColor(off!!.colorTexture) } }
                 onUpdate += {
-                    (shader as MaskShader).visibleRadius = shatterRadiusAnim.tick( it.ctx )
+                    (shader as MaskShader).visibleRadius = shatterRadiusAnim.tick(it.ctx)
+                    // hack to sync anims
+                    if (shatterRadiusAnim.progress >= 1f) game.animEnds = true
+                    else if (game.runner.anyKeyPressed) {
+                        stopIntro(it.ctx)
+                        game.skipAnims = true
+                    }
                 }
             }
-            onUpdate += {
-                //this.setIdentity()
-                //this.scale(min(it.viewport.width / visibleWidth.toFloat(), it.viewport.height / visibleHeight.toFloat()))
+        }
+        +mask!!
+
+        addOffscreenPass(off!!)
+
+        val cal = calculateCamera(levelView!!, levelView!!.runnerView, off!!.camera as OrthographicCamera)
+
+        // each redraw tick
+        updater = { ev ->
+            if (game.isPlaying) {
+                val pos = cal()
+                // anim?
+                cameraPos.to.set(
+                    pos.x /*+ (ctx.inputMgr.pointerState.primaryPointer.x.toFloat() - it.viewport.width/2) / 50f*/,
+                    pos.y /*+ (ctx.inputMgr.pointerState.primaryPointer.y.toFloat() - it.viewport.height/2) / 50f*/,
+                    10f
+                )
+                cameraPos.from.set(cameraPos.value)
+            }
+
+            if ((ev.time - lastUpdate) * 1000 >= gameSettings.speed.msByPass) {
+                game.tick(ev)
+                lastUpdate = ev.time
             }
         }
-        addOffscreenPass(off)
 
-        val deadZone = with(off.camera as OrthographicCamera) {
+        onUpdate += updater!!
+        // each game tick
+        subscriber = updateCamera(off!!.camera as OrthographicCamera, ctx)
+        game.onPlayGame += subscriber!!
+
+    }
+
+    private fun removeLevelView(ctx: KoolContext) {
+        updater?.run { onUpdate -= this }
+        subscriber?.run { game.onPlayGame -= this }
+        subscriber = null
+
+        mask?.run {
+            this@GameLevelScene.removeNode(this)
+            dispose()
+        }
+        mask = null
+
+        off?.run {
+            removeOffscreenPass(this)
+            dispose(ctx)
+        }
+        off = null
+
+        levelView?.dispose(ctx)
+        levelView = null
+    }
+
+    private var updater: ((RenderPass.UpdateEvent) -> Unit)? = null
+    private var subscriber: ((Game, RenderPass.UpdateEvent?) -> Unit)? = null
+
+    private fun calculateCamera(boundNode: Group, followNode: Node, camera: OrthographicCamera): () -> MutableVec3f {
+
+        val deadZone = with(camera) {
             BoundingBox().apply {
                 add(Vec3f(-this@with.width / 4, -this@with.height / 4, 0f))
                 add(Vec3f(this@with.width/4, this@with.height/4, 0f))
             }
         }
-        val borderZone = with(off.camera as OrthographicCamera) {
-            val scaledMin = MutableVec3f(levelView.bounds.min)
-            val scaledMax = MutableVec3f(levelView.bounds.max)
-            levelView.transform.transform(scaledMin)
-            levelView.transform.transform(scaledMax)
+        val borderZone = with(camera) {
+            val scaledMin = MutableVec3f(boundNode.bounds.min)
+            val scaledMax = MutableVec3f(boundNode.bounds.max)
+            boundNode.transform.transform(scaledMin)
+            boundNode.transform.transform(scaledMax)
 
             BoundingBox().apply {
                 add(Vec3f( scaledMin.x + this@with.width / 2f, 0f, 0f))
                 add(Vec3f( scaledMax.x - this@with.width / 2f, scaledMax.y - this@with.height, 0f))
             }
         }
-        // each redraw tick
-        onUpdate += { ev ->
 
-            if ( game.isPlaying ) {
-                val resultPos = MutableVec3f(levelView.runnerView.globalCenter)
+        return {
+            val resultPos = MutableVec3f(followNode.globalCenter)
 
-                with(off.camera as OrthographicCamera) {
-                    //camera shift
-                    resultPos -= Vec3f(0f, height / 2f, 0f)
-                    // get distance from camera. if more than viewport / 4 - move
-                    val diff = resultPos - globalLookAt
-                    if ( !deadZone.contains(diff) ) {
-                        if ( diff.x > deadZone.max.x ) {
-                            resultPos.x = globalPos.x + diff.x - deadZone.max.x
-                        } else if ( diff.x < deadZone.min.x ) {
-                            resultPos.x = globalPos.x - (deadZone.min.x - diff.x)
-                        } else {
-                            resultPos.x = globalPos.x
-
-                        }
-
-                        if ( diff.y > deadZone.max.y ) {
-                            resultPos.y = globalPos.y + diff.y - deadZone.max.y
-                        } else if ( diff.y < deadZone.min.y ) {
-                            resultPos.y = globalPos.y - (deadZone.min.y - diff.y)
-                        } else {
-                            resultPos.y = globalPos.y
-                        }
+            with(camera) {
+                //camera shift
+                resultPos -= Vec3f(0f, height / 2f, 0f)
+                // get distance from camera. if more than viewport / 4 - move
+                val diff = resultPos - globalLookAt
+                if ( !deadZone.contains(diff) ) {
+                    if ( diff.x > deadZone.max.x ) {
+                        resultPos.x = globalPos.x + diff.x - deadZone.max.x
+                    } else if ( diff.x < deadZone.min.x ) {
+                        resultPos.x = globalPos.x - (deadZone.min.x - diff.x)
                     } else {
                         resultPos.x = globalPos.x
-                        resultPos.y = globalPos.y
+
                     }
 
-                    borderZone.clampToBounds(resultPos)
-//                    resultPos.z = 0f
-
-                    cameraPos.to.set(
-                        resultPos.x /*+ (ctx.inputMgr.pointerState.primaryPointer.x.toFloat() - it.viewport.width/2) / 50f*/,
-                        resultPos.y /*+ (ctx.inputMgr.pointerState.primaryPointer.y.toFloat() - it.viewport.height/2) / 50f*/, 10f)
-                    cameraPos.from.set(cameraPos.value)
-                    //                    cameraAnimator.progress = 0f
-                    //                    cameraAnimator.speed = 1f
+                    if ( diff.y > deadZone.max.y ) {
+                        resultPos.y = globalPos.y + diff.y - deadZone.max.y
+                    } else if ( diff.y < deadZone.min.y ) {
+                        resultPos.y = globalPos.y - (deadZone.min.y - diff.y)
+                    } else {
+                        resultPos.y = globalPos.y
+                    }
+                } else {
+                    resultPos.x = globalPos.x
+                    resultPos.y = globalPos.y
                 }
-            }
 
-            if ( (ev.time - lastUpdate) * 1000 >= gameSettings.speed.msByPass ) {
-                game.tick(ev)
-                lastUpdate = ev.time
-            }
-        }
+                borderZone.clampToBounds(resultPos)
 
-        // each game tick
-        game.onPlayGame += {level, ev ->
-            with(off.camera) {
-                position.set ( cameraAnimator.tick(ctx) )
-                lookAt.set(position.x, position.y, 0f)
+                resultPos
+
             }
         }
 
-        game.startGame() ///< wierd stuff - model depends on view?
-
-        ctx.inputMgr.registerKeyListener(UniversalKeyCode('a'), "play anim step") {
-            if ( it.isReleased )
-                game.playAnims = true
+    }
+    private fun updateCamera(camera: OrthographicCamera, ctx: KoolContext) = {_: Game, ev: RenderPass.UpdateEvent? ->
+        with(camera) {
+            position.set(cameraAnimator.tick(ctx))
+            lookAt.set(position.x, position.y, 0f)
         }
+        Unit
     }
 
     var lastUpdate = 0.0
@@ -383,13 +466,38 @@ class GameLevelScene (
                     .width(WrapContent)
                     .height(WrapContent)
                 onUpdate += {
-                    debug.set("%.1f %.1f %.1f\n%d %d\n%d %d x %d %d\n%s[ %d ]".format(shatterRadiusAnim.value.from, currentShutter, shatterRadiusAnim.value.to,
+                    debug.set("act = %s (%b)\ninput: %d %d\n%d %d x %d %d\n%s[ %d ]\nguards: %s\nlevel.gold=%d".format(
+                        game.level?.act?.get(game.runner.x)?.get(game.runner.y) ?: "<no level>",
+                        game.level?.isBarrier(game.runner.x, game.runner.y),
                         game.runner.inputVec.x ?: "<no runner>", game.runner.inputVec.y ?: "<no runner>",
                         game.runner.x, game.runner.ox, game.runner.y, game.runner.oy,
-                        game.runner.action.id, game.runner.frameIndex
+                        game.runner.action.id, game.runner.frameIndex,
+                        game.guards.joinToString(" ") { it.hasGold.toString() },
+                        game.level?.gold
                     ))
                 }
             }
+        }
+        Row {LabeledSwitch("stop animations", game.stopAnims) }
+        Row {LabeledSwitch("stop guards", game.stopGuards) }
+        Row {LabeledSwitch("immortal", immortal) }
+    }
+
+    fun TextScope.labelStyle(width: Dimension = WrapContent) {
+        modifier
+            .width(width)
+            .align(yAlignment = AlignmentY.Center)
+    }
+
+    fun UiScope.LabeledSwitch(label: String, toggleState: MutableStateValue<Boolean>) {
+        Text(label) {
+            labelStyle(Grow.Std)
+            modifier.onClick { toggleState.toggle() }
+        }
+        Switch(toggleState.use()) {
+            modifier
+                .alignY(AlignmentY.Center)
+                .onToggle { toggleState.set(it) }
         }
     }
 
@@ -400,6 +508,14 @@ class GameLevelScene (
             value.from = (sqrt((visibleWidth* visibleWidth + visibleHeight * visibleHeight).toDouble()) / 2).toFloat()
             value.to = 0f
         }
+
+    private suspend fun Animator<Float, InterpolatedFloat>.playAnim(from: Float, to: Float) {
+        speed = 1f
+        progress = 0f
+        value.from = 0f
+        value.to = (sqrt((visibleWidth* visibleWidth + visibleHeight * visibleHeight).toDouble()) / 2).toFloat()
+        while (progress < 1) yield()
+    }
 
     private fun startIntro(ctx: KoolContext) =
         shatterRadiusAnim.apply {

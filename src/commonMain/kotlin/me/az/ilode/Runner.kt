@@ -1,43 +1,96 @@
 package me.az.ilode
 
-import de.fabmax.kool.math.MutableVec2i
 import de.fabmax.kool.math.Vec2i
-import de.fabmax.kool.pipeline.RenderPass
-import me.az.utils.StackedStateMachine
-import me.az.utils.buildStateMachine
+import kotlin.math.abs
 
 
 const val START_HEALTH = 5
 const val MAX_HEALTH = 100
 val Controllable.anyKeyPressed get() = digLeft || digRight || inputVec.x != 0 || inputVec.y != 0
 
-class Runner2(game: Game) : Actor2(game, false), Controllable {
-    var health = START_HEALTH
-    var score = 0
+class Runner(game: Game) : Actor(game), Controllable {
+    var health = game.state.runnerLifes
+        set(value) {
+            field = value
+            game.state.runnerLifes = value
+        }
+    var score = game.state.curScore
+        private set(value) {
+            field = value
+            game.state.curScore = value
+        }
     val success: Boolean get() = y == 0 && oy == 0 && game.level?.isDone == true
-    fun startLevel(level: GameLevel) {
-        block.x = level.runnerPos.x
-        block.y = level.runnerPos.y
-        offset.x = 0
-        offset.y = 0
+
+    init {
+        game.onLevelStart += {
+            block.x = it.runnerPos.x
+            block.y = it.runnerPos.y
+        }
+    }
+
+    fun startNewGame() {
+        health = START_HEALTH
+        score = 0
     }
 
     override val fsm by lazy {
-        val stopState = StopState(this@Runner2)
-        buildStateMachine(stopState.name) {
-            this += stopState
-            this += RunLeft(this@Runner2)
-            this += RunRight(this@Runner2)
-            this += RunUp(this@Runner2)
-            this += RunDown(this@Runner2)
-            this += BarLeft(this@Runner2)
-            this += BarRight(this@Runner2)
-            this += DigRight(this@Runner2)
-            this += DigLeft(this@Runner2)
-            // need something better
-            this += FallState(this@Runner2, false)
+        super.fsm.apply {
+            // it would need to separate Controllable for Runner's and Guard's
+            this += DigRight(this@Runner)
+            this += DigLeft(this@Runner)
+
         }
     }
+
+    override val onFallStop = { sounds.playSound("down") }
+
+    fun dead() {
+        if (!game.state.immortal) alive = false // for game fsm
+    } // game will handle this
+    // should prevent others transitions for a while dig stops
+    sealed class DigState(actor: Runner, animName: ActorSequence) : ActorState(actor, animName, animName.id) {
+        companion object {
+            const val digRunnerAnimLength = 1
+        }
+        init {
+            onEnter {
+                with(actor) {
+                    offset.x = 0
+                    offset.y = 0
+                    sounds.playSound("dig")
+
+                    val (digTileX, bitmap) = if (digLeft) {
+                        Pair(x - 1, "digHoleLeft")
+                    } else {
+                        Pair(x + 1, "digHoleRight")
+                    }
+
+                    level.act[digTileX][y + 1] = TileLogicType.EMPTY
+                    level.anims.add(Anim(Vec2i(digTileX, y), bitmap))
+                    level.anims.add(Anim(Vec2i(digTileX, y + 1), "${bitmap}Base"))
+                }
+            }
+
+            onUpdate {
+                // if state expired and not loop
+                if ( frameIndex >= digRunnerAnimLength ) {
+                    //hack
+                    actor.action = when(this@DigState) {
+                        is DigLeft -> ActorSequence.RunLeft
+                        is DigRight -> ActorSequence.RunRight
+                    }
+                    return@onUpdate StopState.name
+                }
+
+                frameIndex ++
+                null
+            }
+
+        }
+    }
+
+    class DigLeft(actor: Runner) : DigState(actor, ActorSequence.DigLeft)
+    class DigRight(actor: Runner): DigState(actor, ActorSequence.DigRight)
 
     //Page 276 misc.c (book)
     fun ok2Dig(nx: Int): Boolean {
@@ -53,94 +106,37 @@ class Runner2(game: Game) : Actor2(game, false), Controllable {
         level.gold --
         addScore(SCORE_GOLD)
 
-        if ( level.gold == 0 ) {
+        if ( level.isDone ) {
 //                    playSound("goldFinish${(level.levelId - 1) % 6 + 1}")
             sounds.playSound("goldFinish")
             level.showHiddenLadders()
         }
         return true
     }
-}
-class Runner(level: GameLevel) : Actor(level, CharType.RUNNER) {
-    val stance = Array(4) { false } // up, right, down, left
 
-    var health = START_HEALTH
-    var score = 0
-    var digLeft: Boolean = false
-    var digRight: Boolean = false
-    val dig: Boolean get() = digLeft || digRight
-    val success: Boolean get() = block.y == 0 && offset.y == 0 && level.gold == 0
+    override fun update() {
+        super.update()
+        if (checkCollision())
+            dead()
+    }
 
-    val anyKeyPressed get() = dig || stance.any { it }
-
-    val canDig: Boolean get() {
-        val x = block.x
-        val y = block.y
-        if ( (digLeft || (action == "runLeft" && !digRight)) && x > 1 ) {
-
-            if ( y < level.height && x > 0 ) {
-                val lTile = Vec2i(x-1, y+1)
-                val dTile = Vec2i(x-1, y)
-
-                if ( level.getAct(lTile) == TileLogicType.BLOCK && level.getAct(dTile) == TileLogicType.EMPTY) {
-                    if ( level.getBase(dTile) != TileLogicType.GOLD && !level.hasGuard(dTile) ) {
-                        return true
-                    }
-                }
-            }
-        } else if ((digRight || action == "runRight") && x < level.width - 2 ) {
-            if ( y < level.height && x < level.width ) {
-                val rTile = Vec2i(x+1, y+1)
-                val dTile = Vec2i(x+1, y)
-                if ( level.getAct(rTile) == TileLogicType.BLOCK && level.getAct(dTile) == TileLogicType.EMPTY) {
-                    if ( level.getBase(dTile) != TileLogicType.GOLD && !level.hasGuard(dTile)) {
-                        return true
-                    }
-                }
+    private fun checkCollision(): Boolean {
+        level.getAround(block).chunked(2).filter {
+            level.isValid(it.first(), it.last())
+        }.firstOrNull {
+            level.hasGuard(it.first(), it.last())
+        }?.run {
+            val (x, y) = this
+            val g = game.getGuard(x, y)
+            if ( !g.isReborn() &&
+                abs( absolutePosX - g.absolutePosX ) <= 3 * W4 &&
+                abs( absolutePosY - g.absolutePosY ) <= 3 * H4
+            ) {
+                //dead
+                return true
             }
         }
-        return false
+
+        return level.isBarrier(x, y)
     }
-
-
-    init {
-        block = level.runnerPos
-    }
-    fun reset() {
-        digLeft = false
-        digRight = false
-        stance.fill(false)
-    }
-
-    fun addScore(points: Int) {
-        score += points
-    }
-
-    fun update() {
-        if ( success ) return
-
-        // Update runner position
-        move( when {
-            ( state == State.STATE_FALL) || level.status == GameLevel.Status.LEVEL_STARTUP -> Action.ACT_NONE
-            dig -> Action.ACT_DIG
-            stance[0] -> Action.ACT_UP
-            stance[1] -> Action.ACT_RIGHT
-            stance[2] -> Action.ACT_DOWN
-            stance[3] -> Action.ACT_LEFT
-            else -> Action.ACT_NONE
-        } )
-
-        // Falling sound
-        if ( state == State.STATE_FALL && level.status == GameLevel.Status.LEVEL_PLAYING ) {
-            playSound("fall")
-        } else {
-            sounds.stopSound("fall")
-        }
-        updateFrame()
-
-    }
-
-
-
-
 }
