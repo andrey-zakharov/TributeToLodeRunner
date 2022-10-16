@@ -53,6 +53,17 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
 
     override val shouldNotFall: Boolean
         get() = super.shouldNotFall || inHole // when running up from hole
+
+    override fun canMoveRight() =
+        super.canMoveRight() && !(
+            level.hasGuard(x + 1, y) && ox >= game.getGuard(x + 1, y).ox
+        )
+
+    override fun canMoveLeft() =
+        super.canMoveLeft() && !(
+            level.hasGuard(x - 1, y) && ox <= game.getGuard(x - 1, y).ox
+        )
+
     fun updateGuard(runner: Runner) {
         if ( fsm.currentState is ActorState.ControllableState ) {
             val nextAct = bestMove(runner)

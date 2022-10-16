@@ -135,6 +135,9 @@ sealed class Actor(val game: Game) : Controllable {
                 (oy < 0 && level.hasGuard(x, y + 1) && oy < game.getGuard(x, y+1).offset.y)
 
     open val onFallStop: (() -> Unit)? = null
+    open fun canMoveRight() = ox < 0 || (ox >= 0 && !level.isBarrier(x + 1, y))
+    open fun canMoveLeft() = ox > 0 || (ox <= 0 && !level.isBarrier(x - 1, y))
+
     abstract fun takeGold(): Boolean
 
     fun stop() = fsm.reset()
@@ -152,6 +155,7 @@ sealed class Actor(val game: Game) : Controllable {
             }
         }
     }
+
 
 
     // states and valid transitions
@@ -397,17 +401,15 @@ sealed class Actor(val game: Game) : Controllable {
         }
         // bar and simple walk
         sealed class MoveLeft(actor: Actor, animName: ActorSequence ) : MovementState(actor, animName) {
-            private val Actor.invariant get() = ox > 0 || (ox <= 0 && !level.isBarrier(x - 1, y))
             init {
                 edge(StopState.name) {
-                    action { actor.offset.x = 0 }
-                    validWhen { !invariant }
+                    validWhen { !canMoveLeft() }
                 }
 
                 onUpdate {
                     offset.x -= xMove
                     centerY()
-                    if ( !invariant ) offset.x = 0 // stop until next tick
+                    if ( ox < 0 && !canMoveLeft() ) offset.x = 0 // stop until next tick
                     if (ox < -W2) { //move to x-1 position
                         block.x--
                         offset.x += TILE_WIDTH
@@ -422,17 +424,15 @@ sealed class Actor(val game: Game) : Controllable {
 
         // bar and walk
         sealed class MoveRight(actor: Actor, animName: ActorSequence) : MovementState(actor, animName) {
-            val Actor.invariant get() = ox < 0 || (ox >= 0 && !level.isBarrier(x + 1, y))
             init {
                 edge(StopState.name) {
-                    action { actor.offset.x = 0 }
-                    validWhen { !invariant }
+                    validWhen { !canMoveRight() }
                 }
 
                 onUpdate {
                     offset.x += xMove
                     centerY()
-                    if ( !invariant ) offset.x = 0
+                    if ( offset.x > 0 && !canMoveRight() ) offset.x = 0
                     if ( ox > W2 ) { //move to x+1 position
                         block.x++
                         offset.x -= TILE_WIDTH
