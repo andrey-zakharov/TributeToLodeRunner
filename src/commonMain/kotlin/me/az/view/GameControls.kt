@@ -14,8 +14,8 @@ class GameControls(val game: Game, val inputManager: InputManager): Node() {
             inputManager.registerKeyListener(
                 keyCode = action.keyCode.code,
                 name = action.name,
-                filter = {ev -> ev.isPressed &&
-                        (action.keyCode.modificatorBitMask or ev.modifiers) xor action.keyCode.modificatorBitMask == 0
+                filter = { ev ->
+                    ev.isPressed && (action.keyCode.modificatorBitMask xor ev.modifiers) == 0
                 }
             ) { ev ->
                 if ( ev.isReleased ) action.onRelease.invoke(game, ev)

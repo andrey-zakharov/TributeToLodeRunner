@@ -50,9 +50,9 @@ interface Controllable {
 // diverge by bool features
 sealed class Actor(val game: Game) : Controllable {
 
-    open val fsm: StackedStateMachine<Actor> by lazy {
+    open val fsm by lazy {
         val stopState = ActorState.StopState(this)
-        buildStateMachine(stopState.name) {
+        buildStateMachine<String, Actor>(stopState.name) {
             this += stopState
             this += ActorState.MoveLeft.RunLeft(this@Actor)
             this += ActorState.MoveLeft.BarLeft(this@Actor)
@@ -169,7 +169,7 @@ sealed class Actor(val game: Game) : Controllable {
         val actor: Actor,
         val animName: ActorSequence?,
         name: String = animName!!.id,
-    ) : StackedState<Actor>(name) {
+    ) : StackedState<String, Actor>(name) {
         init {
             onEnter { animName?.run { actor.action = this } }
         }
@@ -409,7 +409,7 @@ sealed class Actor(val game: Game) : Controllable {
             }
         }
 
-        class MoveLeftState(actor: Actor) : CompoundState<Actor>(name) {
+        class MoveLeftState(actor: Actor) : CompoundState<String, Actor>(name) {
             companion object {
                 const val name = "moveleft"
             }

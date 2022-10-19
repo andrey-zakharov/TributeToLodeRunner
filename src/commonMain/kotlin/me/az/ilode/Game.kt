@@ -25,6 +25,17 @@ import kotlin.properties.ReadWriteProperty
 //
 //}
 
+enum class GameState {
+    GAME_START,
+    GAME_RUNNING ,
+    GAME_FINISH , GAME_FINISH_SCORE_COUNT,
+    GAME_WAITING , GAME_PAUSE,
+    GAME_NEW_LEVEL , GAME_RUNNER_DEAD,
+    GAME_OVER_ANIMATION , GAME_OVER,
+    GAME_NEXT_LEVEL , GAME_PREV_LEVEL,
+    GAME_LOADING , GAME_WIN
+}
+
 class GameSettings(val settings: Settings) {
     var curScore: Int by settings.int(defaultValue = 0)
     var currentLevel: Int by settings.int(defaultValue = 0)
@@ -74,8 +85,8 @@ class Game(val state: GameSettings) : CoroutineScope {
 //            field = value
 ////            onStatusChanged.forEach { it.invoke(field) }
 //        }
-    val isPlaying get() = fsm.currentStateName == "run"
-    val isPaused get() = fsm.currentStateName == "pause"
+    val isPlaying get() = fsm.currentStateName == GameState.GAME_RUNNING
+    val isPaused get() = fsm.currentStateName == GameState.GAME_PAUSE
 
     var level: GameLevel? = null
         set(v) {
@@ -95,12 +106,12 @@ class Game(val state: GameSettings) : CoroutineScope {
 
     fun startGame() { fsm.reset(true) }
     //@ActionSpec(defaultSpec = KeySpec('a'+ctrl))
-    fun abortGame() { fsm.setState("dead") }
+    fun abortGame() { fsm.setState(GameState.GAME_RUNNER_DEAD) }
 
     //@ActionSpec(defaultSpec = KeySpec('f'+ctrl))
-    fun finishGame() { fsm.setState("finish") }
-    fun prevLevel() { fsm.setState("prevlevel") }
-    fun nextLevel() { fsm.setState("nextlevel") }
+    fun finishGame() { fsm.setState(GameState.GAME_FINISH) }
+    fun prevLevel() { fsm.setState(GameState.GAME_PREV_LEVEL) }
+    fun nextLevel() { fsm.setState(GameState.GAME_NEXT_LEVEL) }
 
     fun reset() {
         nextGuard = 0
@@ -109,9 +120,9 @@ class Game(val state: GameSettings) : CoroutineScope {
         fsm.reset(true)
     }
 
-    private val fsm by lazy { buildStateMachine<Game>("newlevel") {
-        state("start") {
-            edge("run") {
+    private val fsm by lazy { buildStateMachine<GameState, Game>(GameState.GAME_NEW_LEVEL) {
+        state(GameState.GAME_START) {
+            edge(GameState.GAME_RUNNING) {
                 validWhen { runner.anyKeyPressed }
                 // show intro
             }
@@ -120,14 +131,14 @@ class Game(val state: GameSettings) : CoroutineScope {
                 level!!.reset()
             }
         }
-        state("run") {
-            edge("finish") {
+        state(GameState.GAME_RUNNING) {
+            edge(GameState.GAME_FINISH) {
                 action {
 //                    runner.sounds.playSound("pass")
                 }
                 validWhen { runner.success }
             }
-            edge("dead") {
+            edge(GameState.GAME_RUNNER_DEAD) {
                 validWhen { !runner.alive }
             }
             onUpdate {
@@ -143,22 +154,22 @@ class Game(val state: GameSettings) : CoroutineScope {
             }
         }
 
-        state("dead") {
+        state(GameState.GAME_RUNNER_DEAD) {
             onEnter {
                 runner.sounds.playSound("dead")
                 runner.health--
 
                 animEnds = false
             }
-            edge("gameover") {
+            edge(GameState.GAME_OVER) {
                 validWhen { state.runnerLifes <= 0 }
             }
-            edge("newlevel") {
+            edge(GameState.GAME_NEW_LEVEL) {
                 validWhen { animEnds || skipAnims }
             }
         }
 
-        state("finish") {
+        state(GameState.GAME_FINISH) {
             var finalScore = 0
             onEnter {
                 // playMode = CLASSIC
@@ -167,7 +178,7 @@ class Game(val state: GameSettings) : CoroutineScope {
 //                gameState = GameState.GAME_FINISH_SCORE_COUNT
             }
 
-            edge("nextlevel") {
+            edge(GameState.GAME_NEXT_LEVEL) {
                 validWhen {
                     runner.score >= finalScore
                 }
@@ -179,23 +190,23 @@ class Game(val state: GameSettings) : CoroutineScope {
                 null
             }
         }
-        state("prevlevel") {
+        state(GameState.GAME_PREV_LEVEL) {
             onEnter { animEnds = false }
             // handled above
-            edge("newlevel") { validWhen { animEnds || skipAnims } }
+            edge(GameState.GAME_NEW_LEVEL) { validWhen { animEnds || skipAnims } }
         }
-        state("nextlevel") {
+        state(GameState.GAME_NEXT_LEVEL) {
             onEnter {
                 animEnds = false
                 runner.health += 1
             }
             // handled above
-            edge("newlevel") { validWhen { animEnds || skipAnims } }
+            edge(GameState.GAME_NEW_LEVEL) { validWhen { animEnds || skipAnims } }
         }
 
-        state("newlevel") {
+        state(GameState.GAME_NEW_LEVEL) {
 
-            edge("start") {
+            edge(GameState.GAME_START) {
                 validWhen { level?.status == GameLevel.Status.LEVEL_PLAYING }
             }
 
@@ -223,7 +234,7 @@ class Game(val state: GameSettings) : CoroutineScope {
 
     }
 
-    val onStateChanged = mutableListOf<StackedState<Game>.() -> Unit>()
+    val onStateChanged = mutableListOf<StackedState<GameState, Game>.() -> Unit>()
 
     val onPlayGame = mutableListOf<(game: Game, ev: RenderPass.UpdateEvent?) -> Unit>()
 
@@ -274,16 +285,7 @@ class Game(val state: GameSettings) : CoroutineScope {
     fun getGuard(x: Int, y: Int) = guards.first { it.block.x == x && it.block.y == y }
 
 }
-enum class GameState {
-    GAME_START,
-    GAME_RUNNING ,
-    GAME_FINISH , GAME_FINISH_SCORE_COUNT,
-    GAME_WAITING , GAME_PAUSE,
-    GAME_NEW_LEVEL , GAME_RUNNER_DEAD,
-    GAME_OVER_ANIMATION , GAME_OVER,
-    GAME_NEXT_LEVEL , GAME_PREV_LEVEL,
-    GAME_LOADING , GAME_WIN
-}
+
 typealias KeyMod = Int
 
 data class InputSpec(val code: KeyCode, val modificatorBitMask: Int)

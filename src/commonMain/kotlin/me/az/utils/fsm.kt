@@ -118,61 +118,47 @@ class StackedStateEdge<STATEKEY, CONTEXT>(val targetState: STATEKEY, val replace
     fun action(action: StackedStateEdge<STATEKEY, CONTEXT>.() -> Unit) = actionList.push(action)
     fun validWhen(guard: CONTEXT.() -> Boolean) = validateList.push(guard)
     //Invoke when you go down the edge to another state
-    fun enterEdge(retrieveState: (STATEKEY) -> StackedState<CONTEXT>): StackedState<CONTEXT> {
+    fun enterEdge(retrieveState: (STATEKEY) -> StackedState<STATEKEY, CONTEXT>): StackedState<STATEKEY, CONTEXT> {
         actionList.forEach { it(this@StackedStateEdge) }
         return retrieveState(targetState) // if get from actionList returns, dynamically, we could dynamic decide -\
         // go left -> edge check: isBar -> leftBar, isEmpty -> leftRun
     }
     fun canHandleEvent(event: CONTEXT): Boolean = validateList.any { it(event) }
 }
-///// could not believe i need wrapper for usual cascade ifs
-//class DynamicEdge<E>(override val weight: Int) : Edge<String, E> {
-//    override fun canHandleEvent(event: E): Boolean {
-//        TODO("Not yet implemented")
-//    }
-//
-//    override fun enterEdge(stateResolver: (String) -> StackedState<E>): StackedState<E> {
-//        TODO("Not yet implemented")
-//    }
-//
-//    override fun action(action: Edge<String, E>.() -> Unit): Any? {
-//        TODO("Not yet implemented")
-//    }
-//
-//}
-open class StackedState<E>(val name: String) {
 
-    private val stateEnterAction = mutableListOf<(StackedState<E>) -> Unit>()
-    private val stateExitAction = mutableListOf<(StackedState<E>) -> Unit>()
-    private val stateActions = mutableListOf<E.() -> Any?>()
+open class StackedState<STATEKEY, CONTEXT>(val name: STATEKEY) {
+
+    private val stateEnterAction = mutableListOf<(StackedState<STATEKEY, CONTEXT>) -> Unit>()
+    private val stateExitAction = mutableListOf<(StackedState<STATEKEY, CONTEXT>) -> Unit>()
+    private val stateActions = mutableListOf<CONTEXT.() -> Any?>()
     // TBD sortedList
-    private val edgeList = mutableListOf<StackedStateEdge<String, E>>()
+    private val edgeList = mutableListOf<StackedStateEdge<STATEKEY, CONTEXT>>()
     // Add an action which will be called when the state is entered
-    fun onEnter(action: (StackedState<E>) -> Unit) = stateEnterAction.push(action)
-    fun onExit(action: (StackedState<E>) -> Unit) = stateExitAction.push(action)
+    fun onEnter(action: (StackedState<STATEKEY, CONTEXT>) -> Unit) = stateEnterAction.push(action)
+    fun onExit(action: (StackedState<STATEKEY, CONTEXT>) -> Unit) = stateExitAction.push(action)
 
     // return next state obj or self
-    fun onUpdate(action: E.() -> Any?) = stateActions.push(action)
+    fun onUpdate(action: CONTEXT.() -> Any?) = stateActions.push(action)
     open fun suspendState() = exitState()
-    open fun wakeupState(previous: String) = enterState(previous)
+    open fun wakeupState(previous: STATEKEY) = enterState(previous)
 
     fun dynamicEdge(replace: Boolean = true, weight: Int = 0) {
 
     }
-    fun edge(targetState: String, replace: Boolean = true, weight: Int = 0, init: StackedStateEdge<String, E>.() -> Unit) {
-        val edge = StackedStateEdge<String, E>(targetState, replace, weight)
+    fun edge(targetState: STATEKEY, replace: Boolean = true, weight: Int = 0, init: StackedStateEdge<STATEKEY, CONTEXT>.() -> Unit) {
+        val edge = StackedStateEdge<STATEKEY, CONTEXT>(targetState, replace, weight)
         edge.init()
         edgeList.add(edge)
         edgeList.sortBy { it.weight }
     }
 
-    fun beforeUpdate(event: E) = edgeList.firstOrNull {
+    fun beforeUpdate(event: CONTEXT) = edgeList.firstOrNull {
         /*it.targetState != this.name && */it.canHandleEvent(event)
     }
 
-    fun enterState(previous: String) = stateEnterAction.forEach { it(this) }
+    fun enterState(previous: STATEKEY) = stateEnterAction.forEach { it(this) }
     fun exitState() = stateExitAction.reversed().forEach { it(this) }
-    fun update(event: E) = stateActions.firstNotNullOfOrNull { it(event) }
+    fun update(event: CONTEXT) = stateActions.firstNotNullOfOrNull { it(event) }
     fun debugOn() {
         onEnter { println("-> $name"); }
         edgeList.forEach {
@@ -195,8 +181,8 @@ open class StackedState<E>(val name: String) {
     }
 }
 
-abstract class CompoundState<E>(name: String) : StackedState<E>(name) {
-    abstract val internalFsm: StackedStateMachine<E>
+abstract class CompoundState<STATEKEY, E>(name: STATEKEY) : StackedState<STATEKEY, E>(name) {
+    abstract val internalFsm: StackedStateMachine<STATEKEY, E>
     init {
         onEnter {
             internalFsm.reset()
@@ -220,7 +206,7 @@ abstract class CompoundState<E>(name: String) : StackedState<E>(name) {
     }
 }
 
-class StackedStateMachine<E>(private val initialState: String) {
+class StackedStateMachine<STATEKEY, E>(private val initialState: STATEKEY) {
 
     fun debugOn() {
         stateList.forEach { with(it.value) {
@@ -228,24 +214,24 @@ class StackedStateMachine<E>(private val initialState: String) {
         } }
     }
 
-    private val states = mutableListOf<String>()
+    private val states = mutableListOf<STATEKEY>()
     val currentStateName get() = states.current()!!
     val currentState get() = stateList[states.current()!!]!!
-    val onStateChanged = mutableListOf<StackedState<E>.() -> Unit>()
+    val onStateChanged = mutableListOf<StackedState<STATEKEY, E>.() -> Unit>()
 
     // builder
-    private val stateList = mutableMapOf<String, StackedState<E>>()
+    private val stateList = mutableMapOf<STATEKEY, StackedState<STATEKEY, E>>()
     // 2 diff ways to work with: +PredefinedObjectState
     // or via dsl: state {
     // }
-    operator fun plusAssign(state: StackedState<E>) { stateList[state.name] = state }
+    operator fun plusAssign(state: StackedState<STATEKEY, E>) { stateList[state.name] = state }
 
-    fun state(name: String, init: StackedState<E>.() -> Unit) {
-        val state = StackedState<E>(name)
+    fun state(name: STATEKEY, init: StackedState<STATEKEY, E>.() -> Unit) {
+        val state = StackedState<STATEKEY, E>(name)
         state.init()
         this += state
     }
-    fun getState(name: String): StackedState<E> = stateList[name] ?: throw NoSuchElementException(name)
+    fun getState(name: STATEKEY): StackedState<STATEKEY, E> = stateList[name] ?: throw NoSuchElementException(name.toString())
 
     fun update(event: E, safe: Boolean = false /* treat unknown states as exit from fsm or not*/) {
         if ( finished ) return
@@ -253,7 +239,7 @@ class StackedStateMachine<E>(private val initialState: String) {
         val edge = currentState.beforeUpdate(event)
 
         // fsm for updating fsm???
-        if (edge is StackedStateEdge<String, E> && edge.targetState != currentStateName) {
+        if (edge is StackedStateEdge<STATEKEY, E> && edge.targetState != currentStateName) {
             if ( safe && edge.targetState !in stateList.keys ) {
                 println("finish by unknown edge: ${edge.targetState}")
                 //exit
@@ -267,8 +253,8 @@ class StackedStateMachine<E>(private val initialState: String) {
         }
 
         currentState.update(event)?.run {
-            when(this) {
-                is String -> if (this != currentStateName) {
+            (this as? STATEKEY)?.run {
+                if (this != currentStateName) {
                     pushState(getState(this), true)
                 }
             }
@@ -278,10 +264,10 @@ class StackedStateMachine<E>(private val initialState: String) {
     }
 
     // forcefully set state
-    fun setState(stateName: String) {
+    fun setState(stateName: STATEKEY) {
         pushState(getState(stateName), true)
     }
-    fun pushState(newState: StackedState<E>, replace: Boolean = false) {
+    fun pushState(newState: StackedState<STATEKEY, E>, replace: Boolean = false) {
         val prev = if ( replace ) {
             states.pop()?.run {
                 getState(this).exitState()
@@ -306,7 +292,7 @@ class StackedStateMachine<E>(private val initialState: String) {
     }
     val finished get() = states.isEmpty()
 
-    fun popState(): String? {
+    fun popState(): STATEKEY? {
         val old = states.pop()?.run { getState(this) }.also { it?.exitState() }
         if ( states.isEmpty() ) states.add(initialState)
 
@@ -328,8 +314,11 @@ class StackedStateMachine<E>(private val initialState: String) {
     }
 }
 
-fun<E> buildStateMachine(initialState: String, init: StackedStateMachine<E>.() -> Unit): StackedStateMachine<E> {
-    val machine = StackedStateMachine<E>(initialState)
+fun<STATEKEY, E> buildStateMachine(
+    initialState: STATEKEY,
+    init: StackedStateMachine<STATEKEY, E>.() -> Unit): StackedStateMachine<STATEKEY, E> {
+
+    val machine = StackedStateMachine<STATEKEY, E>(initialState)
     machine.init()
 //    machine.reset(true)
     return machine

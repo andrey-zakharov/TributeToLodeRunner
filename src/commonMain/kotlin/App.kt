@@ -168,7 +168,7 @@ class App(val ctx: KoolContext) {
 
     var state: State<App>? = null
 
-    val fsm = buildStateMachine<App>("mainmenu") {
+    val fsm = buildStateMachine<String, App>("mainmenu") {
         state("mainmenu") {
 
             onEnter {

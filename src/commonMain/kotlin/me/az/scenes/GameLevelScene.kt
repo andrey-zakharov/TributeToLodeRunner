@@ -160,26 +160,26 @@ class GameLevelScene (
         game.onStateChanged += {
             println("GameScene. gameState = $name")
             when(name) {
-                "start" -> {
+                GameState.GAME_START -> {
                     // timer to demo, or run
                     startIntro(ctx)
                 }
-                "run" -> stopIntro(ctx)
-                "finish" -> {
+                GameState.GAME_RUNNING -> stopIntro(ctx)
+                GameState.GAME_FINISH -> {
                     sounds.playSound("goldFinish")
                     startOutro(ctx)
                 }
 
-                "dead" -> {
+                GameState.GAME_RUNNER_DEAD -> {
                     startOutro(ctx)
                 }
-                "prevlevel" -> {
+                GameState.GAME_PREV_LEVEL -> {
                     if ( shatterRadiusAnim.speed == 0f ) startOutro(ctx)
                     gameSettings.currentLevel -= 1
                     if ( gameSettings.currentLevel < 0 ) gameSettings.currentLevel += levels.levels.size
 
                 }
-                "nextlevel" -> {
+                GameState.GAME_NEXT_LEVEL -> {
                     // black
                     if ( shatterRadiusAnim.speed == 0f ) startOutro(ctx)
                     gameSettings.currentLevel += 1
@@ -188,7 +188,7 @@ class GameLevelScene (
                         // finish game
                     }
                 }
-                "newlevel" -> {
+                GameState.GAME_NEW_LEVEL -> {
                     game.level = currentLevel
                     addLevelView(ctx)
                     for ( g in game.guards ) {
