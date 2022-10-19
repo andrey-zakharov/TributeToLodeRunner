@@ -333,7 +333,6 @@ sealed class Actor(val game: Game) : Controllable {
             companion object {
                 const val name = "fall"
             }
-            private val Actor.invariant get() = oy < 0 || (oy >= 0 && !level.isFloor(x, y + 1))
 
             init {
                 onEnter { with(actor) {
@@ -372,12 +371,15 @@ sealed class Actor(val game: Game) : Controllable {
                 // onTileChange
                 BehaviorMoveDown(onCenter = {
                     val isBar = level.isBar(x, y)
-                    if ( !invariant || isBar) {
+                    if ( level.isFloor(x, y + 1) || isBar) {
                         offset.y = 0
                         when (actor.nextMove) {
                             Action.ACT_LEFT -> if ( isBar ) ActorSequence.BarLeft.id else ActorSequence.RunLeft.id
                             Action.ACT_RIGHT -> if ( isBar ) ActorSequence.BarRight.id else ActorSequence.RunRight.id
-                            else -> StopState.name
+                            else -> {
+                                action = ActorSequence.BarLeft
+                                StopState.name
+                            }
                         }
                     } else null
                 })
