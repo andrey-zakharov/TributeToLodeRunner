@@ -53,7 +53,7 @@ enum class Tile(val char: Char, val base: TileLogicType, val act: TileLogicType,
     SOLID('@', TileLogicType.SOLID, TileLogicType.SOLID ), // Solid Brick
     LADDER('H', TileLogicType.LADDR, TileLogicType.LADDR ), // Ladder
     ROPE('-', TileLogicType.BAR, TileLogicType.BAR ), // Line of rope
-    TRAP('X', TileLogicType.TRAP, TileLogicType.EMPTY, BRICK.name.lowercase() ), // False brick
+    TRAP('X', TileLogicType.TRAP, TileLogicType.TRAP, BRICK.name.lowercase() ), // False brick
     HLADDER('S', TileLogicType.HLADR, TileLogicType.EMPTY, LADDER.name.lowercase() ), //Ladder appears at end of level
     GOLD('$', TileLogicType.GOLD, TileLogicType.EMPTY ),
     GUARD('0', TileLogicType.EMPTY, TileLogicType.EMPTY, "" ),
@@ -192,8 +192,8 @@ fun generateGameLevel(
                         exampleMapShiftX + x, exampleMapShiftY + y,
                         Tile.byChar[exampleMap[y][x]]!!.exportForGenerator()
                     )
-                    //(wcf.width - exampleWidth) / 2 +
-                    //(wcf.height - exampleHeight) / 2 +
+                    //(wcf.me.az.view.getWidth - exampleWidth) / 2 +
+                    //(wcf.me.az.view.getHeight - exampleHeight) / 2 +
                 }
             }
 //            println(formatPatterns(wcf.patterns.toList().toTypedArray(), patternSize))
@@ -386,7 +386,6 @@ class GameLevel(
     private fun isValid(at: Vec2i) = isValid(at.x, at.y)
 
     fun reset() {
-        hideHiddenLadders()
         stopAllAnims()
         gold = 0
         guardsPos.clear()
@@ -453,7 +452,7 @@ class GameLevel(
     }
 
     fun updateTileMap(): TextureData2d {
-//        println("updating field($width x $height)")
+//        println("updating field($me.az.view.getWidth x $me.az.view.getHeight)")
         return TextureData2d(buf, width, height, TexFormat.R)
     }
 
@@ -467,17 +466,6 @@ class GameLevel(
             }
         }
         status = Status.LEVEL_DONE
-    }
-    private fun hideHiddenLadders() {
-        for ( y in 0 until height ) {
-            for ( x in 0 until width) {
-                if ( base[x][y] == TileLogicType.HLADR ) {
-                    base[x][y] = TileLogicType.LADDR
-                    act[x][y] = TileLogicType.EMPTY
-                    this[x, y] = ViewCell(false, primaryTileSet[Tile.EMPTY.frame]!!)
-                }
-            }
-        }
     }
 
     // not safe

@@ -69,7 +69,7 @@ class Probabilities<T: Comparable<T>>(initial: List<String>/*, n: Int = 1*/): Bi
         val height = initial.size
         val width = initial.first().length
 
-//        totalArcs = width * (height - 1) + height * (width - 1)
+//        totalArcs = me.az.view.getWidth * (me.az.view.getHeight - 1) + me.az.view.getHeight * (me.az.view.getWidth - 1)
     }
 
     override operator fun get(a: T, b: T, dir: Int): Int {
@@ -114,7 +114,7 @@ fun Probabilities<Tile>.load(initial: List<String>) {
 fun Probabilities<Tile>.loadOverlapped(initial: List<String>, n: Int) {
     val height = initial.size
     val width = initial.first().length
-//    val subTiles = Array((1+width - N) * (1+height - N)) { Array(N*N) { } }
+//    val subTiles = Array((1+me.az.view.getWidth - N) * (1+me.az.view.getHeight - N)) { Array(N*N) { } }
     val subTiles = mutableListOf<Array<Tile>>()
 
     (0 until height - n).forEach { startY ->
@@ -281,7 +281,7 @@ class LevelGenerator<T: Comparable<T>>(
     val variables = Array(height) { Array(width) { mutableSetOf(*initDomain) } }
 
     // deleted domain values
-//    val deltas = Array(height) { Array(width) { mutableMapOf<Tile, List< VariableValue >>() } }
+//    val deltas = Array(me.az.view.getHeight) { Array(me.az.view.getWidth) { mutableMapOf<Tile, List< VariableValue >>() } }
     private val waitingList = mutableSetOf<Vec2i>()
 
     private val bans = mutableMapOf<Vec2i, MutableSet<T>>() // unary constraints
@@ -583,7 +583,7 @@ class LevelGenerator<T: Comparable<T>>(
 
     //Sjb={(i, a)/(j, b) is the smallest value in Dj supporting (i, a) on Rij}
     //while in AC-4 it contains all values supported by (j, b).
-//    val counters = Array(height) { Array(width) { mutableMapOf<T, MutableList<Pair<Vec2i, T>>>() } }
+//    val counters = Array(me.az.view.getHeight) { Array(me.az.view.getWidth) { mutableMapOf<T, MutableList<Pair<Vec2i, T>>>() } }
 //    val Vec2i.minSupport get() = counters[y][x]
 
     sealed class Response {

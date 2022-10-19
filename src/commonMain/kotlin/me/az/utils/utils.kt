@@ -3,6 +3,10 @@ package me.az.utils
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.contains
 import de.fabmax.kool.math.Vec2i
+import de.fabmax.kool.math.Vec3f
+import de.fabmax.kool.scene.Group
+import de.fabmax.kool.scene.lineMesh
+import de.fabmax.kool.util.Color
 import org.mifek.wfc.datastructures.IntArray2D
 import kotlin.math.floor
 import kotlin.properties.ReadWriteProperty
@@ -11,6 +15,8 @@ import kotlin.reflect.KProperty
 
 internal val Int.b get() = toByte()
 internal val Float.floor: Float get() = floor(this)
+
+expect fun String.format(vararg args: Any?): String
 
 
 internal inline fun <reified E: Enum<E>>enumDelegate(settings: Settings,
@@ -58,3 +64,9 @@ internal fun Random.choice(choices: List<Int>): Int {
 
 internal operator fun Vec2i.component1() = x
 internal operator fun Vec2i.component2() = y
+
+internal fun Group.addDebugAxis() {
+    +lineMesh("x") { addLine(Vec3f.ZERO, Vec3f(1f, 0f, 0f), Color.RED) }
+    +lineMesh("y") { addLine(Vec3f.ZERO, Vec3f(0f, 1f, 0f), Color.GREEN) }
+    +lineMesh("z") { addLine(Vec3f.ZERO, Vec3f(0f, 0f, 1f), Color.BLUE) }
+}

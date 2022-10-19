@@ -1,6 +1,17 @@
+package me.az.scenes
+
+import AnimationFrames
+import ImageAtlas
+import ImageAtlasSpec
+import LevelSet
+import LevelSpec
+import LevelView
+import LevelsRep
+import RunnerController
+import SoundPlayer
+import TileSet
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
-import de.fabmax.kool.UniversalKeyCode
 import de.fabmax.kool.math.*
 import de.fabmax.kool.math.spatial.BoundingBox
 import de.fabmax.kool.modules.ui2.*
@@ -9,99 +20,23 @@ import de.fabmax.kool.scene.*
 import de.fabmax.kool.scene.animation.*
 
 import de.fabmax.kool.util.Color
-import de.fabmax.kool.util.Viewport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.yield
 import me.az.ilode.*
 import me.az.shaders.MaskShader
-import me.az.view.GameControls
+import me.az.utils.addDebugAxis
+import me.az.utils.format
+import simpleTextureProps
+import sprite
 import kotlin.coroutines.CoroutineContext
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
-abstract class AsyncScene(name: String? = null) : Scene(name) {
-    private var sceneState = State.NEW
-    init {
-        onRenderScene += {
-            checkState(it)
-        }
-    }
-
-    private fun checkState(ctx: KoolContext) {
-        if (sceneState == State.NEW) {
-            // load resources (async from AssetManager CoroutineScope)
-            sceneState = State.LOADING
-            ctx.assetMgr.launch {
-                loadResources(ctx)
-                sceneState = State.SETUP
-            }
-        }
-
-        if (sceneState == State.SETUP) {
-            setup(ctx)
-            sceneState = State.RUNNING
-        }
-    }
-
-    abstract suspend fun AssetManager.loadResources(ctx: KoolContext)
-    abstract fun setup(ctx: KoolContext)
-
-    enum class State {
-        NEW,
-        LOADING,
-        SETUP,
-        RUNNING
-    }
-}
-
-class GameUI(val game: Game, val assets: AssetManager, val gameSettings: GameSettings, val conf: LevelSpec = LevelSpec()) : AsyncScene() {
-    private val tileSet = gameSettings.spriteMode
-    private var fontAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet, "text"))
-    override suspend fun AssetManager.loadResources(ctx: KoolContext) {
-        fontAtlas.load(this)
-    }
-
-    init {
-        // ui camera
-        camera = OrthographicCamera("plain").apply {
-            projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
-            isClipToViewport = false
-            isKeepAspectRatio = true
-            val hw = (visibleTilesX / 2f)*conf.tileSize.x
-            top = visibleTilesY * conf.tileSize.y * 1f
-            bottom = 0f
-            left = -hw
-            right = hw
-            clipFar = 10f
-            clipNear = 0.1f
-        }
-        mainRenderPass.clearColor = null
-    }
-    override fun setup(ctx: KoolContext) {
-        val fontMap = mutableMapOf<Char, Int>()
-        for ( c in '0' .. '9' ) {
-            fontMap[c] = c - '0'
-        }
-        for ( c in 'a' .. 'z') {
-            fontMap[c] = c - 'a' + 10
-        }
-        fontMap['.'] = 36
-        fontMap['<'] = 37
-        fontMap['>'] = 38
-        fontMap['-'] = 39
-        fontMap[' '] = 43
-        fontMap[':'] = 44
-        fontMap['_'] = 45
-
-        +StatusView(game, StringDrawer(fontAtlas, fontMap, fontMap[' ']!!))
-    }
-}
-
 const val visibleTilesX = 28
 const val visibleTilesY = 16 + 1 + 1 // + ground + status
-expect fun String.format(vararg args: Any?): String
 
 class GameLevelScene (
     val game: Game,
@@ -164,8 +99,9 @@ class GameLevelScene (
     var levelView: LevelView? = null
     var mask: Group? = null
     //cam
-    val visibleWidth get() = visibleTilesX * conf.tileSize.x
-    val visibleHeight get() = visibleTilesY * conf.tileSize.y
+    private val visibleWidth get() = visibleTilesX * conf.tileSize.x
+    private val visibleHeight get() = visibleTilesY * conf.tileSize.y
+    private val maxShatterRadius = ceil(sqrt((visibleWidth* visibleWidth + visibleHeight * visibleHeight).toDouble()) / 2).toInt()
 
     private val createCamera get() = OrthographicCamera("plain").apply {
         projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
@@ -266,9 +202,7 @@ class GameLevelScene (
         game.reset()
 
         +RunnerController(ctx.inputMgr, game.runner)
-        +lineMesh("x") { addLine(Vec3f.ZERO, Vec3f(1f, 0f, 0f), Color.RED) }
-        +lineMesh("y") { addLine(Vec3f.ZERO, Vec3f(0f, 1f, 0f), Color.GREEN) }
-        +lineMesh("z") { addLine(Vec3f.ZERO, Vec3f(0f, 0f, 1f), Color.BLUE) }
+        addDebugAxis()
     }
 
     private fun addLevelView(ctx: KoolContext) {
@@ -340,8 +274,8 @@ class GameLevelScene (
                 val pos = cal()
                 // anim?
                 cameraPos.to.set(
-                    pos.x /*+ (ctx.inputMgr.pointerState.primaryPointer.x.toFloat() - it.viewport.width/2) / 50f*/,
-                    pos.y /*+ (ctx.inputMgr.pointerState.primaryPointer.y.toFloat() - it.viewport.height/2) / 50f*/,
+                    pos.x /*+ (ctx.inputMgr.pointerState.primaryPointer.x.toFloat() - it.viewport.me.az.view.getWidth/2) / 50f*/,
+                    pos.y /*+ (ctx.inputMgr.pointerState.primaryPointer.y.toFloat() - it.viewport.me.az.view.getHeight/2) / 50f*/,
                     10f
                 )
                 cameraPos.from.set(cameraPos.value)
@@ -466,15 +400,28 @@ class GameLevelScene (
                     .width(WrapContent)
                     .height(WrapContent)
                 onUpdate += {
-                    debug.set("act = %s (%b)\ninput: %d %d\n%d %d x %d %d\n%s[ %d ]\nguards: %s\nlevel.gold=%d".format(
-                        game.level?.act?.get(game.runner.x)?.get(game.runner.y) ?: "<no level>",
-                        game.level?.isBarrier(game.runner.x, game.runner.y),
-                        game.runner.inputVec.x ?: "<no runner>", game.runner.inputVec.y ?: "<no runner>",
-                        game.runner.x, game.runner.ox, game.runner.y, game.runner.oy,
-                        game.runner.action.id, game.runner.frameIndex,
-                        game.guards.joinToString(" ") { it.hasGold.toString() },
-                        game.level?.gold
-                    ))
+                    with(game) {
+                        debug.set(
+                            """
+                                act = %s
+                                barrier = %b
+                                has guard below = %b
+                                can move down: %b
+                                guards: %s
+                                level.gold=%d
+                               
+                                %s""".trimIndent()
+                            .format(
+                                level?.act?.get(runner.x)?.get(runner.y) ?: "<no level>",
+                                level?.isBarrier(runner.x, runner.y) ?: false,
+                                level?.hasGuard(runner.x, runner.y + 1) ?: false,
+                                level?.run { runner.canMoveDown } ?: false,
+                                guards.joinToString(" ") { it.hasGold.toString() },
+                                level?.gold ?: 0,
+                                runner.toString()
+                            )
+                        )
+                    }
                 }
             }
         }
@@ -505,7 +452,7 @@ class GameLevelScene (
         shatterRadiusAnim.apply {
             speed = 1f
             progress = 0f
-            value.from = (sqrt((visibleWidth* visibleWidth + visibleHeight * visibleHeight).toDouble()) / 2).toFloat()
+            value.from = maxShatterRadius.toFloat()
             value.to = 0f
         }
 
@@ -513,7 +460,7 @@ class GameLevelScene (
         speed = 1f
         progress = 0f
         value.from = 0f
-        value.to = (sqrt((visibleWidth* visibleWidth + visibleHeight * visibleHeight).toDouble()) / 2).toFloat()
+        value.to = maxShatterRadius.toFloat()
         while (progress < 1) yield()
     }
 
@@ -522,13 +469,15 @@ class GameLevelScene (
             speed = 1f
             progress = 0f
             value.from = 0f
-            value.to = (sqrt((visibleWidth* visibleWidth + visibleHeight * visibleHeight).toDouble()) / 2).toFloat()
+            value.to = maxShatterRadius.toFloat()
         }
 
     private fun stopIntro(ctx: KoolContext) = shatterRadiusAnim.apply {
 //        progress = 1f
         speed = 100f
     }
+
+
 
 }
 
@@ -540,19 +489,6 @@ private operator fun Vec3f.minus(position: Vec3f) = Vec3f(
 
 val OrthographicCamera.height get() = top - bottom
 val OrthographicCamera.width get () = right - left
-val OrthographicCamera.circumcircleRadius get() = sqrt(width * width + height * height) / 2
-val Viewport.circumcircleRadius: Float get() = (sqrt((width * width + height * height).toDouble()) / 2f).toFloat()
+
 val BoundingBox.width get() = max.x - min.x
 val BoundingBox.height get() = max.y - min.y
-val BoundingBox.circumcircleRadius get() = sqrt(width * width + height * height) / 2
-val Group.globalBounds: BoundingBox get() {
-    val scaledMin = MutableVec3f(bounds.min)
-    val scaledMax = MutableVec3f(bounds.max)
-
-    transform.transform(scaledMin)
-    transform.transform(scaledMax)
-    return BoundingBox().apply {
-        add(scaledMin)
-        add(scaledMax)
-    }
-}

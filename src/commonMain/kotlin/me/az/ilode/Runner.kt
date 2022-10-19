@@ -39,6 +39,7 @@ class Runner(game: Game) : Actor(game), Controllable {
             this += DigRight(this@Runner)
             this += DigLeft(this@Runner)
 
+            debugOn()
         }
     }
 
@@ -120,7 +121,12 @@ class Runner(game: Game) : Actor(game), Controllable {
             dead()
     }
 
+    private val Number.tabs get() = this.toString().padStart(3, ' ')
+
     private fun checkCollision(): Boolean {
+        
+        if ( level.hasGuard(x, y) ) return true
+
         level.getAround(block).chunked(2).filter {
             level.isValid(it.first(), it.last())
         }.firstOrNull {
@@ -128,7 +134,7 @@ class Runner(game: Game) : Actor(game), Controllable {
         }?.run {
             val (x, y) = this
             val g = game.getGuard(x, y)
-            if ( !g.isReborn() &&
+            if ( !g.isReborn &&
                 abs( absolutePosX - g.absolutePosX ) <= 3 * W4 &&
                 abs( absolutePosY - g.absolutePosY ) <= 3 * H4
             ) {
@@ -137,6 +143,13 @@ class Runner(game: Game) : Actor(game), Controllable {
             }
         }
 
-        return level.isBarrier(x, y)
+        return level.isBlock(x, y)
     }
+//                                level?.run { runner.canMoveDown },
+//                                runner.inputVec.x, runner.inputVec.y,
+//                                runner.x, runner.ox, runner.y, runner.oy,
+//                                runner.action.id,
+//                                runner.frameIndex,
+    override fun toString() = "pos: ${x.tabs} ${ox.tabs} x ${y.tabs} ${oy.tabs} = ${absolutePosX.tabs} x ${absolutePosY.tabs}\n" +
+        "input: $inputVec\nanim: $action[ $frameIndex ]"
 }

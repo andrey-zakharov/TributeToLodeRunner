@@ -1,1 +1,0 @@
-actual fun String.format(vararg args: Any?): String = this

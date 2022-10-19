@@ -1,2 +1,2 @@
-actual fun String.format(vararg args: Any?): String =
-    String.format(this, *args)
+package me.az.utils
+actual fun String.format(vararg args: Any?) = String.format(this, *args)

@@ -12,6 +12,13 @@ import me.az.utils.b
 import me.az.utils.buildStateMachine
 import me.az.utils.choice
 import me.az.view.GameControls
+import me.az.scenes.GameLevelScene
+import me.az.scenes.GameUI
+import me.az.scenes.MainMenuContext
+import me.az.scenes.MainMenuScene
+import me.az.view.ImageText
+import me.az.view.SpriteSet
+import me.az.view.TextDrawer
 import kotlin.random.Random
 
 val simpleTextureProps = TextureProps(TexFormat.RGBA,
@@ -41,60 +48,40 @@ sealed class State <T> {
 }
 
 object MainMenuState : State<App>() {
-    var cachedTex: TextureData? = null
-    val bgTex = Texture2d( simpleTextureProps ) {assets ->
-        if ( cachedTex == null ) {
-            cachedTex = assets.loadTextureData("images/start-screen.png")
-        }
-        cachedTex!!
-    }
+
     val bg by lazy { scene {
-        +sprite( texture = bgTex )
+        +sprite( texture = Texture2d( simpleTextureProps ) { assets ->
+            assets.loadTextureData("images/start-screen.png")
+        } )
     } }
 
     var startnewGame = false
+    var exitGame = false
+    var mainMenu: Scene? = null
 
-    val mainMenu = Ui2Scene {
-        +UiSurface {
-            modifier
-                .width(WrapContent)
-                .padding(start = (10f * -1f).dp)
-                .height(Grow.Std)
-                .background(background = null)
+    val context by lazy {
+        MainMenuContext().also {
 
-            Button("new game") {
-                modifier
-                    .width(30f.dp)
-                    .textAlign(AlignmentX.Center, AlignmentY.Center)
-                    .onClick {
-                        startnewGame = true
-                    }
-            }
-
-            Button("level: ") {
-                modifier
-                    .width(30f.dp)
-                    .textAlign(AlignmentX.Center, AlignmentY.Center)
-            }
-
-            Button( "exit" ) {
-                modifier
-                    .width(30f.dp)
-                    .textAlign(AlignmentX.Center, AlignmentY.Center)
-            }
         }
-
     }
+
     override fun enterState(app: App) {
         super.enterState(app)
         // preload
-        app.ctx.scenes += bg
-        app.ctx.scenes += mainMenu
+        mainMenu = MainMenuScene(context)
+
+//        app.ctx.scenes += bg
+        app.ctx.scenes += mainMenu!!
     }
 
     override fun exitState(app: App) {
         super.exitState(app)
-        app.ctx.scenes -= mainMenu
+        mainMenu?.run {
+            app.ctx.scenes -= this
+            dispose(app.ctx)
+        }
+        mainMenu = null
+
         app.ctx.scenes -= bg
     }
     override fun update(obj: App): State<App>? {
@@ -102,6 +89,10 @@ object MainMenuState : State<App>() {
         if ( startnewGame ) {
             startnewGame = false
             return RunGameState
+        }
+        if ( exitGame ) {
+            exitGame = false
+            return Exit
         }
         return null
     }
@@ -115,6 +106,8 @@ object RunGameState : State<App>() {
 
     override fun enterState(app: App) {
         super.enterState(app)
+
+
         val game = Game(app.gameSettings)
 
         gameScene = GameLevelScene(game, app.ctx.assetMgr, app.gameSettings, "level", true).apply {
@@ -126,39 +119,7 @@ object RunGameState : State<App>() {
         app.ctx.scenes += infoScene!!
         debugScene = Ui2Scene {
             +UiSurface {
-
                 gameScene?.setupUi(this)
-
-/*                Row {
-
-                    Slider(gameScene!!.uiShiftX.use(), -w.width/2f, w.width/2f) {
-                        modifier
-                            .width(300.dp)
-                            .onChange { gameScene!!.uiShiftX.set(it) }
-                            .onChangeEnd {
-                                //gameScene?.
-                            }
-                    }
-
-                    Button("reset X") {
-                        modifier
-                            .margin(start = 5.dp)
-                            .onClick += {
-                                gameScene?.uiShiftX?.set(0f)
-                            }
-                    }
-                }
-                Row {
-
-                    Slider(gameScene!!.uiShiftY.use(), -w.height/2f, w.height/2f) {
-                        modifier
-                            .width(300.dp)
-                            .onChange { gameScene!!.uiShiftY.set(it) }
-                            .onChangeEnd {
-                                //gameScene?.
-                            }
-                    }
-                }*/
             }
         }
 
@@ -193,17 +154,23 @@ object RunGameState : State<App>() {
 
 }
 
-enum class AppEvent {
-    RunGame, MainMenu
+object Exit : State<App>() {
+    override fun enterState(obj: App) = obj.ctx.close()
+    override fun update(obj: App): State<App>? = null
+}
+
+sealed class AppContext {
+    var tileSetName = MutableStateValue(SpriteSet.A8B)
 }
 class App(val ctx: KoolContext) {
-    val settings = Settings()
+    private val settings = Settings()
     val gameSettings = GameSettings(settings)
 
     var state: State<App>? = null
 
-    val fsm = buildStateMachine<AppEvent>("mainmenu") {
+    val fsm = buildStateMachine<App>("mainmenu") {
         state("mainmenu") {
+
             onEnter {
 
             }
@@ -234,7 +201,7 @@ class App(val ctx: KoolContext) {
         test2()
         ctx.assetMgr.assetsBaseDir = "." // = resources
 
-//        changeState(MainMenuState())
+//        changeState(MainMenuState)
         changeState(RunGameState)
 
 
@@ -242,7 +209,9 @@ class App(val ctx: KoolContext) {
             val newState = state?.update(this)
             newState?.run { changeState(this) }
         }
+
         ctx.run()
+
 
         test1()
     }
@@ -297,10 +266,33 @@ class App(val ctx: KoolContext) {
     }
 }
 
+interface Action<E> {
+    val name: String
+    val keyCode: InputSpec
+    val onPress: E.(InputManager.KeyEvent) -> Unit
+    val onRelease: E.(InputManager.KeyEvent) -> Unit
+}
+
+fun<E> registerActions(inputManager: InputManager, root: E, actions: Iterable<Action<E>>, ) {
+    actions.forEach { action ->
+        inputManager.registerKeyListener(
+            keyCode = action.keyCode.code,
+            name = action.name,
+            filter = {ev ->
+                ev.isPressed &&
+                (action.keyCode.modificatorBitMask or ev.modifiers) xor action.keyCode.modificatorBitMask == 0
+            }
+        ) { ev ->
+            if ( ev.isReleased ) action.onRelease.invoke(root, ev)
+            else
+                if (ev.isPressed) action.onPress.invoke(root, ev)
+        }
+    }
+}
 
 
 /*
     Game(settings).startLevel()
-    +GameView(game) -> +LevelView(level) -> +ActorView(runner)
+    +GameView(game) -> +LevelView(level) -> +me.az.view.ActorView(runner)
 
  */

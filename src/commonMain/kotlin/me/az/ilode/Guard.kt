@@ -2,7 +2,7 @@ package me.az.ilode
 
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.math.randomI
-import format
+import me.az.utils.format
 import kotlin.math.abs
 import kotlin.random.Random
 
@@ -51,18 +51,33 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
             true
         } else false
 
-    override val shouldNotFall: Boolean
-        get() = super.shouldNotFall || inHole // when running up from hole
+    override val canStay: Boolean
+        get() = super.canStay || inHole // when running up from hole
 
-    override fun canMoveRight() =
-        super.canMoveRight() && !(
-            level.hasGuard(x + 1, y) && ox >= game.getGuard(x + 1, y).ox
+    override val canMoveRight get() =
+        super.canMoveRight && (
+                !level.hasGuard(x + 1, y) ||
+                (level.hasGuard(x + 1, y) && ox < game.getGuard(x + 1, y).ox)
         )
 
-    override fun canMoveLeft() =
-        super.canMoveLeft() && !(
-            level.hasGuard(x - 1, y) && ox <= game.getGuard(x - 1, y).ox
+    override val canMoveLeft get() =
+        super.canMoveLeft && (
+                !level.hasGuard(x - 1, y) ||
+                (level.hasGuard(x - 1, y) && ox > game.getGuard(x - 1, y).ox)
         )
+
+    override val canMoveUp get() = (
+        super.canMoveUp && (
+            !level.hasGuard(x, y - 1) ||
+            (level.hasGuard(x, y - 1) && oy < game.getGuard(x, y - 1).oy)
+        ) ) || (this.inHole && level.isHole(x, y)) // hole hack
+
+    // TBD collisions and groups
+    override val canMoveDown get() = super.canMoveDown && (
+            !level.hasGuard(x, y + 1) ||
+            (level.hasGuard(x, y + 1) && oy > game.getGuard(x, y + 1).oy)
+    )
+
 
     fun updateGuard(runner: Runner) {
         if ( fsm.currentState is ActorState.ControllableState ) {
@@ -101,6 +116,7 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
         //update fsm
         super.update()
 
+        // try to drop gold every step
         if ( fsm.currentState is ActorState.MovementState ) dropGold()
         if ( level.isBlock(x, y) ) fsm.setState(ActorSequence.Reborn.id)
 
@@ -108,8 +124,10 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
 //            println("${fsm.currentStateName} $frameIndex $oldx -> ${block.x} $oldy -> ${block.y}")
             level.guard[oldx][oldy] = false // field.removeGuard
             level.guard[x][y] = true // field.addGuard
+
         }
 
+        // leave hole
         if ( fsm.currentState is ActorState.ControllableState ) {
             if (inHole && !level.isHole(x, y) && !level.isHole(x, y + 1)) inHole = false
         }
@@ -150,11 +168,11 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
 
             getState(ActorState.FallState.name).apply {
                 edge(InHole.name) {
-                    validWhen { level.isHole(x, y) }
+                    validWhen { oy < 0 && level.isHole(x, y) }
                 }
             }
 
-            debugOn()
+//            debugOn()
         }
 
     }
@@ -207,7 +225,8 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
         when {
             hasGold > 1 -> hasGold -- // // count > 1,  don't drop it only decrease count
             hasGold == 1 -> { //drop gold
-                if ( level.isEmpty(x, y) && level.isFloor(x, y + 1, useGuard = false) ) {
+                // not at hidden ladders
+                if ( level.isEmpty(x, y) && level.base[x][y] == TileLogicType.EMPTY && level.isFloor(x, y + 1, useGuard = false) ) {
                     level.dropGold( x, y )
                     hasGold = -1
                     return true
@@ -437,7 +456,7 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
         }
     }
 
-    fun isReborn() = action == ActorSequence.Reborn
+    val isReborn get() = action == ActorSequence.Reborn
 
     override fun toString() = "guard %d+%d x %d+%d state=%s gold=%d inhole=%s".format(
         x, ox, y, oy, fsm.currentStateName, hasGold, inHole

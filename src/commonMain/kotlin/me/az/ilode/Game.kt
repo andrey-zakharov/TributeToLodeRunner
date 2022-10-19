@@ -19,7 +19,11 @@ import me.az.utils.StackedState
 import me.az.utils.buildStateMachine
 import me.az.utils.enumDelegate
 import kotlin.coroutines.CoroutineContext
+import kotlin.properties.ReadWriteProperty
 
+//class IntProperty(key: String? = null, defaultValue: Int, minValue: Int?, maxValue: Int?): ReadWriteProperty<Any?, Int> {
+//
+//}
 
 class GameSettings(val settings: Settings) {
     var curScore: Int by settings.int(defaultValue = 0)
@@ -181,7 +185,10 @@ class Game(val state: GameSettings) : CoroutineScope {
             edge("newlevel") { validWhen { animEnds || skipAnims } }
         }
         state("nextlevel") {
-            onEnter { animEnds = false }
+            onEnter {
+                animEnds = false
+                runner.health += 1
+            }
             // handled above
             edge("newlevel") { validWhen { animEnds || skipAnims } }
         }
@@ -250,7 +257,7 @@ class Game(val state: GameSettings) : CoroutineScope {
         }
 
         while ( movesCount > 0 ) {
-           if ( nextGuard == guards.size - 1 ) {
+           if ( nextGuard >= guards.size - 1 ) {
                nextGuard = 0
            } else {
                nextGuard ++
