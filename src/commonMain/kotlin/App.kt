@@ -128,7 +128,8 @@ object RunGameState : State<App>() {
         val game = Game(app.context)
         val conf = ViewSpec()
 
-        gameScene = GameLevelScene(game, app.ctx.assetMgr, app.context,
+        gameScene = GameLevelScene(game, app.ctx,
+            appContext = app.context,
             name = "level", startNewGame = true).apply {
             +GameControls(game, app.ctx.inputMgr)
         }

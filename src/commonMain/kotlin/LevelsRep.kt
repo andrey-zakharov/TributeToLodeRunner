@@ -56,7 +56,7 @@ class LevelsRep(
                 generateGameLevel(
                     id,
                     fromMap,
-                    mapWidth = fromMap.first().length,
+                    mapWidth = 24 + fromMap.first().length,
                     mapHeight = 12 + fromMap.size,
 
                     tilesAtlasIndex = tileSet.nameIndex,

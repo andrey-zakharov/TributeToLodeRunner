@@ -8,10 +8,7 @@ import de.fabmax.kool.pipeline.RenderPass
 import de.fabmax.kool.scene.Group
 import de.fabmax.kool.scene.Node
 import de.fabmax.kool.scene.OrthographicCamera
-import de.fabmax.kool.scene.animation.Animator
-import de.fabmax.kool.scene.animation.InterpolatedFloat
-import de.fabmax.kool.scene.animation.InterpolatedValue
-import de.fabmax.kool.scene.animation.SquareAnimator
+import de.fabmax.kool.scene.animation.*
 import me.az.ilode.Game
 import me.az.scenes.height
 import me.az.scenes.width
@@ -34,12 +31,12 @@ class InterpolatedVec3f(val from: MutableVec3f, val `to`: MutableVec3f) : Interp
     }
 }
 
-class CameraController(val camera: OrthographicCamera, name: String? = "camcontrol") : Node(name) {
+class CameraController(private val cameraToControl: OrthographicCamera, name: String? = "camcontrol", val ctx: KoolContext) : Node(name) {
 
-    private val cameraPos = InterpolatedVec3f(camera.position, camera.position)
-    private val cameraAnimator = SquareAnimator(cameraPos).apply {
-        duration = 5000f
-        repeating = Animator.REPEAT
+    private val cameraPos = InterpolatedVec3f(MutableVec3f(cameraToControl.position), MutableVec3f(cameraToControl.position))
+    private val cameraAnimator = InverseSquareAnimator(cameraPos).apply {
+        duration = 1f / 4f //runner.xMove
+        repeating = Animator.ONCE
         progress = 0f
         speed = 1f
     }
@@ -51,9 +48,8 @@ class CameraController(val camera: OrthographicCamera, name: String? = "camcontr
 //    fun calculateCamera(levelView!!, levelView!!.runnerView)
 
     fun startTrack(game: Game, boundNode: Group, followNode: Node) {
-        calculator = cameraCalculator(game, boundNode, followNode).also {
-            onUpdate += it
-        }
+        calculator = cameraCalculator(game, boundNode, followNode)
+        calculator?.run { onUpdate += this }
 
         game.onPlayGame += cameraUpdater
     }
@@ -63,16 +59,14 @@ class CameraController(val camera: OrthographicCamera, name: String? = "camcontr
         game.onPlayGame -= cameraUpdater
     }
 
-
     private fun calculateCamera(boundNode: Group, followNode: Node): () -> MutableVec3f {
-
-        val deadZone = with(camera) {
+        val deadZone = with(cameraToControl) {
             BoundingBox().apply {
                 add(Vec3f(-this@with.width / 4, -this@with.height / 4, 0f))
-                add(Vec3f(this@with.width/4, this@with.height/4, 0f))
+                add(Vec3f(this@with.width / 4, this@with.height / 4, 0f))
             }
         }
-        val borderZone = with(camera) {
+        val borderZone = with(cameraToControl) {
             val scaledMin = MutableVec3f(boundNode.bounds.min)
             val scaledMax = MutableVec3f(boundNode.bounds.max)
             boundNode.transform.transform(scaledMin)
@@ -87,47 +81,39 @@ class CameraController(val camera: OrthographicCamera, name: String? = "camcontr
         return {
             val resultPos = MutableVec3f(followNode.globalCenter)
 
-            with(camera) {
+            with(cameraToControl) {
                 //camera shift
-                resultPos -= Vec3f(0f, height / 2f, 0f)
+                resultPos -= Vec3f(0f, this@with.height / 2f, 0f)
                 // get distance from camera. if more than viewport / 4 - move
-                val diff = resultPos - globalLookAt
-                if ( !deadZone.contains(diff) ) {
-                    if ( diff.x > deadZone.max.x ) {
-                        resultPos.x = globalPos.x + diff.x - deadZone.max.x
-                    } else if ( diff.x < deadZone.min.x ) {
-                        resultPos.x = globalPos.x - (deadZone.min.x - diff.x)
-                    } else {
-                        resultPos.x = globalPos.x
+                val diff = resultPos - this@with.globalLookAt
 
-                    }
-
-                    if ( diff.y > deadZone.max.y ) {
-                        resultPos.y = globalPos.y + diff.y - deadZone.max.y
-                    } else if ( diff.y < deadZone.min.y ) {
-                        resultPos.y = globalPos.y - (deadZone.min.y - diff.y)
-                    } else {
-                        resultPos.y = globalPos.y
-                    }
+                if ( diff.x > deadZone.max.x ) {
+                    resultPos.x = this@with.globalPos.x + diff.x - deadZone.max.x
+                } else if ( diff.x < deadZone.min.x ) {
+                    resultPos.x = this@with.globalPos.x - (deadZone.min.x - diff.x)
                 } else {
-                    resultPos.x = globalPos.x
-                    resultPos.y = globalPos.y
+                    resultPos.x = this@with.globalPos.x
+                }
+
+                if ( diff.y > deadZone.max.y ) {
+                    resultPos.y = this@with.globalPos.y + diff.y - deadZone.max.y
+                } else if ( diff.y < deadZone.min.y ) {
+                    resultPos.y = this@with.globalPos.y - (deadZone.min.y - diff.y)
+                } else {
+                    resultPos.y = this@with.globalPos.y
                 }
 
                 borderZone.clampToBounds(resultPos)
 
                 resultPos
-
             }
         }
 
     }
-    private val cameraUpdater = { _: Game, ev: RenderPass.UpdateEvent? ->
-        with(camera) {
-            ev?.ctx?.run {
-                position.set(cameraAnimator.tick(this))
-                lookAt.set(position.x, position.y, 0f)
-            }
+    private val cameraUpdater = { _: Game, _: RenderPass.UpdateEvent? ->
+        with(cameraToControl) {
+            position.set(cameraAnimator.tick(ctx))
+            lookAt.set(position.x, position.y, 0f)
         }
         Unit
     }
@@ -137,7 +123,6 @@ class CameraController(val camera: OrthographicCamera, name: String? = "camcontr
         val calculator = calculateCamera(boundNode, followNode)
 
         return { ev: RenderPass.UpdateEvent ->
-            println(camera.toString())
             if (game.isPlaying) {
                 val pos = calculator()
                 // anim?
@@ -147,6 +132,8 @@ class CameraController(val camera: OrthographicCamera, name: String? = "camcontr
                     10f
                 )
                 cameraPos.from.set(cameraPos.value)
+                cameraAnimator.speed = 1f
+                cameraAnimator.progress = 0f
             }
         }
     }

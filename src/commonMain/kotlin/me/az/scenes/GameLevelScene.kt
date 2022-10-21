@@ -28,7 +28,8 @@ import kotlin.math.sqrt
 
 class GameLevelScene (
     game: Game,
-    assets: AssetManager,
+    ctx: KoolContext,
+    assets: AssetManager = ctx.assetMgr,
     appContext: AppContext,
     name: String? = null,
     private val startNewGame: Boolean = false,
@@ -146,8 +147,10 @@ class GameLevelScene (
             runnerAnims,
             guardAtlas,
             guardAnims
-        ).also { view ->
-            off = OffscreenRenderPass2d(view, renderPassConfig {
+        )
+
+        levelView?.run {
+            off = OffscreenRenderPass2d(this, renderPassConfig {
                 this.name = "bg"
 
                 setSize(visibleWidth, visibleHeight)
@@ -157,18 +160,22 @@ class GameLevelScene (
                     minFilter = FilterMethod.NEAREST
                     magFilter = FilterMethod.NEAREST
                 }
-            }).apply {
-                this.camera = App.createCamera( visibleWidth, visibleHeight ).apply {
-                    projCorrectionMode = Camera.ProjCorrectionMode.OFFSCREEN
+            })
+        }
 
-                    cameraController = CameraController(this).also {
-                        this@GameLevelScene += it
-                        it.startTrack(game, view, view.runnerView)
-                    }
-                }
-                clearColor = Color(0.00f, 0.00f, 0.00f, 0.00f)
-                addOffscreenPass(this)
+        off?.run {
+            camera = App.createCamera( visibleWidth, visibleHeight ).apply {
+                projCorrectionMode = Camera.ProjCorrectionMode.OFFSCREEN
             }
+            clearColor = Color(0.00f, 0.00f, 0.00f, 0.00f)
+            this@GameLevelScene.addOffscreenPass(this)
+
+            cameraController = CameraController(this@run.camera as OrthographicCamera, ctx = ctx)
+        }
+
+        cameraController?.run {
+            this@GameLevelScene += this
+            levelView?.run { startTrack(game, this@run, runnerView) }
         }
 
         // minimap TBD
@@ -215,7 +222,7 @@ class GameLevelScene (
     private fun removeLevelView(ctx: KoolContext) {
         cameraController?.run {
             stopTrack(game)
-            -this
+            this@GameLevelScene -= this
         }
 
 
