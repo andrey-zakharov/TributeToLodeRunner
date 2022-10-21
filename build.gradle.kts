@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "me.az"
-version = "1.0-SNAPSHOT"
+version = "0.1-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -87,6 +87,15 @@ kotlin {
                 runtimeOnly(DepsJvm.lwjglNatives("nfd"))
 
                 implementation("de.fabmax.kool:kool-core-jvm:${koolVersion}")
+
+                // bundle
+                implementation(DepsJvm.lwjglNatives(platform = org.gradle.internal.os.OperatingSystem.WINDOWS))
+                implementation(DepsJvm.lwjglNatives("glfw", org.gradle.internal.os.OperatingSystem.WINDOWS))
+                implementation(DepsJvm.lwjglNatives("jemalloc", org.gradle.internal.os.OperatingSystem.WINDOWS))
+                implementation(DepsJvm.lwjglNatives("opengl", org.gradle.internal.os.OperatingSystem.WINDOWS))
+                implementation(DepsJvm.lwjglNatives("vma", org.gradle.internal.os.OperatingSystem.WINDOWS))
+                implementation(DepsJvm.lwjglNatives("shaderc", org.gradle.internal.os.OperatingSystem.WINDOWS))
+                implementation(DepsJvm.lwjglNatives("nfd", org.gradle.internal.os.OperatingSystem.WINDOWS))
             }
         }
 

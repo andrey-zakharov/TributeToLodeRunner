@@ -7,7 +7,7 @@ object Versions {
     val koolVersion = "0.9.0-SNAPSHOT"
 
     val lwjglVersion = "3.3.1"
-    val lwjglNatives = OperatingSystem.current().let {
+    fun lwjglNatives(platform: OperatingSystem) = platform.let {
         when {
             it.isLinux -> "natives-linux"
             it.isMacOsX -> "natives-macos"
@@ -31,11 +31,11 @@ object DepsJvm {
         }
     }
 
-    fun lwjglNatives(subLib: String? = null): String {
+    fun lwjglNatives(subLib: String? = null, platform: OperatingSystem = OperatingSystem.current()): String {
         return if (subLib != null) {
-            "org.lwjgl:lwjgl-$subLib:${Versions.lwjglVersion}:${Versions.lwjglNatives}"
+            "org.lwjgl:lwjgl-$subLib:${Versions.lwjglVersion}:${Versions.lwjglNatives(platform)}"
         } else {
-            "org.lwjgl:lwjgl:${Versions.lwjglVersion}:${Versions.lwjglNatives}"
+            "org.lwjgl:lwjgl:${Versions.lwjglVersion}:${Versions.lwjglNatives(platform)}"
         }
     }
 }
