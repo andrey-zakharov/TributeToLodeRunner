@@ -118,7 +118,7 @@ sealed class Actor(val game: Game) : Controllable {
     lateinit var sounds: SoundPlayer
 
     open fun update() {
-       fsm.update(this)
+        fsm.update(this)
         //check collision
         checkGold()
     }
@@ -126,7 +126,7 @@ sealed class Actor(val game: Game) : Controllable {
         level.isLadder(x, y) ||
                 (oy == 0 && level.isBar(x, y)) ||
                 (oy >= 0 && level.isFloor(x, y + 1)) ||
-                level.hasGuard(x, y + 1) // not strict check about guard
+                (level.hasGuard(x, y + 1) && oy >= game.getGuard(x, y + 1).offset.y)
     // strict check is where needed
 
     open val onFallStop: (() -> Unit)? = null
@@ -153,7 +153,7 @@ sealed class Actor(val game: Game) : Controllable {
             sounds.playSound(sound, false, true)
     // collect gold
     private fun checkGold() {
-        if ( level.isGold(x, y) && ox > -W4 && ox < W4 && oy > -H4 && oy < H4 ) {
+        if ( level.isGold(x, y) && ox > -xMove && ox < xMove && oy > -yMove && oy < yMove ) {
             if ( takeGold() ) {
                 level.takeGold(x, y)
             }
@@ -308,7 +308,7 @@ sealed class Actor(val game: Game) : Controllable {
 
 
                 edge(StopState.name, weight = Int.MAX_VALUE) {
-                    validWhen { !contMode && !anyKeyPressed }
+                    validWhen { !contMode && !anyKeyPressed && this@ControllableState !is StopState }
                 }
 
                 onEnter {
@@ -320,6 +320,18 @@ sealed class Actor(val game: Game) : Controllable {
         class StopState(actor: Actor) : ControllableState(actor, null, name) {
             companion object {
                 const val name = "stop"
+            }
+            init {
+                onUpdate {
+                    // special cases - cannot move - change anim
+                    if ( inputVec.x < 0 ) {
+                        actor.action = ActorSequence.RunLeft
+                    }
+
+                    if ( inputVec.x > 0 ) {
+                        actor.action = ActorSequence.RunRight
+                    }
+                }
             }
         }
 
@@ -349,7 +361,7 @@ sealed class Actor(val game: Game) : Controllable {
                     action {
                         actor.onFallStop?.invoke()
                     }
-                    validWhen { canStay || (level.hasGuard(x, y + 1) && oy >= game.getGuard(x, y + 1).offset.y) }
+                    validWhen { canStay }
                 }
 
                 onUpdate {
@@ -377,7 +389,7 @@ sealed class Actor(val game: Game) : Controllable {
                             Action.ACT_LEFT -> if ( isBar ) ActorSequence.BarLeft.id else ActorSequence.RunLeft.id
                             Action.ACT_RIGHT -> if ( isBar ) ActorSequence.BarRight.id else ActorSequence.RunRight.id
                             else -> {
-                                action = ActorSequence.BarLeft
+                                if ( isBar ) action = ActorSequence.BarLeft
                                 StopState.name
                             }
                         }
@@ -389,15 +401,11 @@ sealed class Actor(val game: Game) : Controllable {
         sealed class MovementState(actor: Actor, animName: ActorSequence?, name: String = animName!!.id) : ControllableState(actor, animName, name) {
             init {
                 // pause runner when all edges fails but still some keys
+
                 edge(StopState.name, weight = Int.MAX_VALUE) {
-                    validWhen {
-                        inputVec.x < 0 && (this@MovementState !is MoveLeft.RunLeft && this@MovementState !is MoveLeft.BarLeft)
-                    }
-                    validWhen {
-                        inputVec.x > 0 && (this@MovementState !is RunRight && this@MovementState !is BarRight)
-                    }
-                    validWhen { inputVec.y > 0 && this@MovementState !is RunDown }
-                    validWhen { inputVec.y < 0 && this@MovementState !is RunUp }
+
+                    validWhen { inputVec.y > 0 }
+                    validWhen { inputVec.y < 0  }
                     validWhen { digLeft }
                     validWhen { digRight }
                 }
@@ -456,6 +464,10 @@ sealed class Actor(val game: Game) : Controllable {
             }
 
             init {
+                // so we have entered state - set animation, but stop before update
+                edge(StopState.name) {
+                    validWhen { !canMoveLeft }
+                }
                 onUpdate {
                     offset.x -= xMove
                     centerY()
@@ -478,16 +490,16 @@ sealed class Actor(val game: Game) : Controllable {
         sealed class MoveRight(actor: Actor, animName: ActorSequence) : MovementState(actor, animName) {
             init {
                 onUpdate {
+                    offset.x += xMove
+                    centerY()
+                    if ( !canMoveRight ) {
+                        offset.x = 0
+                        return@onUpdate StopState.name
+                    }
                     if ( ox > W2 ) { //move to x+1 position
                         block.x++
                         offset.x -= TILE_WIDTH
                         if ( this is Guard && inHole ) inHole = false
-                    }
-                    centerY()
-                    offset.x += xMove
-                    if ( offset.x >= 0 && !canMoveRight ) {
-                        offset.x = 0
-                        return@onUpdate StopState.name
                     }
                     null
                 }

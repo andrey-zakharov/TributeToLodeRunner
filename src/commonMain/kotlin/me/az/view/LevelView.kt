@@ -16,8 +16,6 @@ import me.az.shaders.TileMapShaderConf
 import me.az.view.ActorView
 import kotlin.experimental.and
 
-expect fun Texture2d.export(scale: Float = 1f)
-
 class LevelView(
     game: Game, level: GameLevel, conf: LevelSpec,
     tilesAtlas: ImageAtlas,

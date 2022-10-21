@@ -165,7 +165,7 @@ open class StackedState<STATEKEY, CONTEXT>(val name: STATEKEY) {
             when(it) {
                 is StackedStateEdge -> {
                     it.action {
-                        println("  edge action: ${it.targetState}")
+                        println("  edge action: ${this@StackedState.name} -> ${it.targetState}")
                     }
                 }
                 else -> {
@@ -235,8 +235,7 @@ class StackedStateMachine<STATEKEY, E>(private val initialState: STATEKEY) {
 
     fun update(event: E, safe: Boolean = false /* treat unknown states as exit from fsm or not*/) {
         if ( finished ) return
-
-        val edge = currentState.beforeUpdate(event)
+        var edge = currentState.beforeUpdate(event)
 
         // fsm for updating fsm???
         if (edge is StackedStateEdge<STATEKEY, E> && edge.targetState != currentStateName) {
@@ -246,15 +245,17 @@ class StackedStateMachine<STATEKEY, E>(private val initialState: STATEKEY) {
                 finish()
                 return
             }
+
             val newState = edge.enterEdge {
                 getState(it)
             }
-            pushState(newState, edge.replace )
+
+            pushState(newState, edge.replace)
         }
 
         currentState.update(event)?.run {
             (this as? STATEKEY)?.run {
-                if (this != currentStateName) {
+                if (this != Unit && this != currentStateName) {
                     pushState(getState(this), true)
                 }
             }

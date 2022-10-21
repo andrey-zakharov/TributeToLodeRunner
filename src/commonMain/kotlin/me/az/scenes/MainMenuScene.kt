@@ -13,10 +13,8 @@ import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.Texture2d
 import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.FontProps
-import me.az.ilode.Game
 import me.az.ilode.InputSpec
 import me.az.ilode.toInputSpec
-import me.az.utils.addDebugAxis
 import me.az.view.ImageText
 import me.az.view.TextDrawer
 import registerActions
@@ -105,7 +103,7 @@ class MainMenuScene(val context: MainMenuContext) : AsyncScene() {
     override fun setup(ctx: KoolContext) {
 
         +sprite(Texture2d(simpleTextureProps) {
-            it.loadTextureData("images/cover.jpg")
+            it.loadTextureData("assets/images/cover.jpg")
         })
 
         selected.set(0)

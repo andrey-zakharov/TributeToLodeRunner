@@ -5,6 +5,7 @@ import ImageAtlas
 import Sprite
 import de.fabmax.kool.math.Vec2i
 import me.az.ilode.Actor
+import me.az.utils.addDebugAxis
 
 class ActorView(val actor: Actor,
                 val atlas: ImageAtlas,
@@ -14,6 +15,7 @@ class ActorView(val actor: Actor,
 
 
     init {
+//        addDebugAxis()
         onUpdate += {
             actor.level?.run {
 
