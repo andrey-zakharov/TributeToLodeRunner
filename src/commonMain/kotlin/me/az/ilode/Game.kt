@@ -1,5 +1,6 @@
 package me.az.ilode
 
+import AppContext
 import GameSpeed
 import LevelSet
 import TileSet
@@ -10,6 +11,7 @@ import com.russhwolf.settings.int
 import de.fabmax.kool.KeyCode
 import de.fabmax.kool.LocalKeyCode
 import de.fabmax.kool.modules.ui2.MutableStateValue
+import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.RenderPass
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -36,20 +38,7 @@ enum class GameState {
     GAME_LOADING , GAME_WIN
 }
 
-class GameSettings(val settings: Settings) {
-    var curScore: Int by settings.int(defaultValue = 0)
-    var currentLevel: Int by settings.int(defaultValue = 0)
-    var runnerLifes by settings.int(defaultValue = START_HEALTH) // max = MAX_HEALTH
-    var speed: GameSpeed by enumDelegate(settings, defaultValue = GameSpeed.SPEED_SLOW)
-    var spriteMode: TileSet by enumDelegate(settings, defaultValue = TileSet.SPRITES_APPLE2)
-    var version: LevelSet by enumDelegate(settings, defaultValue = LevelSet.CLASSIC)
-    var introDuration by settings.float(defaultValue = 60f)
-    var sometimePlayInGodMode by settings.boolean()
 
-    // { s:curScore, l:curLevel, r:runnerLife, m: maxLevel, g: sometimePlayInGodMode, p: passedLevel};
-    var immortal by settings.boolean(defaultValue = true)
-    var stopGuards by settings.boolean(defaultValue = false)
-}
 const val SCORE_COUNTER = 15 // how much scores bumbs in finish anim
 const val SCORE_COMPLETE = 1500
 const val SCORE_COMPLETE_INC = SCORE_COMPLETE / SCORE_COUNTER
@@ -58,7 +47,7 @@ const val SCORE_FALL     = 75
 const val SCORE_DIES     = 75
 
 //system
-class Game(val state: GameSettings) : CoroutineScope {
+class Game(val state: AppContext) : CoroutineScope {
     sealed class GameEvent {
         object Tick: GameEvent()
         class AnimationEnds(val animName: String): GameEvent()
@@ -72,9 +61,7 @@ class Game(val state: GameSettings) : CoroutineScope {
     var nextGuard = 0
     var nextMoves = 0
     val stopAnims = MutableStateValue(false)
-    val stopGuards = MutableStateValue(state.stopGuards).also {
-        it.onChange { v -> state.stopGuards = v }
-    }
+
     val gameOver get() = runner.health <= 0 // classic
     // hack to sync anims
     var animEnds = false
@@ -162,7 +149,7 @@ class Game(val state: GameSettings) : CoroutineScope {
                 animEnds = false
             }
             edge(GameState.GAME_OVER) {
-                validWhen { state.runnerLifes <= 0 }
+                validWhen { state.runnerLifes.value <= 0 }
             }
             edge(GameState.GAME_NEW_LEVEL) {
                 validWhen { animEnds || skipAnims }
@@ -241,7 +228,7 @@ class Game(val state: GameSettings) : CoroutineScope {
     private fun playGame(ev: RenderPass.UpdateEvent? = null): Boolean {
         return level?.run {
             runner.update()
-            if ( !stopGuards.value ) guardsUpdate()
+            if ( !state.stopGuards.value ) guardsUpdate()
             if ( !stopAnims.value ) {
                 level?.update(runner)
             }

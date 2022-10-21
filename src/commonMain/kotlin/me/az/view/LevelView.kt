@@ -1,23 +1,16 @@
 import de.fabmax.kool.math.MutableVec2f
 import de.fabmax.kool.math.Vec2i
-import de.fabmax.kool.modules.ksl.KslUnlitShader
 import de.fabmax.kool.pipeline.Attribute
-import de.fabmax.kool.pipeline.TexFormat
 import de.fabmax.kool.pipeline.Texture2d
-import de.fabmax.kool.pipeline.TextureData2d
 import de.fabmax.kool.scene.Group
-import de.fabmax.kool.scene.colorMesh
 import de.fabmax.kool.scene.mesh
-import de.fabmax.kool.util.Color
-import de.fabmax.kool.util.createUint8Buffer
 import me.az.ilode.*
 import me.az.shaders.TileMapShader
 import me.az.shaders.TileMapShaderConf
 import me.az.view.ActorView
-import kotlin.experimental.and
 
 class LevelView(
-    game: Game, level: GameLevel, conf: LevelSpec,
+    game: Game, level: GameLevel, conf: ViewSpec,
     tilesAtlas: ImageAtlas,
     holesAtlas: ImageAtlas,
     runnerAtlas: ImageAtlas,

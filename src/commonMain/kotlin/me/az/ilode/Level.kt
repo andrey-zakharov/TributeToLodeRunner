@@ -153,8 +153,6 @@ fun generateGameLevel(
 
     // view stuff
     tilesAtlasIndex: Map<String, Int>,
-    holesIndex: MutableMap<String, Int>,
-    holesAnims: AnimationFrames,
     scope: CoroutineScope,
 ): GameLevel {
     val patternSize = 3 // n , m
@@ -181,7 +179,7 @@ fun generateGameLevel(
                 else Tile.values()[0].char
             tileIndex.toString()
         }
-    }.toList(), tilesAtlasIndex, holesIndex, holesAnims).apply {
+    }.toList(), tilesAtlasIndex).apply {
 
         scope.launch {
 
@@ -268,9 +266,7 @@ fun loadGameLevel(
     levelId: Int,
     map: List<String>,
     tilesAtlasIndex: Map<String, Int>,
-    holesIndex: MutableMap<String, Int>,
-    holesAnims: AnimationFrames
-) = GameLevel(levelId, map, tilesAtlasIndex, holesIndex, holesAnims = holesAnims)
+) = GameLevel(levelId, map, tilesAtlasIndex)
 
 data class Anim( val pos: Vec2i, val name: String, var currentFrame: Int = 0 )
 
@@ -278,9 +274,7 @@ class GameLevel(
     val levelId: Int,
     private val map: List<String>,
     private val primaryTileSet: Map<String, Int>, // index
-    private val holesTileSet: Map<String, Int>,
     val maxGuards: Int = 5,
-    val holesAnims: AnimationFrames
 ) {
     // for load
     val width = map.first().length
@@ -308,6 +302,8 @@ class GameLevel(
     val anims = mutableListOf<Anim>() // pos -> anim name, current frame index in anim
     var dirty = false
 
+    var holesAnims: AnimationFrames? = null
+
     init {
         println("creating level $levelId $width x $height")
         println("from map:")
@@ -323,7 +319,8 @@ class GameLevel(
         while( iter.hasNext() ) {
             val entry = iter.next()
             val (pos, animName, frame) = entry
-            val animArray = holesAnims.sequence[animName]!!
+            entry.currentFrame++
+            val animArray = holesAnims?.sequence?.get(animName) ?: continue
             val (x, y) = pos
 
             if ( frame < animArray.size ) {
@@ -341,7 +338,6 @@ class GameLevel(
                     this[x, y] = ViewCell(true, tileIndex)
                 }
 
-                entry.currentFrame++
             } else {
                 // on exit
                 if ( animName == "fillHole" ) {

@@ -1,8 +1,7 @@
 package me.az.scenes
 
 import Action
-import ImageAtlas
-import ImageAtlasSpec
+import AppContext
 import MainMenuState.exitGame
 import MainMenuState.startnewGame
 import TileSet
@@ -11,15 +10,18 @@ import de.fabmax.kool.InputManager
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.Texture2d
+import de.fabmax.kool.scene.OrthographicCamera
 import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.FontProps
 import me.az.ilode.InputSpec
 import me.az.ilode.toInputSpec
-import me.az.view.ImageText
 import me.az.view.TextDrawer
 import registerActions
 import simpleTextureProps
 import sprite
+import unregisterActions
+import kotlin.math.max
+import kotlin.math.min
 
 
 data class MainMenuContext(
@@ -27,28 +29,27 @@ data class MainMenuContext(
     val level: MutableStateValue<Int> = mutableStateOf(0)
 )
 
-class MainMenuScene(val context: MainMenuContext) : AsyncScene() {
-
-    private val fontAtlas = ImageAtlas(ImageAtlasSpec(context.tileSet.value, "text"))
-
+class MainMenuScene(context: AppContext) : AsyncScene() {
+    val context = MainMenuContext()
     val fontProps = FontProps(
         family = "text",
         sizePts = 22f,
         chars = TextDrawer.fontMap.keys.joinToString("")
     )
 
-    override suspend fun AssetManager.loadResources(ctx: KoolContext) {
-         fontAtlas.load(this)
-    }
-
     val transparent = Color(0.25f,0.25f,0.25f,0f)
     private fun ButtonModifier.themeButtons(): ButtonModifier {
         width(Grow.Std)
         margin(Dp(20f))
-        textAlign(AlignmentX.Center, AlignmentY.Center)
-        background(RectBackground(Color.WHITE))
+        textAlign(AlignmentX.Start, AlignmentY.Center)
+//        background(RectBackground(Color.WHITE))
 //        background(RectBackground(pc))
         isClickFeedback(false)
+        font(fontProps)
+        colors(
+            buttonColor = transparent,
+            buttonHoverColor = transparent
+        )
 
         return this
     }
@@ -64,28 +65,7 @@ class MainMenuScene(val context: MainMenuContext) : AsyncScene() {
         mutableStateOf(" ")
     } }
 
-    private fun UiScope.ImageButton(text: String, scale: Float = 2f, action: () -> Unit) {
-        Button() {
-            println(text)
-            modifier
-                .themeButtons()
-
-                .width( (scale * text.length * fontAtlas.spec.tileWidth).dp )
-                .height( (scale * fontAtlas.spec.tileHeight).dp )
-                .onClick {
-                    action()
-                }
-            ImageText(fontAtlas, text) {
-                modifier.padding(start = 5.dp, bottom = 5.dp)
-                    .width(this@Button.modifier.width)
-                    .height(this@Button.modifier.height)
-                    .alignX(AlignmentX.Center)
-                    .alignY(AlignmentY.Center)
-            }
-        }
-    }
-
-    enum class MenuActions(
+    enum class MenuCommands(
         override val keyCode: InputSpec, // or no
         override val onPress: MainMenuScene.(InputManager.KeyEvent) -> Unit = {},
         override val onRelease: MainMenuScene.(InputManager.KeyEvent) -> Unit = {}
@@ -100,18 +80,35 @@ class MainMenuScene(val context: MainMenuContext) : AsyncScene() {
             println(children[selected.value])
         })
     }
+
+    override suspend fun loadResources(assetManager: AssetManager, ctx: KoolContext) {
+
+    }
+
+    private val subs = mutableListOf<InputManager.KeyEventListener>()
+
     override fun setup(ctx: KoolContext) {
-
-        +sprite(Texture2d(simpleTextureProps) {
-            it.loadTextureData("assets/images/cover.jpg")
-        })
-
         selected.set(0)
 
-        registerActions(ctx.inputMgr, this, MenuActions.values().asIterable())
+        subs.addAll(
+            registerActions(ctx.inputMgr, this, MenuCommands.values().asIterable())
+        )
 
         setupUiScene(clearScreen = true)
 
+        +sprite(Texture2d(simpleTextureProps) {
+            it.loadTextureData("images/cover.jpg", simpleTextureProps.format)
+//        it.loadAndPrepareTexture("images/cover.jpg")
+        }).apply {
+            grayScaled = true
+            onResize += { w, h ->
+//                translate(0f, h.toFloat() / 2f, 0f)
+                val imageMinSide = min(w, h)
+                val camSide = max((camera as OrthographicCamera).width, (camera as OrthographicCamera).height)
+                scale(camSide / imageMinSide)
+
+            }
+        }
 
         selected.onChange {
             println(it)
@@ -131,31 +128,30 @@ class MainMenuScene(val context: MainMenuContext) : AsyncScene() {
             var scale = 2f
 
 
-            ImageButton("${marks[0].use()}new game", scale) {
-                startnewGame = true
-            }
-
-            Button("${marks[1].use()}level:${context.level.use().toString().padStart(3, '0')}") {
+            Button("${marks[0].use()}new game") {
                 modifier.onClick {
-                    context.level.set( context.level.value + 1)
-                }
-                    .font(fontProps)
-                    .isClickFeedback(false)
-                    .colors(
-                        buttonColor = transparent,
-                        buttonHoverColor = transparent
-                    )
-
+                    startnewGame = true
+                }.themeButtons()
             }
 
-            ImageButton("${marks[1].use()}level: ${context.level.use()}", scale) {
-                context.level.set( context.level.value + 1)
+            Button("${marks[1].use()}level: ${context.level.use().toString().padStart(3, '0')}") {
+                modifier.onClick {
+                    context.level.set(context.level.value + 1)
+                }.themeButtons()
             }
 
-            ImageButton( "${marks[2].use()}exit" ) {
-                exitGame = true
+            Button( "${marks[2].use()}exit" ) {
+                modifier.onClick {
+                    exitGame = true
+                }.themeButtons()
             }
         }
+    }
+
+    override fun dispose(ctx: KoolContext) {
+        super.dispose(ctx)
+        unregisterActions(ctx.inputMgr, subs)
+        subs.clear()
     }
 
     //@KeySpec(ARROW_UP)

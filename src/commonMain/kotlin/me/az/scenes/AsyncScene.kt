@@ -17,7 +17,7 @@ abstract class AsyncScene(name: String? = null) : Scene(name) {
             // load resources (async from AssetManager CoroutineScope)
             sceneState = State.LOADING
             ctx.assetMgr.launch {
-                loadResources(ctx)
+                loadResources(this, ctx)
                 sceneState = State.SETUP
             }
         }
@@ -28,7 +28,7 @@ abstract class AsyncScene(name: String? = null) : Scene(name) {
         }
     }
 
-    abstract suspend fun AssetManager.loadResources(ctx: KoolContext)
+    abstract suspend fun loadResources(assets: AssetManager, ctx: KoolContext)
     abstract fun setup(ctx: KoolContext)
 
     enum class State {

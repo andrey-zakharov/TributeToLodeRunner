@@ -19,12 +19,18 @@ enum class TileSet(val path: String) {
     SPRITES_ZXSPECTRUM("zxs"),
     SPRITES_NES("nes"),
 }
-
+data class GapsSpec(
+    val top: Int = 0,
+    val right: Int = 0,
+    val bottom: Int = 0,
+    val left: Int = 0,
+)
 data class ImageAtlasSpec(
     val tileset: TileSet = TileSet.SPRITES_APPLE2,
     val name: String,
     val tileWidth: Int = 20, // +padding?
     val tileHeight: Int = 22,
+    val gap: GapsSpec = GapsSpec()
 ) {}
 
 @Serializable

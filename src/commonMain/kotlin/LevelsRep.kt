@@ -14,8 +14,6 @@ enum class LevelSet(val path: String) {
 class LevelsRep(
     private val assets: AssetManager,
     private val tileSet: ImageAtlas,
-    val holeAtlas: ImageAtlas,
-    val holeAnims: AnimationFrames,
     val scope: CoroutineScope
 ) {
 
@@ -23,11 +21,6 @@ class LevelsRep(
     val loadedLevels = mutableMapOf<Int, GameLevel>()
     companion object {
         val tilesByNames = Tile.values().associateBy { it.name.lowercase() }
-    }
-
-    val tilesIndex by lazy {
-        Tile.values().filter { tileSet.nameIndex.containsKey(it.name.lowercase()) }
-            .associateWith { tileSet.nameIndex[it.name.lowercase()]!! }
     }
 
     suspend fun load(levelSet: LevelSet) {
@@ -67,12 +60,12 @@ class LevelsRep(
                     mapHeight = 12 + fromMap.size,
 
                     tilesAtlasIndex = tileSet.nameIndex,
-                    holesIndex = holeAtlas.nameIndex,
-                    holesAnims = holeAnims,
+//                    holesIndex = holeAtlas.nameIndex,
+//                    holesAnims = holeAnims,
                     scope = scope
                 )
             } else
-                loadGameLevel(id, levels[id], tileSet.nameIndex, holeAtlas.nameIndex, holeAnims)
+                loadGameLevel(id, levels[id], tileSet.nameIndex)
         }
     }
 }

@@ -9,15 +9,15 @@ const val MAX_HEALTH = 100
 val Controllable.anyKeyPressed get() = digLeft || digRight || inputVec.x != 0 || inputVec.y != 0
 
 class Runner(game: Game) : Actor(game), Controllable {
-    var health = game.state.runnerLifes
+    var health = game.state.runnerLifes.value
         set(value) {
             field = value
-            game.state.runnerLifes = value
+            game.state.runnerLifes.set( value )
         }
-    var score = game.state.curScore
+    var score = game.state.score.value
         private set(value) {
             field = value
-            game.state.curScore = value
+            game.state.score.set( value )
         }
     val success: Boolean get() = y == 0 && oy == 0 && game.level?.isDone == true
 
@@ -46,7 +46,7 @@ class Runner(game: Game) : Actor(game), Controllable {
     override val onFallStop = { sounds.playSound("down") }
 
     fun dead() {
-        if (!game.state.immortal) alive = false // for game fsm
+        if (!game.state.immortal.value) alive = false // for game fsm
     } // game will handle this
     // should prevent others transitions for a while dig stops
     sealed class DigState(actor: Runner, animName: ActorSequence) : ActorState(actor, animName, animName.id) {
