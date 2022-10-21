@@ -16,6 +16,8 @@ import org.mifek.wfc.models.OverlappingCartesian2DModel
 import org.mifek.wfc.models.options.Cartesian2DModelOptions
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTime
+import kotlin.time.measureTimedValue
+
 // game rules: allowing entrance for each base block
 // enter from up, down, ...
 const val ENTER_ALL = 0
@@ -129,23 +131,37 @@ expect fun debugAlgoStart(levelId: Int, model: OverlappingCartesian2DModel, algo
 @OptIn(ExperimentalTime::class)
 fun generateGameLevel(
     levelId: Int,
+    // generator topology setup
     exampleMap: List<String>,
+    exampleWidth: Int =  exampleMap.first().length,
+    exampleHeight: Int = exampleMap.size,
+    mapWidth: Int = exampleWidth,
+    mapHeight: Int = exampleHeight, // default turn off
+    exampleOriginX: Int = (mapWidth - exampleWidth) / 2,
+    exampleOriginY: Int = mapHeight - exampleHeight,
+    genOptions: Cartesian2DModelOptions = Cartesian2DModelOptions(
+        allowRotations = false,
+        allowHorizontalFlips = true,
+        allowVerticalFlips = false,
+        grounded = true,
+        roofed = false,
+        leftSided = false,
+        rightSided = false,
+        periodicInput = true,
+        periodicOutput = false,
+    ),
+
+    // view stuff
     tilesAtlasIndex: Map<String, Int>,
     holesIndex: MutableMap<String, Int>,
     holesAnims: AnimationFrames,
     scope: CoroutineScope,
 ): GameLevel {
-
-    val exampleWidth = exampleMap.first().length
-    val exampleHeight = exampleMap.size
-    val mapHeight = exampleHeight // * 2
-    val mapWidth = exampleWidth // * 2
     val patternSize = 3 // n , m
 
-    val exampleMapShiftX = (mapWidth - exampleWidth) / 2
-    val exampleMapShiftY = mapHeight - exampleHeight
-    println("input = $exampleWidth x $exampleHeight, output = $mapWidth x $mapHeight")
+    println("input = $exampleWidth x $exampleHeight, output = $mapWidth x $mapHeight example origin= $exampleOriginX x $exampleOriginY")
     println(exampleMap.joinToString("\n"))
+    println("for generator")
     println(exampleMap.joinToString("\n") { it.map { Tile.values()[Tile.byChar[it]!!.exportForGenerator()].char }.joinToString("")})
     println("raw patterns count: ${(exampleWidth - patternSize + 1) * (exampleHeight - patternSize + 1)}")
 
@@ -157,8 +173,8 @@ fun generateGameLevel(
 
     return loadGameLevel(levelId, Array(mapHeight) { y ->
         (0 until mapWidth).joinToString("") { x ->
-            val exampleX = x - exampleMapShiftX
-            val exampleY = y - exampleMapShiftY
+            val exampleX = x - exampleOriginX
+            val exampleY = y - exampleOriginY
             val tileIndex =
                 if (exampleX in 0 until exampleWidth &&
                     exampleY in 0 until exampleHeight) exampleMap[exampleY][exampleX]
@@ -171,17 +187,7 @@ fun generateGameLevel(
 
             val wcf = OverlappingCartesian2DModel(initials, overlap = patternSize - 1,
                 outputWidth = mapWidth, outputHeight = mapHeight,
-                options = Cartesian2DModelOptions(
-                    allowRotations = false,
-                    allowHorizontalFlips = true,
-                    allowVerticalFlips = false,
-                    grounded = true,
-                    roofed = false,
-                    leftSided = false,
-                    rightSided = false,
-                    periodicInput = true,
-                    periodicOutput = false,
-                )
+                options = genOptions
             )
 
             // set in map
@@ -189,7 +195,7 @@ fun generateGameLevel(
                 row.forEachIndexed { x, c ->
 //            println("$x $y -> ${(mapWidth - exampleWidth) / 2 + x}, ${y + mapHeight - exampleHeight}")
                     wcf.setPixel(
-                        exampleMapShiftX + x, exampleMapShiftY + y,
+                        exampleOriginX + x, exampleOriginY + y,
                         Tile.byChar[exampleMap[y][x]]!!.exportForGenerator()
                     )
                     //(wcf.me.az.view.getWidth - exampleWidth) / 2 +
@@ -198,16 +204,17 @@ fun generateGameLevel(
             }
 //            println(formatPatterns(wcf.patterns.toList().toTypedArray(), patternSize))
 
-            val algo = wcf.build()
+            val (algo, buildTime) = measureTimedValue { wcf.build() }
+            println("algorithm build in $buildTime")
 
             algo.afterFail += {
                 println("failed")
             }
 
-            val dur = measureTime {
+            val (res, dur) = measureTimedValue {
                 algo.run(seed = 2)
             }
-            println("wcf run in $dur")
+            println("wcf run in $dur with result = $res")
             wcf.dis(algo)
 
             val out = wcf.constructNullableOutput(algo)
@@ -227,7 +234,7 @@ fun generateGameLevel(
 
             exampleMap.forEachIndexed { y, row ->
                 row.forEachIndexed { x, c ->
-                    out[y + exampleMapShiftY][exampleMapShiftX + x] =
+                    out[y + exampleOriginY][exampleOriginX + x] =
                         Tile.byChar[exampleMap[y][x]]!!.ordinal
                 }
             }
@@ -236,8 +243,8 @@ fun generateGameLevel(
                 row.forEachIndexed { x, cellIdx ->
                     if ( cellIdx == null || cellIdx == Int.MIN_VALUE ) return@forEachIndexed
                     /// skip initialized
-                    if (x - exampleMapShiftX in 0 until exampleWidth &&
-                        y - exampleMapShiftY in 0 until exampleHeight
+                    if (x - exampleOriginX in 0 until exampleWidth &&
+                        y - exampleOriginY in 0 until exampleHeight
                     ) return@forEachIndexed
                     val tile = Tile.values()[cellIdx]
 
@@ -263,7 +270,7 @@ fun loadGameLevel(
     tilesAtlasIndex: Map<String, Int>,
     holesIndex: MutableMap<String, Int>,
     holesAnims: AnimationFrames
-) = GameLevel(levelId, map, tilesAtlasIndex, holesIndex, holesAnims)
+) = GameLevel(levelId, map, tilesAtlasIndex, holesIndex, holesAnims = holesAnims)
 
 data class Anim( val pos: Vec2i, val name: String, var currentFrame: Int = 0 )
 
@@ -272,10 +279,9 @@ class GameLevel(
     private val map: List<String>,
     private val primaryTileSet: Map<String, Int>, // index
     private val holesTileSet: Map<String, Int>,
+    val maxGuards: Int = 5,
     val holesAnims: AnimationFrames
 ) {
-
-    val maxGuards = 5
     // for load
     val width = map.first().length
     val height = map.size + 1 // ground
@@ -304,6 +310,8 @@ class GameLevel(
 
     init {
         println("creating level $levelId $width x $height")
+        println("from map:")
+        println(map.joinToString("\n"))
 
         reset()
     }
@@ -452,7 +460,8 @@ class GameLevel(
     }
 
     fun updateTileMap(): TextureData2d {
-//        println("updating field($me.az.view.getWidth x $me.az.view.getHeight)")
+//        println("updating field($width x $height)")
+//        println(buf.toArray().mapIndexed { index, byte -> if (index % width == 0) "\n$byte" else byte.toString() }.joinToString(""))
         return TextureData2d(buf, width, height, TexFormat.R)
     }
 

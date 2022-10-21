@@ -12,7 +12,7 @@ import java.io.RandomAccessFile
 import javax.imageio.stream.FileImageOutputStream
 import kotlin.math.floor
 
-private val Float.int: Int get() = this.toInt()
+internal val Float.int: Int get() = this.toInt()
 
 /**
  * To buffered image

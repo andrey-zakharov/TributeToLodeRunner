@@ -10,6 +10,7 @@ import LevelsRep
 import RunnerController
 import SoundPlayer
 import TileSet
+import backgroundImageFile
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.*
@@ -25,7 +26,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.yield
 import me.az.ilode.*
 import me.az.shaders.MaskShader
-import me.az.utils.addDebugAxis
 import me.az.utils.format
 import simpleTextureProps
 import sprite
@@ -35,29 +35,29 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
-const val visibleTilesX = 28
-const val visibleTilesY = 16 + 1 + 1 // + ground + status
-
 class GameLevelScene (
     val game: Game,
     val assets: AssetManager,
     val gameSettings: GameSettings,
+    val conf: LevelSpec = LevelSpec(),
     name: String? = null,
     private val startNewGame: Boolean = false,
 
-) : AsyncScene(name), CoroutineScope {
+    ) : AsyncScene(name), CoroutineScope {
+
     var tileSet: TileSet = TileSet.SPRITES_APPLE2
-    val conf = LevelSpec()
-    private val currentLevel get() = levels.getLevel(gameSettings.currentLevel, false)
+    private val currentLevel get() = levels.getLevel(gameSettings.currentLevel, true)
     private val immortal = MutableStateValue(game.state.immortal).also {
         it.onChange { v -> game.state.immortal = v } // save to settings
     }
 
-    protected val job = Job()
+    private val job = Job()
     override val coroutineContext: CoroutineContext
         get() = job
 
-    private lateinit var bg: Texture2d
+    private val bg = Texture2d(simpleTextureProps) {
+        it.loadTextureData(backgroundImageFile, simpleTextureProps.format)
+    }
     private var off: OffscreenRenderPass2d? = null
     private var tilesAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet, "tiles"))
     private var runnerAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet, "runner"))
@@ -99,27 +99,17 @@ class GameLevelScene (
     var levelView: LevelView? = null
     var mask: Group? = null
     //cam
-    private val visibleWidth get() = visibleTilesX * conf.tileSize.x
-    private val visibleHeight get() = visibleTilesY * conf.tileSize.y
+    private val visibleWidth = conf.visibleWidth
+    private val visibleHeight = conf.visibleHeight
     private val maxShatterRadius = ceil(sqrt((visibleWidth* visibleWidth + visibleHeight * visibleHeight).toDouble()) / 2).toInt()
 
-    private val createCamera get() = OrthographicCamera("plain").apply {
-        projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
-        isClipToViewport = false
-        isKeepAspectRatio = true
-        val hw = visibleWidth / 2f
-        top = visibleHeight * 1f
-        bottom = 0f
-        left = -hw
-        right = hw
-        clipFar = 10f
-        clipNear = 0.1f
-    }
+    private val createCamera get() = App.createCamera( visibleWidth, visibleHeight )
 
     init {
         camera = createCamera.apply {
             projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
         }
+        mainRenderPass.clearColor = null
     }
 
     override suspend fun AssetManager.loadResources(ctx: KoolContext) {
@@ -134,8 +124,6 @@ class GameLevelScene (
 
         sounds.loadSounds()
         levels.load(LevelSet.CLASSIC)
-        bg = loadAndPrepareTexture("images/cover.jpg", simpleTextureProps)
-
     }
 
     fun dispose() {
@@ -149,13 +137,30 @@ class GameLevelScene (
         }
         game.runner.sounds = sounds
 
-        +sprite(bg).apply {
+        +sprite( texture = Texture2d(simpleTextureProps) {
+            it.loadTextureData(backgroundImageFile, simpleTextureProps.format)
+        } ).apply {
+
+            //textureOffset.x = 100
             grayScaled = true
-            val imageMinSide = min(bg.loadedTexture!!.width, bg.loadedTexture!!.height)
-            val camSide = max((camera as OrthographicCamera).width, (camera as OrthographicCamera).height)
-            scale(camSide / imageMinSide)
+            onResize += { w, h ->
+//                translate(0f, h.toFloat() / 2f, 0f)
+                val imageMinSide = min(w, h)
+                val camSide = max((camera as OrthographicCamera).width, (camera as OrthographicCamera).height)
+                scale(camSide / imageMinSide)
+
+            }
             // paralax TBD
         }
+//        +sprite(bg).apply {
+//            grayScaled = true
+//            onResize += { w, h ->
+//                val imageMinSide = min(w, h)
+//                val camSide = max((camera as OrthographicCamera).width, (camera as OrthographicCamera).height)
+//                scale(camSide / imageMinSide)
+//            }
+//            // paralax TBD
+//        }
 
         game.onStateChanged += {
             println("GameScene. gameState = $name")
@@ -202,7 +207,6 @@ class GameLevelScene (
         game.reset()
 
         +RunnerController(ctx.inputMgr, game.runner)
-        addDebugAxis()
     }
 
     private fun addLevelView(ctx: KoolContext) {
@@ -238,7 +242,11 @@ class GameLevelScene (
             }
         }
 
-        println(levelView)
+//        +sprite(Texture2d(simpleValueTextureProps, game.level!!.updateTileMap())).apply {
+//            translate(100f, 230f, 0f)
+//            scale(5f)
+//            grayScaled = true
+//        }
 
         //mask
         mask = group {
@@ -476,9 +484,6 @@ class GameLevelScene (
 //        progress = 1f
         speed = 100f
     }
-
-
-
 }
 
 private operator fun Vec3f.minus(position: Vec3f) = Vec3f(

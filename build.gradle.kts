@@ -1,8 +1,11 @@
 import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig.*
+import org.jetbrains.kotlin.ir.backend.js.compile
 
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.serialization")
+    distribution
+    application
 }
 
 group = "me.az"
@@ -39,6 +42,7 @@ kotlin {
     }
 
     jvm {
+        withJava()
         compilations.all {
             kotlinOptions {
                 jvmTarget = "1.8"
@@ -95,8 +99,39 @@ kotlin {
     }
 }
 
+application {
+    mainClass.set("MainKt")
+}
 
 tasks["clean"].doLast {
     delete("${rootDir}/dist/")
     delete(rootProject.buildDir)
+}
+
+distributions {
+    main {
+        distributionBaseName.set("ttld")
+        contents {
+            into("") {
+                val jvmJar by tasks.getting
+                from(jvmJar)
+            }
+            into("lib/") {
+                val main by kotlin.jvm().compilations.getting
+                from(main.runtimeDependencyFiles)
+            }
+            into("assets/") {
+                from("src/commonMain/resources/assets")
+            }
+        }
+    }
+}
+
+gradle.taskGraph.whenReady {
+    allTasks
+        .filter { it.hasProperty("duplicatesStrategy") } // Because it's some weird decorated wrapper that I can't cast.
+        .forEach {
+            println(it)
+            it.setProperty("duplicatesStrategy", "EXCLUDE")
+        }
 }

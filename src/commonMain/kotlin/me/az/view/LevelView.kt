@@ -16,6 +16,8 @@ import me.az.shaders.TileMapShaderConf
 import me.az.view.ActorView
 import kotlin.experimental.and
 
+expect fun Texture2d.export(scale: Float = 1f)
+
 class LevelView(
     game: Game, level: GameLevel, conf: LevelSpec,
     tilesAtlas: ImageAtlas,
@@ -41,11 +43,8 @@ class LevelView(
 
             generate {
                 rect {
-//                    size.set(conf.gameWidth.toFloat(), conf.gameHeight.toFloat() - conf.tileSize.y * 2)
-//                    origin.set(-size.x/2f, -size.y/2f, 0f)
                     size.set(level.width.toFloat(), level.height.toFloat())
-                    origin.set(-level.width/2f, 0f, 0f)
-
+                    origin.set(-width/2f, 0f, 0f)
                 }
             }
 
@@ -65,7 +64,6 @@ class LevelView(
                 if ( level.dirty ) {
                     tileMapShader.field = Texture2d(simpleValueTextureProps, level.updateTileMap())
                     level.dirty = false
-//                    println("level updated")
                 }
             }
         }
@@ -75,4 +73,5 @@ class LevelView(
             +ActorView(it, guardAtlas, guardAnims, conf.tileSize)
         }
     }
+
 }

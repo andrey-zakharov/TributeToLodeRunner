@@ -17,7 +17,7 @@ fun sprite(texture: Texture2d,
 }
 
 open class Sprite(
-    private val spriteSize: Vec2i?, // in pixels
+    private val spriteSize: Vec2i?, // in pixels size of sprite view
     private val texture: Texture2d,
     private val regionSize: Vec2i?, // how much get from texture by pixels
     name: String? = null,
@@ -31,6 +31,7 @@ open class Sprite(
 
     val _spriteSize = MutableVec2i(spriteSize?.x ?: 0, spriteSize?.y ?: 0)
     val _regionSize = MutableVec2i(regionSize?.x ?: 0, regionSize?.y ?: 0)
+    val onResize = mutableListOf<Sprite.(x: Int, y: Int) -> Unit>()
 
     init {
         buildMesh()
@@ -40,15 +41,18 @@ open class Sprite(
                     if ( _spriteSize == Vec2i.ZERO ) {
                         _spriteSize.x = texture.loadedTexture!!.width
                         _spriteSize.y = texture.loadedTexture!!.height
+                        onResize.forEach { it(this, _spriteSize.x, _spriteSize.y) }
                     }
                     if ( _regionSize == Vec2i.ZERO ) {
                         _regionSize.x = texture.loadedTexture!!.width
                         _regionSize.y = texture.loadedTexture!!.height
                     }
+
+                    transform.scale(_spriteSize.x.toDouble(), _spriteSize.y.toDouble(), 1.0)
                 }
             }
-            transform.resetScale()
-            transform.scale(_spriteSize.x.toDouble(), _spriteSize.y.toDouble(), 1.0)
+            //transform.pus
+
         }
     }
 

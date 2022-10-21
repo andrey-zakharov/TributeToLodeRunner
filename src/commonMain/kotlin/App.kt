@@ -8,17 +8,12 @@ import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.*
 import me.az.ilode.*
+import me.az.scenes.*
 import me.az.utils.b
 import me.az.utils.buildStateMachine
 import me.az.utils.choice
 import me.az.view.GameControls
-import me.az.scenes.GameLevelScene
-import me.az.scenes.GameUI
-import me.az.scenes.MainMenuContext
-import me.az.scenes.MainMenuScene
-import me.az.view.ImageText
 import me.az.view.SpriteSet
-import me.az.view.TextDrawer
 import kotlin.random.Random
 
 val simpleTextureProps = TextureProps(TexFormat.RGBA,
@@ -38,8 +33,14 @@ enum class GameSpeed(val msByPass: Int) {
 }
 
 class LevelSpec (
-    val tileSize: Vec2i = Vec2i(20, 22)
-) {}
+    val tileSize: Vec2i = Vec2i(20, 22),
+    val visibleSize: Vec2i = Vec2i(28, 16+2) // in tiles  + ground + status
+) {
+    val visibleWidth get() = visibleSize.x * tileSize.x
+    val visibleHeight get() = visibleSize.y * tileSize.y
+}
+
+const val backgroundImageFile = "images/cover.jpg"
 
 sealed class State <T> {
     open fun enterState(obj: T) {}
@@ -99,23 +100,27 @@ object MainMenuState : State<App>() {
 }
 
 object RunGameState : State<App>() {
+
     var gameScene: GameLevelScene? = null
     var infoScene: Scene? = null
     var debugScene: Scene? = null
-    var listener: InputManager.KeyEventListener? = null
+    private var listener: InputManager.KeyEventListener? = null
 
     override fun enterState(app: App) {
         super.enterState(app)
 
 
         val game = Game(app.gameSettings)
+        val conf = LevelSpec()
 
-        gameScene = GameLevelScene(game, app.ctx.assetMgr, app.gameSettings, "level", true).apply {
+        gameScene = GameLevelScene(game, app.ctx.assetMgr, app.gameSettings,
+            conf,
+            name = "level", startNewGame = true).apply {
             +GameControls(game, app.ctx.inputMgr)
         }
 
-        app.ctx.scenes += gameScene!!
         infoScene = GameUI(game, assets = app.ctx.assetMgr, app.gameSettings)
+        app.ctx.scenes += gameScene!!
         app.ctx.scenes += infoScene!!
         debugScene = Ui2Scene {
             +UiSurface {
@@ -134,7 +139,7 @@ object RunGameState : State<App>() {
             }
         }
 
-        app.ctx.scenes += debugScene!!
+//        app.ctx.scenes += debugScene!!
     }
 
     override fun exitState(app: App) {
@@ -199,7 +204,6 @@ class App(val ctx: KoolContext) {
 
         test3()
         test2()
-        ctx.assetMgr.assetsBaseDir = "." // = resources
 
 //        changeState(MainMenuState)
         changeState(RunGameState)
@@ -214,6 +218,22 @@ class App(val ctx: KoolContext) {
 
 
         test1()
+    }
+
+    companion object {
+        // for 3 scenes
+        fun createCamera(width: Int, height: Int) = OrthographicCamera("plain").apply {
+            projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
+            isClipToViewport = false
+            isKeepAspectRatio = true
+            val hw = width / 2f
+            top = height * 1f
+            bottom = 0f
+            left = -hw
+            right = hw
+            clipFar = 10f
+            clipNear = 0.1f
+        }
     }
 
     private fun changeState(newState: State<App>) {

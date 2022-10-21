@@ -57,9 +57,21 @@ class LevelsRep(
 
     fun getLevel(id: Int, generated: Boolean = true): GameLevel {
         return loadedLevels.getOrPut(id) {
-            if ( generated )
-                generateGameLevel(id, levels[id], tileSet.nameIndex, holeAtlas.nameIndex, holeAnims, scope)
-            else
+            if ( generated ) {
+                val fromMap = levels[id]
+
+                generateGameLevel(
+                    id,
+                    fromMap,
+                    mapWidth = fromMap.first().length,
+                    mapHeight = 12 + fromMap.size,
+
+                    tilesAtlasIndex = tileSet.nameIndex,
+                    holesIndex = holeAtlas.nameIndex,
+                    holesAnims = holeAnims,
+                    scope = scope
+                )
+            } else
                 loadGameLevel(id, levels[id], tileSet.nameIndex, holeAtlas.nameIndex, holeAnims)
         }
     }

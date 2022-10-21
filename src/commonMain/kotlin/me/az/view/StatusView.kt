@@ -1,22 +1,29 @@
 package me.az.view
 
 import ImageAtlas
+import backgroundImageFile
 import de.fabmax.kool.math.MutableVec2f
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.modules.ksl.KslUnlitShader
 import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.Group
+import de.fabmax.kool.scene.OrthographicCamera
 import de.fabmax.kool.scene.colorMesh
 import de.fabmax.kool.scene.mesh
 import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.createUint8Buffer
 import me.az.ilode.Game
+import me.az.scenes.height
+import me.az.scenes.width
 import me.az.shaders.TileMapShader
 import me.az.shaders.TileMapShaderConf
 import simpleTextureProps
 import simpleValueTextureProps
+import sprite
 import kotlin.experimental.and
+import kotlin.math.max
+import kotlin.math.min
 
 inline fun UiScope.ImageText(fontAtlas: ImageAtlas, text: String, block: ImageScope.() -> Unit): ImageScope {
     val image = uiNode.createChild(ImageNode::class, ImageNode.factory)
@@ -143,8 +150,9 @@ class StatusView(val game: Game, val builder: StringDrawer) : Group() {
                     origin.set(-width / 2, 0f, 0f)
                 }
             }
-            shader = KslUnlitShader { color { constColor(Color.BLACK) } }
+            shader = KslUnlitShader { color { constColor(Color(0f, 0f, 0f, 0.75f)) } }
         }
+
         +mesh(listOf(Attribute.POSITIONS, Attribute.TEXTURE_COORDS)) {
             generate {
                 rect {

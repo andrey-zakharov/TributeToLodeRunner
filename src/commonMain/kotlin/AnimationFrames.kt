@@ -9,7 +9,7 @@ class AnimationFrames(
     val sequence = mutableMapOf<String, List<Int>>()
 
     suspend fun loadAnimations(ctx: KoolContext) {
-        ctx.assetMgr.loadAsset("./anims/$asset.json")?.run {
+        ctx.assetMgr.loadAsset("anims/$asset.json")?.run {
             val root = Json.decodeFromString<JsonObject>(toArray().decodeToString())
             // validate json
             val frames  = root["sequence"] as JsonObject
@@ -17,6 +17,6 @@ class AnimationFrames(
                 sequence[it] = (frames[it]!! as JsonArray).map { it.jsonPrimitive.int }
             }
         }
-        println("loaded anims: ${sequence.map { "${it.key} len: ${it.value.size}" }.joinToString("\n")}")
+//        println("loaded anims: ${sequence.map { "${it.key} len: ${it.value.size}" }.joinToString("\n")}")
     }
 }
