@@ -8,12 +8,17 @@ import me.az.ilode.generateGameLevel
 import me.az.ilode.loadGameLevel
 
 enum class LevelSet(val path: String) {
-    CLASSIC("classic")
+    CLASSIC("classic"),
+    CHAMPIONSHIP("championship"),
+    FANBOOK("fanbook"),
+    PROFESSIONAL("professional"),
+    REVENGE("revenge"),
+    ;
+    val dis get() = "${ordinal + 1}.${name.lowercase()}"
 }
 
 class LevelsRep(
     private val assets: AssetManager,
-    private val tileSet: ImageAtlas,
     val scope: CoroutineScope
 ) {
 
@@ -24,13 +29,6 @@ class LevelsRep(
     }
 
     suspend fun load(levelSet: LevelSet) {
-        tileSet.frames.keys.forEach {
-            if ( !tilesByNames.containsKey(it)) {
-                //throw RuntimeException()
-                println("$it not found in $tilesByNames")
-            }
-        }
-
         val json = assets.loadAsset("maps/${levelSet.path}.json")!!.toArray().decodeToString()
         val obj = Json.decodeFromString<JsonObject>(json)
 
@@ -48,13 +46,22 @@ class LevelsRep(
         }
     }
 
-    fun getLevel(id: Int, generated: Boolean = true): GameLevel {
-        return loadedLevels.getOrPut(id) {
+    fun getLevel(id: Int, tileSet: ImageAtlas, generated: Boolean = true): GameLevel {
+
+        tileSet.frames.keys.forEach {
+            if ( !tilesByNames.containsKey(it)) {
+                //throw RuntimeException()
+                println("$it not found in $tilesByNames")
+            }
+        }
+
+        val lid = id.mod(levels.size)
+        return loadedLevels.getOrPut(lid) {
             if ( generated ) {
-                val fromMap = levels[id]
+                val fromMap = levels[lid]
 
                 generateGameLevel(
-                    id,
+                    lid,
                     fromMap,
                     mapWidth = 24 + fromMap.first().length,
                     mapHeight = 12 + fromMap.size,
@@ -65,7 +72,7 @@ class LevelsRep(
                     scope = scope
                 )
             } else
-                loadGameLevel(id, levels[id], tileSet.nameIndex)
+                loadGameLevel(lid, levels[lid], tileSet.nameIndex)
         }
     }
 }

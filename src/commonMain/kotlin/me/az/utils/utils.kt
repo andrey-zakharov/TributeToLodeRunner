@@ -70,3 +70,16 @@ internal fun Group.addDebugAxis() {
     +lineMesh("y") { addLine(Vec3f.ZERO, Vec3f(0f, 1f, 0f), Color.GREEN) }
     +lineMesh("z") { addLine(Vec3f.ZERO, Vec3f(0f, 0f, 1f), Color.BLUE) }
 }
+
+internal val Int.nearestTwo: Int get() {
+    var x = this
+    x -= 1
+    x = x or (x shr 1)
+    x = x or (x shr 2)
+    x = x or (x shr 4)
+    x = x or (x shr 8)
+    x = x or (x shr 16)
+    return x + 1
+}
+
+internal operator fun Vec2i.plus(o: Vec2i) = Vec2i(this.x + o.x, this.y + o.y)

@@ -1,161 +1,375 @@
 package me.az.scenes
 
-import Action
 import AppContext
-import MainMenuState.exitGame
+import GameSpeed
+import LevelSet
+import LevelsRep
+import MainMenuState.continueGame
 import MainMenuState.startnewGame
 import TileSet
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.InputManager
 import de.fabmax.kool.KoolContext
+import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.modules.ui2.*
-import de.fabmax.kool.pipeline.Texture2d
-import de.fabmax.kool.scene.OrthographicCamera
-import de.fabmax.kool.util.Color
-import de.fabmax.kool.util.FontProps
-import me.az.ilode.InputSpec
-import me.az.ilode.toInputSpec
-import me.az.view.TextDrawer
-import registerActions
-import simpleTextureProps
-import sprite
+import kotlinx.coroutines.launch
+import me.az.ilode.Game
+import me.az.ilode.GameLevel
+import me.az.ilode.GameState
+import me.az.utils.plus
+import me.az.view.TextView
+import me.az.view.textView
 import unregisterActions
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 
 
 data class MainMenuContext(
-    val tileSet: MutableStateValue<TileSet> = MutableStateValue( TileSet.SPRITES_ATARI8BIT ),
+    val levelSet: MutableStateValue<LevelSet>,
     val level: MutableStateValue<Int> = mutableStateOf(0)
 )
 
-class MainMenuScene(context: AppContext) : AsyncScene() {
-    val context = MainMenuContext()
-    val fontProps = FontProps(
-        family = "text",
-        sizePts = 22f,
-        chars = TextDrawer.fontMap.keys.joinToString("")
+class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
+    GameScene(game, assets, context, name = "mainmenu") {
+
+    val menuContext = MainMenuContext(
+        mutableStateOf(context.levelSet.value), mutableStateOf(context.currentLevel.value)
     )
-
-    val transparent = Color(0.25f,0.25f,0.25f,0f)
-    private fun ButtonModifier.themeButtons(): ButtonModifier {
-        width(Grow.Std)
-        margin(Dp(20f))
-        textAlign(AlignmentX.Start, AlignmentY.Center)
-//        background(RectBackground(Color.WHITE))
-//        background(RectBackground(pc))
-        isClickFeedback(false)
-        font(fontProps)
-        colors(
-            buttonColor = transparent,
-            buttonHoverColor = transparent
-        )
-
-        return this
-    }
-
-    val totalItems = 3
-    val selected by lazy { mutableStateOf(-1).also {
-         it.onChange {
-             marks.forEachIndexed { index, _ -> marks[index].set(if ( it == index ) ">" else " ") }
-         }
-    } }
-
-    val marks by lazy { Array(totalItems) {
-        mutableStateOf(" ")
-    } }
-
-    enum class MenuCommands(
-        override val keyCode: InputSpec, // or no
-        override val onPress: MainMenuScene.(InputManager.KeyEvent) -> Unit = {},
-        override val onRelease: MainMenuScene.(InputManager.KeyEvent) -> Unit = {}
-    ) : Action<MainMenuScene> {
-        SELUP(InputManager.KEY_CURSOR_UP.toInputSpec(), onPress = {
-            selectUp()
-        }),
-        SELDN(InputManager.KEY_CURSOR_DOWN.toInputSpec(), onPress = {
-            selectDown()
-        }),
-        SELECT(InputManager.KEY_ENTER.toInputSpec(), onPress = {
-            println(children[selected.value])
-        })
-    }
-
-    override suspend fun loadResources(assetManager: AssetManager, ctx: KoolContext) {
-
-    }
 
     private val subs = mutableListOf<InputManager.KeyEventListener>()
 
-    override fun setup(ctx: KoolContext) {
-        selected.set(0)
+    private val currentSpriteName = mutableStateOf(appContext.spriteMode.value.dis)
+    private val currentSpeedName = mutableStateOf(appContext.speed.value.dis)
+    private val currentLevelSet = mutableStateOf(menuContext.levelSet.value.dis)
+    private var maxLevelId = Int.MAX_VALUE // reload
 
-        subs.addAll(
-            registerActions(ctx.inputMgr, this, MenuCommands.values().asIterable())
-        )
+    private fun Int.digit(n: Int): Int = (mod( 10f.pow(n).toInt() ) / 10f.pow(n - 1)).toInt()
+    private fun Int.replaceDigit(digitPos: Int, value: Int): Int {
+        val m = 10f.pow(digitPos - 1).toInt()
+        return this - digit(digitPos) * m + value * m
+    }
 
-        setupUiScene(clearScreen = true)
+    private val currentLevelDigit1: MutableStateValue<String>
+    private val currentLevelDigit2: MutableStateValue<String>
+    private val currentLevelDigit3: MutableStateValue<String>
 
-        +sprite(Texture2d(simpleTextureProps) {
-            it.loadTextureData("images/cover.jpg", simpleTextureProps.format)
-//        it.loadAndPrepareTexture("images/cover.jpg")
-        }).apply {
-            grayScaled = true
-            onResize += { w, h ->
-//                translate(0f, h.toFloat() / 2f, 0f)
-                val imageMinSide = min(w, h)
-                val camSide = max((camera as OrthographicCamera).width, (camera as OrthographicCamera).height)
-                scale(camSide / imageMinSide)
+    private val commands = mutableListOf<MenuCommand>()
+    private val staticLabels = mutableListOf<StaticLabel>()
 
+    private val map by lazy {
+        val mx = 16
+        // this is not actually model. with basic view support as TextureData2d exporter TBD
+        val end =    "  # $ # "
+        val sep =    "  ##H## "
+        val choice = "  $-H-$ "
+        val start  = "H @ H& $"
+        listOf(
+            end,
+            choice,
+            "  # H#",
+            "  @ H-  HHH@",
+            "  # H#@@",
+            choice,
+            sep,
+            choice,
+            "0 # H # ",
+            start
+
+        ).map { it.padEnd(mx, ' ') }
+    }
+
+    private val reloadLevels get() = scope.launch {
+        val rep = LevelsRep(assets, scope)
+        rep.load(menuContext.levelSet.value)
+        maxLevelId = rep.levels.size - 1
+    }
+
+    init {
+        appContext.spriteMode.onChange {
+            currentSpriteName.set(it.dis)
+        }
+        appContext.speed.onChange {
+            currentSpeedName.set(it.dis)
+        }
+        menuContext.levelSet.onChange {
+            currentLevelSet.set(it.dis)
+            reloadLevels
+        }
+
+        reloadLevels
+
+        with(menuContext.level.value + 1) {
+            currentLevelDigit1 = mutableStateOf(digit(1).toString())
+            currentLevelDigit2 = mutableStateOf(digit(2).toString())
+            currentLevelDigit3 = mutableStateOf(digit(3).toString())
+        }
+        menuContext.level.onChange {
+            with(it + 1) {
+                currentLevelDigit1.set(digit(1).toString())
+                currentLevelDigit2.set(digit(2).toString())
+                currentLevelDigit3.set(digit(3).toString())
             }
         }
 
-        selected.onChange {
-            println(it)
+        val levelHeight = map.size
+        val levelWidth = map.first().length
+        val leftCol = 2
+        val rightCol = 6
+        val dy = 2
+        var y = 1
+
+        // addition labels
+        val dx = - levelWidth / 2f
+        val labelsX = rightCol + 2 + dx
+
+
+        // level set
+        staticLabels += StaticLabel( "level set", labelsX, levelHeight - y.toFloat() + 1)
+        commands += MenuCommand(pos = Vec2i(leftCol, y)) {
+            with(menuContext.levelSet) {
+                maxLevelId = Int.MAX_VALUE
+                set( LevelSet.values()[ (value.ordinal - 1).mod(LevelSet.values().size) ] )
+                game.teleportRunnerRight()
+            }
         }
 
-        +UiSurface(
-            Colors.darkColors(),
-            Sizes.large()
+        commands += LabeledMenuCommand(pos = Vec2i(rightCol, y), label = currentLevelSet) {
+            with(menuContext.levelSet) {
+                maxLevelId = 0
+                set( LevelSet.values()[ (value.ordinal + 1) % LevelSet.values().size ] )
+                game.teleportRunnerLeft()
+            }
+        }
+
+        y += dy
+
+        // level
+        val origin = Vec2i(rightCol + 2, y)
+        staticLabels += StaticLabel( "level", labelsX, levelHeight - y.toFloat() + 1)
+        commands += LabeledMenuCommand(pos = origin + Vec2i(0, -1), label = currentLevelDigit3, labelDelta = Vec2i(0, -1)) {
+            game.teleportRunnerDown()
+            with(menuContext.level) {
+                set( min(maxLevelId, value.replaceDigit(3, value.digit(3) + 1) ) )
+            }
+        }
+        commands += MenuCommand(pos = origin + Vec2i(0, 1)) {
+            game.teleportRunnerUp()
+            with(menuContext.level) {
+                set( max(0, value.replaceDigit(3, value.digit(3) - 1) ) )
+            }
+        }
+
+        // tens
+        commands += LabeledMenuCommand(pos = origin + Vec2i(1, -1), label = currentLevelDigit2, labelDelta = Vec2i(0, -1)) {
+            game.teleportRunnerDown()
+            with(menuContext.level) {
+                set( min(maxLevelId, value.replaceDigit(2, value.digit(2) + 1) ) )
+            }
+        }
+
+        commands += MenuCommand(pos = origin + Vec2i(1, 1)) {
+            game.teleportRunnerUp()
+            with(menuContext.level) {
+                set( max(0, value.replaceDigit(2, value.digit(2) - 1) ) )
+            }
+        }
+
+        commands += LabeledMenuCommand(pos = origin + Vec2i(2, -1), label = currentLevelDigit1, labelDelta = Vec2i(0, -1)) {
+            game.teleportRunnerDown()
+            with(menuContext.level) {
+                set( min(maxLevelId, value.replaceDigit(1, value.digit(1) + 1) ) )
+            }
+        }
+
+        commands += MenuCommand(pos = origin + Vec2i(2, 1)) {
+            game.teleportRunnerUp()
+            with(menuContext.level) {
+                set( max(0, value.replaceDigit(1, value.digit(1) - 1) ) )
+            }
+        }
+
+
+        y += dy
+        // game speed
+        staticLabels += StaticLabel("speed", labelsX, levelHeight - y.toFloat() + 1)
+        commands += MenuCommand(pos = Vec2i(leftCol, y)) {
+            with(appContext.speed) {
+                set( GameSpeed.values()[ (value.ordinal - 1).mod(GameSpeed.values().size) ] )
+                game.teleportRunnerRight()
+            }
+        }
+
+        commands += LabeledMenuCommand(pos = Vec2i(rightCol, y), label = currentSpeedName) {
+            with(appContext.speed) {
+                set( GameSpeed.values()[ (value.ordinal + 1) % GameSpeed.values().size ] )
+                game.teleportRunnerLeft()
+            }
+        }
+
+        y += dy
+
+        // tileset
+        staticLabels += StaticLabel("sprites", labelsX, levelHeight - y.toFloat() + 1)
+        commands += MenuCommand(pos = Vec2i(leftCol, y)) {
+            with(appContext.spriteMode) {
+                set( TileSet.values()[ (value.ordinal - 1).mod(TileSet.values().size) ] )
+                game.teleportRunnerRight()
+            }
+        }
+
+        commands += LabeledMenuCommand(pos = Vec2i(rightCol, y), label = currentSpriteName) {
+            with(appContext.spriteMode) {
+                set( TileSet.values()[ (value.ordinal + 1) % TileSet.values().size ] )
+                game.teleportRunnerLeft()
+            }
+        }
+
+        commands += LabeledMenuCommand(
+            pos = Vec2i(7, levelHeight - 1), label = mutableStateOf("continue game")
         ) {
-            modifier
-                .width(WrapContent)
-                .height(WrapContent)
-                .background(background = null)
-                .layout(ColumnLayout)
-                .alignX(AlignmentX.Center)
-                .alignY(AlignmentY.Center)
-            var scale = 2f
+            continueGame = true
+//            game.teleportRunnerLeft()
+        }
+
+        commands += LabeledMenuCommand(
+            pos = Vec2i(4, 0), label = mutableStateOf("new game"),
+            labelDelta = Vec2i(0, 2)
+        ) {
+            startnewGame = true
+        }
 
 
-            Button("${marks[0].use()}new game") {
-                modifier.onClick {
-                    startnewGame = true
-                }.themeButtons()
-            }
+    }
 
-            Button("${marks[1].use()}level: ${context.level.use().toString().padStart(3, '0')}") {
-                modifier.onClick {
-                    context.level.set(context.level.value + 1)
-                }.themeButtons()
-            }
+    data class StaticLabel(
+        val text: String, val x: Float, val y: Float
+    )
 
-            Button( "${marks[2].use()}exit" ) {
-                modifier.onClick {
-                    exitGame = true
-                }.themeButtons()
+    open class MenuCommand(
+        val pos: Vec2i, // on level in tiles - actuator pos
+        val onEnter: MainMenuScene.() -> Unit = {}
+    )
+
+    class LabeledMenuCommand(
+        pos: Vec2i, // on level in tiles - actuator pos
+        val label: MutableStateValue<String>,
+        val labelDelta: Vec2i = Vec2i(2, 0),
+        onEnter: MainMenuScene.() -> Unit = {}
+    ) : MenuCommand(pos, onEnter)
+//    {
+//        LEVEL,
+//    }
+
+    private val runnerPosString = mutableStateOf("${game.runner.x} x ${game.runner.y}")
+
+    override fun setup(ctx: KoolContext) {
+
+        super.setup(ctx)
+        game.level = GameLevel(0, map, primaryTileSet = tilesAtlas.nameIndex ).also {
+            it.holesAnims = holeAnims
+
+            // additions
+        }
+
+        game.onPlayGame += { g: Game, _ ->
+            runnerPosString.set("${g.runner.x} x ${g.runner.y}")
+
+            commands.firstOrNull {
+                it.pos.x == g.runner.block.x && it.pos.y == g.runner.block.y
+            }?.run {
+                sounds.playSound("getGold")
+                onEnter()
             }
         }
+
+
+        game.onStateChanged += {
+            println(name)
+            when(name) {
+                GameState.GAME_NEW_LEVEL -> {
+                    addLevelView(ctx, game.level!!)
+
+                    +TextView(runnerPosString, fontAtlas, currentSpriteSet, 10) {
+                        translate(10f, 10f, 0f)
+                        scale(currentSpriteSet.value.tileWidth / 2f, currentSpriteSet.value.tileHeight / 2f, 1f)
+                    }
+
+                    levelView?.run {
+                        staticLabels.forEach { addNode(
+                            textView(it.text, fontAtlas, currentSpriteSet) {
+                                translate(it.x, it.y, 0f)
+                                scale(0.5f, 0.5f, 1f)
+                            }
+                        ) }
+                    }
+
+                    commands.filterIsInstance<LabeledMenuCommand>().forEach {
+                        //arranging to level coords
+                        levelView?.addNode(
+                            TextView(it.label, fontAtlas, currentSpriteSet, 25) {
+                                translate( it.pos.x + it.labelDelta.x.toFloat() - game.level!!.width / 2f,
+                                    game.level!!.height - it.pos.y - 1 + it.labelDelta.y.toFloat(), 0f )
+                            }
+                        )
+                    }
+
+                }
+
+                GameState.GAME_START -> startIntro(ctx)
+                GameState.GAME_FINISH -> game.runner.stop()
+                else -> Unit
+//                GameState.GAME_RUNNING -> TODO()
+//                GameState.GAME_FINISH -> TODO()
+//                GameState.GAME_FINISH_SCORE_COUNT -> TODO()
+//                GameState.GAME_WAITING -> TODO()
+//                GameState.GAME_PAUSE -> TODO()
+//                GameState.GAME_RUNNER_DEAD -> TODO()
+//                GameState.GAME_OVER_ANIMATION -> TODO()
+//                GameState.GAME_OVER -> TODO()
+//                GameState.GAME_NEXT_LEVEL -> TODO()
+//                GameState.GAME_PREV_LEVEL -> TODO()
+//                GameState.GAME_LOADING -> TODO()
+//                GameState.GAME_WIN -> TODO()
+            }
+        }
+
+//        subs.addAll(
+//            registerActions(ctx.inputMgr, this, MenuCommands.values().asIterable())
+//        )
+
+        game.startGame()
     }
 
     override fun dispose(ctx: KoolContext) {
+        //game.stop()
+        game.runner.stop()
         super.dispose(ctx)
         unregisterActions(ctx.inputMgr, subs)
         subs.clear()
     }
 
-    //@KeySpec(ARROW_UP)
-    fun select(select: Int) { selected.set(select.mod(totalItems)) }
-    fun selectUp() = select (selected.value - 1)
-    fun selectDown() = select( selected.value + 1)
+
+    private fun Game.afterTeleport() {
+        runner.offset.x = 0
+        runner.offset.y = 0
+        runner.stop()
+    }
+    private fun Game.teleportRunnerLeft() {
+        runner.block.x --
+        afterTeleport()
+    }
+    private fun Game.teleportRunnerRight() {
+        runner.block.x ++
+        afterTeleport()
+    }
+    private fun Game.teleportRunnerDown() {
+        runner.block.y ++
+        afterTeleport()
+    }
+    private fun Game.teleportRunnerUp() {
+        runner.block.y --
+        afterTeleport()
+    }
+
 }

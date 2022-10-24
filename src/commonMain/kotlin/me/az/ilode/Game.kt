@@ -3,6 +3,7 @@ package me.az.ilode
 import AppContext
 import GameSpeed
 import LevelSet
+import SoundPlayer
 import TileSet
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.boolean
@@ -46,6 +47,14 @@ const val SCORE_GOLD     = 250
 const val SCORE_FALL     = 75
 const val SCORE_DIES     = 75
 
+enum class Sound(val fileNameO: String? = null, val fileNameCall: (() -> String)? = null) {
+    BORN, DEAD, DIG, DOWN, FALL, GOLD("getGold"),
+    FINISH,
+    PASS,
+    TRAP
+    ;
+    val fileName get() = fileNameO ?: fileNameCall?.invoke() ?: name.lowercase()
+}
 //system
 class Game(val state: AppContext) : CoroutineScope {
     sealed class GameEvent {
@@ -90,6 +99,13 @@ class Game(val state: AppContext) : CoroutineScope {
                 status = GameLevel.Status.LEVEL_PLAYING
             }
         }
+
+    lateinit var soundPlayer: SoundPlayer
+    fun playSound(sound: Sound, x: Int, y: Int, force: Boolean = false) =
+        soundPlayer.playSound(sound.fileName, false, force)
+
+    fun stopSound(sound: Sound) =
+        soundPlayer.stopSound(sound.fileName)
 
     fun startGame() { fsm.reset(true) }
     //@ActionSpec(defaultSpec = KeySpec('a'+ctrl))
@@ -137,13 +153,13 @@ class Game(val state: AppContext) : CoroutineScope {
             }
             onExit {
                 skipAnims = false
-                runner.sounds.stopSound("fall") // ?
+                stopSound(Sound.FALL)
             }
         }
 
         state(GameState.GAME_RUNNER_DEAD) {
             onEnter {
-                runner.sounds.playSound("dead")
+                playSound(Sound.DEAD, runner.x, runner.y)
                 runner.health--
 
                 animEnds = false
@@ -173,7 +189,7 @@ class Game(val state: AppContext) : CoroutineScope {
 
             onUpdate {
                 runner.addScore(SCORE_COMPLETE_INC)
-                runner.sounds.playSound("pass")
+                playSound(Sound.PASS, runner.x, runner.y)
                 null
             }
         }

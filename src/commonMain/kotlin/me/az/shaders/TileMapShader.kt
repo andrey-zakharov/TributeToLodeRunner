@@ -20,6 +20,7 @@ class TileMapShader(conf: TileMapShaderConf) : KslShader(Program(conf), Pipeline
     var tileSize by uniform2i("tileSize")
     val tileFrames by uniform2fv("frames", conf.totalTiles)
     var field by texture2d("tileMap") // field
+    var fieldSize by uniform2f("size") // as we have map rounded to power of 2
     var time by uniform1f("time")
 
     class Program(conf: TileMapShaderConf) : KslProgram("tilemap") {
@@ -42,10 +43,12 @@ class TileMapShader(conf: TileMapShaderConf) : KslShader(Program(conf), Pipeline
 
                 val tileSize = uniformInt2("tileSize")
                 val tileFrames = uniformFloat2Array("frames", conf.totalTiles)
+                val fieldSize = uniformFloat2("size")
 
                 main {
+
                     // in tiles
-                    val fieldSize = float2Var(textureSize2d(field).toFloat2())
+//                    val fieldSize = float2Var(textureSize2d(field).toFloat2())
                     val inField = fieldSize * uv.output
 
                     val tilePos = floor(inField)

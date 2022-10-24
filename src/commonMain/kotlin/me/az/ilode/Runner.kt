@@ -28,11 +28,6 @@ class Runner(game: Game) : Actor(game), Controllable {
         }
     }
 
-    fun startNewGame() {
-        health = START_HEALTH
-        score = 0
-    }
-
     override val fsm by lazy {
         super.fsm.apply {
             // it would need to separate Controllable for Runner's and Guard's
@@ -43,7 +38,7 @@ class Runner(game: Game) : Actor(game), Controllable {
         }
     }
 
-    override val onFallStop = { sounds.playSound("down") }
+    override val onFallStop = { game.playSound(Sound.DOWN, x, y) }
 
     fun dead() {
         if (!game.state.immortal.value) alive = false // for game fsm
@@ -58,7 +53,7 @@ class Runner(game: Game) : Actor(game), Controllable {
                 with(actor) {
                     offset.x = 0
                     offset.y = 0
-                    sounds.playSound("dig")
+                    game.playSound(Sound.DIG, x, y)
 
                     val (digTileX, bitmap) = if (digLeft) {
                         Pair(x - 1, "digHoleLeft")
@@ -103,13 +98,13 @@ class Runner(game: Game) : Actor(game), Controllable {
     }
 
     override fun takeGold(): Boolean {
-        sounds.playSound("getGold")
+        game.playSound(Sound.GOLD, x, y)
         level.gold --
         addScore(SCORE_GOLD)
 
         if ( level.isDone ) {
 //                    playSound("goldFinish${(level.levelId - 1) % 6 + 1}")
-            sounds.playSound("goldFinish")
+//            sounds.playSound("goldFinish")
             level.showHiddenLadders()
         }
         return true

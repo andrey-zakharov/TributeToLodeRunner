@@ -1,7 +1,7 @@
-import de.fabmax.kool.math.MutableVec2i
 import de.fabmax.kool.math.Vec2i
 import me.az.ilode.Tile
 import me.az.utils.choice
+import me.az.utils.plus
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.min
@@ -252,9 +252,6 @@ class PatternRestrictions<T>(val n: Int, val m: Int = n): BinaryConstrains<T, In
         return if (sockets[a as Int]?.get(dir)?.contains(b as Int) == true) 1 else 0
     }
 }
-
-operator fun Vec2i.plus(o: Vec2i) = Vec2i(this.x + o.x, this.y + o.y)
-
 
 open class FiniteField2d(val width: Int, val height: Int) {
     val Vec2i.idx get() = x + y * width

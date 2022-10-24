@@ -162,7 +162,7 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
                     null
                 }
                 onExit {
-                    sounds.playSound("born");
+                    game.playSound(Sound.BORN, x, y)
                 }
             }
 
@@ -195,7 +195,7 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
 
             BehaviorMoveDown { // on center
                 offset.y = 0
-                sounds.playSound("trap")
+                game.playSound(Sound.TRAP, x, y)
                 when(action) {
                     ActorSequence.FallRight -> ActorSequence.ShakeRight
                     else -> ActorSequence.ShakeLeft

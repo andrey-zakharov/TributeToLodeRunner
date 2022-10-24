@@ -18,7 +18,7 @@ fun sprite(texture: Texture2d,
 
 open class Sprite(
     private val spriteSize: Vec2i?, // in pixels size of sprite view
-    private val texture: Texture2d,
+    var texture: Texture2d?,
     private val regionSize: Vec2i?, // how much get from texture by pixels
     name: String? = null,
     private val mirrorTexCoordsY: Boolean = false
@@ -37,15 +37,15 @@ open class Sprite(
         buildMesh()
         onUpdate += {
             if ( _spriteSize == Vec2i.ZERO || _regionSize == Vec2i.ZERO ) {
-                if ( texture.loadingState == Texture.LoadingState.LOADED ) {
+                if ( texture?.loadingState == Texture.LoadingState.LOADED ) {
                     if ( _spriteSize == Vec2i.ZERO ) {
-                        _spriteSize.x = texture.loadedTexture!!.width
-                        _spriteSize.y = texture.loadedTexture!!.height
+                        _spriteSize.x = texture!!.loadedTexture!!.width
+                        _spriteSize.y = texture!!.loadedTexture!!.height
                         onResize.forEach { it(this, _spriteSize.x, _spriteSize.y) }
                     }
                     if ( _regionSize == Vec2i.ZERO ) {
-                        _regionSize.x = texture.loadedTexture!!.width
-                        _regionSize.y = texture.loadedTexture!!.height
+                        _regionSize.x = texture!!.loadedTexture!!.width
+                        _regionSize.y = texture!!.loadedTexture!!.height
                     }
 
                     transform.scale(_spriteSize.x.toDouble(), _spriteSize.y.toDouble(), 1.0)
@@ -70,12 +70,11 @@ open class Sprite(
                         mirrorTexCoordsY()
                     }
                 }
-                shader = spriteShader.also {
-                    it.texture = texture
-                }
+                shader = spriteShader
             }
 
             onUpdate += {
+                spriteShader.texture = texture
                 spriteShader.textureOffset = this@Sprite.textureOffset
                 spriteShader.tileSize = _regionSize
                 spriteShader.grayScaled = if ( grayScaled ) 1 else 0

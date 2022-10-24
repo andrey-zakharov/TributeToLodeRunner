@@ -32,53 +32,12 @@ class GameLevelScene (
     assets: AssetManager = ctx.assetMgr,
     appContext: AppContext,
     name: String? = null,
-    private val startNewGame: Boolean = false,
-
     ) : GameScene(game, assets, appContext, ViewSpec(), name), CoroutineScope {
 
-    private val currentLevel get() = levels.getLevel(appContext.currentLevel.value, true)
-
-    private val job = Job()
-    override val coroutineContext: CoroutineContext
-        get() = job
-
-    private var off: OffscreenRenderPass2d? = null
-
-    private val levels = LevelsRep(assets, tilesAtlas, this)
-
-    private val shatterRadiusAnim = LinearAnimator(InterpolatedFloat(0f, 1f)).apply {
-        duration = 1f
-    }
-    val currentShutter get() = shatterRadiusAnim.value.value
-    val debug = MutableStateValue("")
-
-    var levelView: LevelView? = null
-    var cameraController: CameraController? = null
-    var mask: Group? = null
-    //cam
-    private val visibleWidth = conf.visibleWidth
-    private val visibleHeight = conf.visibleHeight
-    private val maxShatterRadius = ceil(sqrt((visibleWidth* visibleWidth + visibleHeight * visibleHeight).toDouble()) / 2).toInt()
-
-    override suspend fun loadResources(assets: AssetManager, ctx: KoolContext) {
-        super.loadResources(assets, ctx)
-        levels.load(LevelSet.CLASSIC)
-    }
-
-    fun dispose() {
-        job.cancel()
-    }
-
-    override fun setup(ctx: KoolContext) {
-
-
-        if ( startNewGame ) {
-            game.runner.startNewGame()
-        }
-
+    init {
         game.onStateChanged += {
-            println("GameScene. gameState = $name")
-            when(name) {
+            println("GameScene. gameState = ${this.name}")
+            when(this.name) {
                 GameState.GAME_START -> {
                     // timer to demo, or run
                     startIntro(ctx)
@@ -116,132 +75,30 @@ class GameLevelScene (
                     }
                 }
                 GameState.GAME_NEW_LEVEL -> {
-                    game.level = currentLevel.also {
-                        it.holesAnims = holeAnims
-                    }
-
-                    addLevelView(ctx)
-                    // startPlay()
-                    for ( g in game.guards ) {
-                        g.sounds = sounds
+                    game.level = currentLevel
+                    game.level?.run {
+                        holesAnims = holeAnims
+                        addLevelView(ctx, this)
                     }
                 }
                 else -> Unit
             }
         }
 
-        super.setup(ctx)
     }
+    private val currentLevel get() = levels.getLevel(appContext.currentLevel.value, tilesAtlas, false)
 
-    private fun addLevelView(ctx: KoolContext) {
-        removeLevelView(ctx)
+    private val job = Job()
+    override val coroutineContext: CoroutineContext
+        get() = job
 
-        // views
-        levelView = LevelView(
-            game,
-            currentLevel,
-            conf,
-            tilesAtlas,
-            holeAtlas,
-            runnerAtlas,
-            runnerAnims,
-            guardAtlas,
-            guardAnims
-        )
+    private val levels = LevelsRep(assets, this)
 
-        levelView?.run {
-            off = OffscreenRenderPass2d(this, renderPassConfig {
-                this.name = "bg"
+    val debug = MutableStateValue("")
 
-                setSize(visibleWidth, visibleHeight)
-                setDepthTexture(false)
-                addColorTexture {
-                    colorFormat = TexFormat.RGBA
-                    minFilter = FilterMethod.NEAREST
-                    magFilter = FilterMethod.NEAREST
-                }
-            })
-        }
-
-        off?.run {
-            camera = App.createCamera( visibleWidth, visibleHeight ).apply {
-                projCorrectionMode = Camera.ProjCorrectionMode.OFFSCREEN
-            }
-            clearColor = Color(0.00f, 0.00f, 0.00f, 0.00f)
-            this@GameLevelScene.addOffscreenPass(this)
-
-            cameraController = CameraController(this@run.camera as OrthographicCamera, ctx = ctx)
-        }
-
-        cameraController?.run {
-            this@GameLevelScene += this
-            levelView?.run { startTrack(game, this@run, runnerView) }
-        }
-
-        // minimap TBD
-//        +sprite(Texture2d(simpleValueTextureProps, game.level!!.updateTileMap())).apply {
-//            translate(100f, 230f, 0f)
-//            scale(5f)
-//            grayScaled = true
-//        }
-
-        //mask
-        mask = group {
-            +textureMesh {
-                generate {
-                    rect {
-                        size.set(visibleWidth.toFloat(), visibleHeight.toFloat())
-                        origin.set(-width / 2f, 0f, 0f)
-                        mirrorTexCoordsY()
-                    }
-                }
-                shader = MaskShader { color { textureColor(off!!.colorTexture) } }
-                onUpdate += {
-                    (shader as MaskShader).visibleRadius = shatterRadiusAnim.tick(it.ctx)
-                    // hack to sync anims
-                    if (shatterRadiusAnim.progress >= 1f) game.animEnds = true
-                    else if (game.runner.anyKeyPressed) {
-                        stopIntro(it.ctx)
-                        game.skipAnims = true
-                    }
-                }
-            }
-        }
-        +mask!!
-
-        onUpdate += ticker // start play
-    }
-
-    private val ticker = { ev: RenderPass.UpdateEvent ->
-        if ((ev.time - lastUpdate) * 1000 >= appContext.speed.value.msByPass) {
-            game.tick(ev)
-            lastUpdate = ev.time
-        }
-    }
-
-    private fun removeLevelView(ctx: KoolContext) {
-        cameraController?.run {
-            stopTrack(game)
-            this@GameLevelScene -= this
-        }
-
-
-        onUpdate -= ticker // stop ticker
-
-        mask?.run {
-            this@GameLevelScene.removeNode(this)
-            dispose()
-        }
-        mask = null
-
-        off?.run {
-            removeOffscreenPass(this)
-            dispose(ctx)
-        }
-        off = null
-
-        levelView?.dispose(ctx)
-        levelView = null
+    override suspend fun loadResources(assets: AssetManager, ctx: KoolContext) {
+        super.loadResources(assets, ctx)
+        levels.load(appContext.levelSet.value)
     }
 
     fun setupUi(scope: UiScope) = with(scope) {
@@ -310,14 +167,6 @@ class GameLevelScene (
         }
     }
 
-    private fun startOutro(ctx: KoolContext) =
-        shatterRadiusAnim.apply {
-            speed = 1f
-            progress = 0f
-            value.from = maxShatterRadius.toFloat()
-            value.to = 0f
-        }
-
     private suspend fun Animator<Float, InterpolatedFloat>.playAnim(from: Float, to: Float) {
         speed = 1f
         progress = 0f
@@ -326,17 +175,9 @@ class GameLevelScene (
         while (progress < 1) yield()
     }
 
-    private fun startIntro(ctx: KoolContext) =
-        shatterRadiusAnim.apply {
-            speed = 1f
-            progress = 0f
-            value.from = 0f
-            value.to = maxShatterRadius.toFloat()
-        }
-
-    private fun stopIntro(ctx: KoolContext) = shatterRadiusAnim.apply {
-//        progress = 1f
-        speed = 100f
+    override fun dispose(ctx: KoolContext) {
+        job.cancel()
+        super.dispose(ctx)
     }
 }
 

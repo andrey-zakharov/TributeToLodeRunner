@@ -1,21 +1,28 @@
 package me.az.scenes
 
+import App
 import AppContext
 import ImageAtlas
 import ImageAtlasSpec
 import ViewSpec
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
+import de.fabmax.kool.modules.ui2.mutableStateOf
 import me.az.ilode.Game
 import me.az.view.StatusView
 import me.az.view.StringDrawer
-import me.az.view.TextDrawer
+import me.az.view.TextView
 
-class GameUI(val game: Game, val assets: AssetManager, val gameSettings: AppContext, val conf: ViewSpec = ViewSpec()) : AsyncScene() {
+class GameUI(val game: Game,
+             val assets: AssetManager,
+             val gameSettings: AppContext,
+             val conf: ViewSpec = ViewSpec()) : AsyncScene() {
     private val tileSet = gameSettings.spriteMode
-    private var fontAtlas: ImageAtlas = ImageAtlas(ImageAtlasSpec(tileSet.value, "text")) // sub to update
+    private var fontAtlas: ImageAtlas = ImageAtlas("text") // sub to update
+    private val spec = mutableStateOf(ImageAtlasSpec(tileset = gameSettings.spriteMode.value))
+
     override suspend fun loadResources(assets: AssetManager, ctx: KoolContext) {
-        fontAtlas.load(assets)
+        fontAtlas.load(ImageAtlasSpec(tileSet.value), assets)
     }
 
     init {
@@ -24,6 +31,6 @@ class GameUI(val game: Game, val assets: AssetManager, val gameSettings: AppCont
         mainRenderPass.clearColor = null
     }
     override fun setup(ctx: KoolContext) {
-        +StatusView(game, StringDrawer(fontAtlas, TextDrawer.fontMap, TextDrawer.fontMap[' ']!!))
+        +StatusView(game, StringDrawer(fontAtlas, spec, TextView.fontMap, TextView.fontMap[' ']!!))
     }
 }

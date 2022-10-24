@@ -1,5 +1,7 @@
 import de.fabmax.kool.math.MutableVec2f
+import de.fabmax.kool.math.Vec2f
 import de.fabmax.kool.math.Vec2i
+import de.fabmax.kool.modules.ui2.MutableStateValue
 import de.fabmax.kool.pipeline.Attribute
 import de.fabmax.kool.pipeline.Texture2d
 import de.fabmax.kool.scene.Group
@@ -10,7 +12,8 @@ import me.az.shaders.TileMapShaderConf
 import me.az.view.ActorView
 
 class LevelView(
-    game: Game, level: GameLevel, conf: ViewSpec,
+    game: Game, level: GameLevel,
+    conf: ViewSpec,
     tilesAtlas: ImageAtlas,
     holesAtlas: ImageAtlas,
     runnerAtlas: ImageAtlas,
@@ -20,8 +23,7 @@ class LevelView(
 
 ) : Group() {
     private val tileMapShader = TileMapShader(TileMapShaderConf(tilesAtlas.tileCoords.size))
-//    val runnerView = me.az.view.ActorView( game.runner!!, runnerAtlas, runnerAnims, conf.tileSize)
-    val runnerView = ActorView( game.runner, runnerAtlas, runnerAnims, conf.tileSize)
+    val runnerView by lazy { ActorView( game.runner, runnerAtlas, runnerAnims, conf.tileSize) }
     val widthInPx = conf.tileSize.x * level.width
     val heightInPx = conf.tileSize.y * level.height
 
@@ -40,20 +42,22 @@ class LevelView(
             }
 
             shader = tileMapShader.apply {
-
-                tileSize = Vec2i(tilesAtlas.spec.tileWidth, tilesAtlas.spec.tileHeight)
-                this.tiles = tilesAtlas.tex
-                this.secondaryTiles = holesAtlas.tex
-                tilesAtlas.tileCoords.forEachIndexed { index, vec2i ->
-                    this.tileFrames[index] = MutableVec2f(vec2i.x.toFloat(), vec2i.y.toFloat())
-                }
-//                field = Texture2d(simpleValueTextureProps, level.updateTileMap())
+                tileSize = conf.tileSize
             }
 
             onUpdate +=  {
                 tileMapShader.time =  it.time.toFloat()
+
                 if ( level.dirty ) {
-                    tileMapShader.field = Texture2d(simpleValueTextureProps, level.updateTileMap())
+                    with(tileMapShader) {
+                        field = Texture2d(simpleValueTextureProps, level.updateTileMap())
+                        fieldSize = Vec2f(level.width.toFloat(), level.height.toFloat())
+                        tiles = tilesAtlas.tex.value
+                        secondaryTiles = holesAtlas.tex.value
+                        tilesAtlas.tileCoords.forEachIndexed { index, vec2i ->
+                            this.tileFrames[index] = MutableVec2f(vec2i.x.toFloat(), vec2i.y.toFloat())
+                        }
+                    }
                     level.dirty = false
                 }
             }
@@ -61,6 +65,7 @@ class LevelView(
 
         +runnerView
         game.guards.forEach {
+            println("creating guard views")
             +ActorView(it, guardAtlas, guardAnims, conf.tileSize)
         }
     }

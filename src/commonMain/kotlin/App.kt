@@ -20,6 +20,7 @@ import me.az.utils.buildStateMachine
 import me.az.utils.choice
 import me.az.utils.enumDelegate
 import me.az.view.GameControls
+import kotlin.native.concurrent.ThreadLocal
 import kotlin.random.Random
 
 val simpleTextureProps = TextureProps(TexFormat.RGBA,
@@ -30,12 +31,15 @@ val simpleValueTextureProps = TextureProps(TexFormat.R,
     AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE,
     FilterMethod.NEAREST, FilterMethod.NEAREST, mipMapping = false, maxAnisotropy = 1
 )
-enum class GameSpeed(val msByPass: Int) {
-    SPEED_VERY_SLOW(55),
-    SPEED_SLOW      (40),
-    SPEED_NORMAL    (25),
-    SPEED_FAST      (15),
-    SPEED_VERY_FAST (10),
+enum class GameSpeed(val fps: Int) {
+    SPEED_VERY_SLOW(14),
+    SPEED_SLOW      (18),
+    SPEED_NORMAL    (23),
+    SPEED_FAST      (29),
+    SPEED_VERY_FAST (35), // 14, 18, 23, 29, 35
+    ;
+    val msByPass get() = 1000 / fps
+    val dis get() = name.removePrefix("SPEED_").lowercase().replace('_', ' ')
 }
 
 class ViewSpec (
@@ -49,61 +53,61 @@ class ViewSpec (
 const val backgroundImageFile = "images/cover.jpg"
 
 sealed class State <T> {
-    open suspend fun enterState(obj: T) {}
-    open suspend fun exitState(obj: T) {}
+    open fun enterState(obj: T) {}
+    open fun exitState(obj: T) {}
     abstract fun update(obj: T): State<T>?
 }
 
 object MainMenuState : State<App>() {
-
-    val bg by lazy { scene {
-        +sprite( texture = Texture2d( simpleTextureProps ) { assets ->
-            assets.loadTextureData("images/start-screen.png")
-        } )
-    } }
+    var continueGame = false
     var startnewGame = false
     var exitGame = false
     var mainMenu: Scene? = null
+    var mainUiMenu: Scene? = null
+    val menuContext get() = (mainMenu as? MainMenuScene)?.menuContext ?: throw IllegalStateException()
 
-    override suspend fun enterState(app: App) {
+    override fun enterState(app: App) {
         super.enterState(app)
         val game = Game(app.context)
-
-        val tiles = ImageAtlas(ImageAtlasSpec(app.context.spriteMode.value, "tiles"))
-        tiles.load(app.ctx.assetMgr)
-
-        game.level = GameLevel(0, listOf(
-            "##H##",
-            "&-H-&",
-            "##H##",
-            "&-H-&",
-            "##H##",
-            "&-H-&",
-            "##H##",
-            "  H& ",
-        ), tiles.nameIndex )
-
         // preload
-        mainMenu = MainMenuScene(app.context)
+        mainMenu = MainMenuScene(app.context, game, app.ctx.assetMgr).also {
+            app.ctx.scenes += it
+//            mainUiMenu = it.setupUi()
+        }
+        mainUiMenu?.run { app.ctx.scenes += this }
 
-//        app.ctx.scenes += bg
-        app.ctx.scenes += mainMenu!!
+        game.reset()
     }
 
-    override suspend fun exitState(app: App) {
+    override fun exitState(app: App) {
         super.exitState(app)
+        //game.stop()
+
+        mainUiMenu?.run {
+            app.ctx.scenes -= this
+            app.ctx.runDelayed(1) { dispose(app.ctx) }
+        }
+        mainUiMenu = null
+
         mainMenu?.run {
             app.ctx.scenes -= this
-            dispose(app.ctx)
+            app.ctx.runDelayed(1) { dispose(app.ctx) }
         }
         mainMenu = null
-
-        app.ctx.scenes -= bg
     }
     override fun update(obj: App): State<App>? {
 
-        if ( startnewGame ) {
+        if ( startnewGame || continueGame ) {
+            if ( startnewGame ) {
+                with( obj.context ) {
+                    currentLevel.set(menuContext.level.value)
+                    levelSet.set(menuContext.levelSet.value)
+                    runnerLifes.set( START_HEALTH )
+                    score.set(0)
+                }
+            }
             startnewGame = false
+            continueGame = false
             return RunGameState
         }
         if ( exitGame ) {
@@ -121,16 +125,14 @@ object RunGameState : State<App>() {
     var debugScene: Scene? = null
     private var listener: InputManager.KeyEventListener? = null
 
-    override suspend fun enterState(app: App) {
+    override fun enterState(app: App) {
         super.enterState(app)
-
-
         val game = Game(app.context)
         val conf = ViewSpec()
 
         gameScene = GameLevelScene(game, app.ctx,
             appContext = app.context,
-            name = "level", startNewGame = true).apply {
+            name = "level").apply {
             +GameControls(game, app.ctx.inputMgr)
         }
 
@@ -157,15 +159,17 @@ object RunGameState : State<App>() {
 //        app.ctx.scenes += debugScene!!
     }
 
-    override suspend fun exitState(app: App) {
+    override fun exitState(app: App) {
         super.exitState(app)
-        listener?.run { app.ctx.inputMgr.removeKeyListener(this) }
-        gameScene?.run { app.ctx.scenes -= this;  dispose(app.ctx) }
-        gameScene = null
-        infoScene?.run { app.ctx.scenes -= this; dispose(app.ctx) }
-        infoScene = null
-        debugScene?.run { app.ctx.scenes -= this; dispose(app.ctx) }
-        debugScene = null
+        with(app.ctx) {
+            listener?.run { inputMgr.removeKeyListener(this) }
+            gameScene?.run { scenes -= this; runDelayed(1) { dispose(this@with) } }
+            gameScene = null
+            infoScene?.run { scenes -= this; runDelayed(1) { dispose(this@with) } }
+            infoScene = null
+            debugScene?.run { app.ctx.scenes -= this; runDelayed(1) { dispose(this@with) } }
+            debugScene = null
+        }
     }
 
     override fun update(app: App): State<App>? {
@@ -175,7 +179,7 @@ object RunGameState : State<App>() {
 }
 
 object Exit : State<App>() {
-    override suspend fun enterState(obj: App) = obj.ctx.close()
+    override fun enterState(obj: App) = obj.ctx.close()
     override fun update(obj: App): State<App>? = null
 }
 
@@ -198,6 +202,7 @@ class AppContext(val gameSettings: GameSettings) {
     val score = mutableStateOf(gameSettings.curScore).also { it.onChange { gameSettings.curScore = it } }
 
     val spriteMode = mutableStateOf(gameSettings.spriteMode).also { it.onChange { gameSettings.spriteMode = it } }
+    val levelSet = mutableStateOf(gameSettings.version).also { it.onChange { gameSettings.version = it } }
     val currentLevel = mutableStateOf(gameSettings.currentLevel).also { it.onChange { gameSettings.currentLevel = it } }
     val speed = mutableStateOf(gameSettings.speed).also { it.onChange { gameSettings.speed = it } }
     val stopGuards = MutableStateValue(gameSettings.stopGuards).also { it.onChange { v -> gameSettings.stopGuards = v } }
@@ -213,7 +218,7 @@ class App(val ctx: KoolContext) {
     val gameSettings = GameSettings(settings)
     val context = AppContext(gameSettings)
 
-    var state: State<App>? = null
+    private var state: State<App>? = null
 
     val fsm = buildStateMachine<String, App>("mainmenu") {
         state("mainmenu") {
@@ -247,6 +252,7 @@ class App(val ctx: KoolContext) {
         test3()
         test2()
 
+        registerActions(ctx.inputMgr, this, AppActions.values().asIterable())
         changeState(MainMenuState)
 //        changeState(RunGameState)
 
@@ -282,12 +288,9 @@ class App(val ctx: KoolContext) {
     }
 
     private fun changeState(newState: State<App>) {
-
-        scope.launch {
-            state?.exitState(this@App)
-            state = newState
-            state?.enterState(this@App)
-        }
+        state?.exitState(this@App)
+        state = newState
+        state?.enterState(this@App)
     }
 
     fun test1() {
@@ -331,6 +334,15 @@ class App(val ctx: KoolContext) {
 
     private fun expect(cond: Boolean, msg: () -> String = { "assert error" }) {
         if ( !cond ) throw AssertionError(msg())
+    }
+
+    enum class AppActions(override val keyCode: InputSpec,
+                          override val onPress: App.(InputManager.KeyEvent) -> Unit,
+                          override val onRelease: App.(InputManager.KeyEvent) -> Unit) : Action<App> {
+        ESC(InputManager.KEY_ESC.toInputSpec(), onPress = {
+            fsm.popState()
+            changeState(MainMenuState)
+        }, onRelease = {})
     }
 }
 

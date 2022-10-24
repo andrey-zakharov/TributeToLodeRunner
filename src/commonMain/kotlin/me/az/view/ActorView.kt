@@ -11,7 +11,7 @@ class ActorView(val actor: Actor,
                 val atlas: ImageAtlas,
                 val animations: AnimationFrames,
                 val tileSize: Vec2i
-) : Sprite(tileSize, atlas.tex, tileSize) {
+) : Sprite(tileSize, atlas.tex.value, tileSize) {
 
 
     init {
@@ -19,6 +19,7 @@ class ActorView(val actor: Actor,
         onUpdate += {
             actor.level?.run {
 
+                this@ActorView.texture = atlas.tex.value
                 val sequence = animations.sequence[actor.action.id]?: throw NullPointerException(actor.action.id)
                 if ( actor.sequenceSize == 0 ) actor.sequenceSize = sequence.size
                 textureOffset.set(atlas.getTexOffset(sequence[actor.frameIndex % sequence.size]))

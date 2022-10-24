@@ -115,8 +115,6 @@ sealed class Actor(val game: Game) : Controllable {
     override var digLeft: Boolean = false
     override var digRight: Boolean = false
 
-    lateinit var sounds: SoundPlayer
-
     open fun update() {
         fsm.update(this)
         //check collision
@@ -146,11 +144,6 @@ sealed class Actor(val game: Game) : Controllable {
 
     fun stop() = fsm.reset()
 
-    fun playSound(sound: String, force: Boolean = false) =
-        if ( force )
-            sounds.playSound(sound, false, false)
-        else
-            sounds.playSound(sound, false, true)
     // collect gold
     private fun checkGold() {
         if ( level.isGold(x, y) && ox > -xMove && ox < xMove && oy > -yMove && oy < yMove ) {
@@ -349,10 +342,12 @@ sealed class Actor(val game: Game) : Controllable {
             init {
                 onEnter { with(actor) {
                     if (this is Runner)
-                        playSound("fall")
+                        // actor - is sound source.
+                        // enable (play) / disable.
+                        game.playSound(Sound.FALL, x, y)
                 }}
                 onExit { with(actor) {
-                    sounds.stopSound("fall")
+                    game.stopSound(Sound.FALL)
                 }}
 
                 // this if final stop after fall state.

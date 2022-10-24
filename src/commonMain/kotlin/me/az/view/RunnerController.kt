@@ -1,5 +1,6 @@
 import de.fabmax.kool.InputManager
 import de.fabmax.kool.KeyCode
+import de.fabmax.kool.KoolContext
 import de.fabmax.kool.UniversalKeyCode
 import de.fabmax.kool.scene.Node
 import me.az.ilode.Controllable
@@ -19,12 +20,18 @@ enum class RunnerAction(
 }
 class RunnerController(private val inputManager: InputManager, val runner: Controllable): Node() {
 
+    val subs = mutableListOf<InputManager.KeyEventListener>()
     init {
-        RunnerAction.values().forEach { act->
+        subs.addAll( RunnerAction.values().map { act->
             inputManager.registerKeyListener(act.keyCode, "runner_action_${act.name}_pressed",
                 { ev -> ev.isPressed || ev.isReleased },
                 { ev -> if ( ev.isReleased ) act.onRelease.invoke(this, ev) else
                     if (ev.isPressed) act.onPress.invoke(this, ev) })
-        }
+        } )
+    }
+
+    override fun dispose(ctx: KoolContext) {
+        super.dispose(ctx)
+        subs.forEach { inputManager.removeKeyListener(it) }
     }
 }
