@@ -65,7 +65,6 @@ class LevelView(
 
         +runnerView
         game.guards.forEach {
-            println("creating guard views")
             +ActorView(it, guardAtlas, guardAnims, conf.tileSize)
         }
     }
