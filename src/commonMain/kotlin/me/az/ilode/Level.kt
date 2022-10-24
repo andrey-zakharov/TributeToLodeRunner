@@ -347,7 +347,6 @@ class GameLevel(
 
                 if ( animName == "digHoleLeftBase" || animName == "digHoleRightBase" ) {
                     toAdd.add(Anim(pos, "fillHole"))
-                    println("starting fill hole")
                 }
 
                 // purge old anims

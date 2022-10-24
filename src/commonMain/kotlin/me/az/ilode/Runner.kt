@@ -34,7 +34,7 @@ class Runner(game: Game) : Actor(game), Controllable {
             this += DigRight(this@Runner)
             this += DigLeft(this@Runner)
 
-            debugOn()
+//            debugOn()
         }
     }
 
