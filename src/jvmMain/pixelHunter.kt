@@ -40,11 +40,36 @@ val palette = arrayOf(
     ' ', '▮', '▯', '▼', '▽', '◆', '◇', '◈',
     '▮', '▮', '▮', '▮', '▮', '▮', '▮', '▮',
 )
+@kotlin.ExperimentalUnsignedTypes
+fun List<UByte>.pixelStream(
+    bitsPerPixel: Int = 2
+) = sequence<Int> {
+
+    val mask = (2f.pow( bitsPerPixel ) - 1).toUInt()
+    var currentByte = 0
+    var currentShift = 0
+    var currentMask = (mask shl (8 - bitsPerPixel)).toUByte()
+
+    while( currentByte < size ) {
+        val f = this@pixelStream[currentByte] and currentMask
+        val res = f.toInt() shr (8 - currentShift - bitsPerPixel)
+        yield( res )
+
+        currentMask = (currentMask.toInt() shr bitsPerPixel).toUByte()
+        currentShift += bitsPerPixel
+        if ( currentShift >= 8 ) { // byte border TBD for 3 bits per pixel!
+            ++currentByte
+            currentShift = 0
+            currentMask = (mask shl (8 - bitsPerPixel)).toUByte()
+        }
+    }
+
+}
 // or use colors for 1
 fun InputStream.pixelsStream(
     bytesWindow: Int = 32,
     bitsPerPixel: Int = 2
-) = sequence<UInt> {
+) = sequence<Int> {
 
     val windowBuff = ByteArray(bytesWindow)
     val mask = (2f.pow( bitsPerPixel ) - 1).toUInt()
@@ -69,7 +94,7 @@ fun InputStream.pixelsStream(
 //                    "\nmask = ${currentMask.toString(2).padStart(8, '0')} " +
 //                    "\tres = $res")
 //
-        yield( res.toUInt() )
+        yield( res )
 //
         currentMask = (currentMask.toInt() shr bitsPerPixel).toUByte()
         currentShift += bitsPerPixel
@@ -79,26 +104,6 @@ fun InputStream.pixelsStream(
             currentMask = (mask shl (8 - bitsPerPixel)).toUByte()
         }
     }
-}
-
-fun InputStream.readAll(mark: ByteArray, bitsPerPixel: Int = 2, width: Int = 12, height: Int = 11) {
-    var p =0
-    val markBuf = ByteArray(mark.size)
-    while( available() > 0 ) {
-        read(markBuf)
-        if (markBuf[0] == mark[0] && markBuf[1] == mark[1]) {
-            p ++
-            // mark[0] was rows, mark[1] bytes per row (= 3 * 8 / 2  = 12)
-//            println(pos.toString(16).padStart(8, '0'))
-//            printSprite(bitsPerPixel, width, height)
-//            println(read().toString(16))
-//            println(read().toString(16))
-//            println(read().toString(16))
-//            println(read().toString(16))
-            println()
-        }
-    }
-    println("total $p")
 }
 
 // returns pixels red
@@ -123,10 +128,7 @@ fun InputStream.printSprite(
 
     stream.takeWhile { printedRows < height }.chunked(width).forEach { row ->
         val rowStr = row.map {
-            if ( export ) "${it.toString(10)}"
-            else
-                if ( it == 0u ) " "
-                else "\u001b[38;5;${it % 255u}m${palette[1]}"
+            it.printPixel(export)
         }.joinToString("")
 
         redPixels += row.size
@@ -141,6 +143,105 @@ fun InputStream.printSprite(
     return redPixels
 }
 
+fun Int.printPixel(export: Boolean = false): String =
+    if ( export ) "${toString(10)}"
+    else
+        if ( this == 0 ) " "
+        else "\u001b[38;5;${this % 255}m${palette[1]}"
+
+
+fun InputStream.readAll(mark: ByteArray, bitsPerPixel: Int = 2, width: Int = 12, height: Int = 11) {
+    var p = 0
+    var curMarkI = 0
+    val charBuff = ByteArray(1)
+
+    while( available() > 0 ) {
+
+        while ( curMarkI < mark.size && read(charBuff) > 0 && mark[curMarkI] == charBuff[0] ) {
+            curMarkI++
+        }
+        if ( curMarkI == mark.size ) {// exact match
+            val red = printSprite(bitsPerPixel, width, height)
+            println("red = $red bytes")
+            p++
+
+        } else {
+            // failed match
+        }
+        curMarkI = 0
+    }
+
+    println("total $p")
+}
+
+val cga = mapOf(
+    0 to "0, 0, 0",
+    1 to "0, 170, 170",
+    2 to "170, 0, 170",
+    3 to "170, 170, 170",
+)
+
+@kotlin.ExperimentalUnsignedTypes
+fun File.parse(mark: ByteArray, bitsPerPixel: Int = 2, width: Int = 12, height: Int = 11, export: Boolean = false) {
+
+    var p = 0
+    val b = readBytes().asUByteArray()
+    val m1 = 0x0b.toUByte()
+    val m2 = 0x03.toUByte()
+
+
+
+
+    for ( i in 0 until b.size - 1 ) {
+        if (b[i] == m1 && b[i+1] == m2) {
+            val px = b.slice( i + 2 until i + 2 + (width * height * bitsPerPixel / 8) )
+                .pixelStream(bitsPerPixel)
+
+            val channels = Array(cga.size) { mutableListOf<Pair<Int, Int>>() }
+
+//            val resFile = File("${(i + 2).toString(16)}.png")
+            val resFile = File("${(i + 2).toString(16)}.txt")
+            println("\u001B[0m = Sprite #${p+1} (${(i + 2).toString(16)}) =")
+
+            // could not print at once. some imagemagick errors. draw each channel sep
+//            val closeFile = " -quality 100 ${resFile.name}"
+
+//            val openFile = "convert -size ${width}x$height xc:transparent $closeFile"
+
+            resFile.printWriter().use { out ->
+                out.println("# ImageMagick pixel enumeration: $width,$height,255,rgb")
+                px.chunked(width).mapIndexed { y, r ->
+                    r.forEachIndexed { x, p ->
+//                        if ( p == 0 ) return@forEachIndexed
+//                    channels[p].add(Pair(x, y))
+                       out.println("$x,$y: (${cga[p]})")
+                    }
+                }.toList()
+            }
+
+            // for t in *.txt; do convert -transparent black txt:$t -define png:color-type=3 -define png:bit-depth=4 -quality 100 `basename $t .txt`.png; done
+            // convert -transparent black txt:ddc0.txt ddc0.png
+            // montage cf98.png cfbb.png cfde.png ca0d.png d06a.png d08d.png ccff.png cd22.png cd45.png cd68.png cd8b.png cdae.png cdae.left.png cdae.right.png cdd1.png cdd1.left.png cdd1.rigth.png cdf4.png ce17.png ce3a.png cec6.png cee9.png cf0c.png dc85.png dca8.png  -transparent white -geometry +0 -quality 100 out.png
+//            Runtime.getRuntime().exec(openFile)
+//
+//            val command = channels.mapIndexed { color, cells ->
+//                "convert ${resFile.name} -fill \"#${cga[color]!!.toString(16).padStart(3, '0')}\" ${cells.map { (x, y) ->
+//                    "-draw 'point $x,$y'"
+//                }.joinToString(" ")} $closeFile"
+//            }.map {
+//                println(it)
+//                Runtime.getRuntime().exec(it)
+//            }
+
+            p++
+
+        }
+    }
+    println(p)
+
+}
+
+@kotlin.ExperimentalUnsignedTypes
 fun main(args: Array<String>) {
 //    println(4.lcm(3))
 //    println(18.lcm(8))
@@ -151,11 +252,20 @@ fun main(args: Array<String>) {
     }
 
     val f = File(args[0].toString())
+
     val reader = f.inputStream()
     if ( args.size > 1 && args[1] == "mark" ) {
         val mark = ByteArray(2) { listOf(0x0b, 0x03)[it].toByte() }
-        reader.readAll(mark)
+        //check
+        f.parse(mark, 2, 12, 11)
         exitProcess(0)
+//
+//        val b = f.readBytes()
+//        val c = b.filterIndexed { i, c -> c == 0x03.toByte() && b[i-1] == 0x0b.toByte() }.count()
+//        println(c)
+//
+//        reader.readAll(mark)
+//        exitProcess(0)
     }
 
     val rowWidth = try { Integer.decode(args[1]) } catch (e: Exception) {32} // in "pixels"
