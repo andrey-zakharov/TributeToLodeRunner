@@ -13,6 +13,7 @@ import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.modules.ui2.*
 import kotlinx.coroutines.launch
+import me.az.Version
 import me.az.ilode.Game
 import me.az.ilode.GameLevel
 import me.az.ilode.GameState
@@ -257,9 +258,6 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
         val labelDelta: Vec2i = Vec2i(2, 0),
         onEnter: MainMenuScene.() -> Unit = {}
     ) : MenuCommand(pos, onEnter)
-//    {
-//        LEVEL,
-//    }
 
     private val runnerPosString = mutableStateOf("${game.runner.x} x ${game.runner.y}")
 
@@ -290,9 +288,15 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
                 GameState.GAME_NEW_LEVEL -> {
                     addLevelView(ctx, game.level!!)
 
-                    +TextView(runnerPosString, fontAtlas, currentSpriteSet, 10) {
-                        translate(10f, 10f, 0f)
+//                    +TextView(runnerPosString, fontAtlas, currentSpriteSet, 10) {
+//                        translate(10f, 10f, 0f)
+//                        scale(currentSpriteSet.value.tileWidth / 2f, currentSpriteSet.value.tileHeight / 2f, 1f)
+//                    }
+                    val version = "$Version by Andrey Zakharov"
+                    +textView(version, fontAtlas, currentSpriteSet, version.length) {
+//                        translate(10f, currentSpriteSet.value.tileHeight.toFloat() / 2f , 0f)
                         scale(currentSpriteSet.value.tileWidth / 2f, currentSpriteSet.value.tileHeight / 2f, 1f)
+                        translate(-(version.length/ 2f), 0f, 0f)
                     }
 
                     levelView?.run {

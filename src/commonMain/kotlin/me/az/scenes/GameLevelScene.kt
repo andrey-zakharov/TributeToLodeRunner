@@ -44,7 +44,6 @@ class GameLevelScene (
                 }
                 GameState.GAME_RUNNING -> stopIntro(ctx)
                 GameState.GAME_FINISH -> {
-                    sounds.playSound("goldFinish")
                     startOutro(ctx)
                 }
 
@@ -65,7 +64,7 @@ class GameLevelScene (
                 GameState.GAME_NEXT_LEVEL -> {
                     // black
                     if ( shatterRadiusAnim.speed == 0f ) startOutro(ctx)
-                    println("nextlevel: ${appContext.currentLevel} ${levels.levels.size}")
+
                     with(appContext.currentLevel) {
                         set( value + 1 )
                         if ( value >= levels.levels.size ) {

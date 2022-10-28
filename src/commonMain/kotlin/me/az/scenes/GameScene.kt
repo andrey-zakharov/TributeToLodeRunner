@@ -3,6 +3,7 @@ package me.az.scenes
 import AnimationFrames
 import App
 import AppContext
+import GapsSpec
 import ImageAtlas
 import ImageAtlasSpec
 import LevelView
@@ -89,12 +90,12 @@ open class GameScene(val game: Game,
         mainRenderPass.clearColor = null
     }
 
+    protected val currentSpriteSet = mutableStateOf(ImageAtlasSpec(appContext.spriteMode.value))
     protected var tilesAtlas = ImageAtlas("tiles")
     protected var runnerAtlas = ImageAtlas("runner")
     protected var guardAtlas = ImageAtlas("guard")
     protected var holeAtlas = ImageAtlas("hole")
     protected var fontAtlas = ImageAtlas("text")
-    protected val currentSpriteSet = mutableStateOf(ImageAtlasSpec(appContext.spriteMode.value))
 
     protected var runnerAnims = AnimationFrames("runner")
     protected var guardAnims = AnimationFrames("guard")
@@ -103,17 +104,22 @@ open class GameScene(val game: Game,
     protected val sounds = SoundPlayer(assets)
 
     suspend fun reload(newts: TileSet) {
+        val newSpecWithGap = ImageAtlasSpec(tileset = newts, gap = GapsSpec(0, 0, newts.tileMarginX, newts.tileMarginY))
         val newSpec = ImageAtlasSpec(tileset = newts)
         // awaitAll
-        tilesAtlas.load(newSpec, assets)
+        tilesAtlas.load(newSpecWithGap, assets)
         runnerAtlas.load(newSpec, assets)
         guardAtlas.load(newSpec, assets)
         holeAtlas.load(newSpec, assets)
         fontAtlas.load(newSpec, assets)
 
-        runnerAnims = AnimationFrames("runner")
-        guardAnims = AnimationFrames("guard")
-        holeAnims = AnimationFrames("hole")
+        runnerAnims.loadAnimations(newSpec, assets)
+        guardAnims.loadAnimations(newSpec, assets)
+        holeAnims.loadAnimations(newSpec, assets)
+
+//        runnerAnims = AnimationFrames("runner")
+//        guardAnims = AnimationFrames("guard")
+//        holeAnims = AnimationFrames("hole")
 
         currentSpriteSet.set(ImageAtlasSpec(appContext.spriteMode.value))
         game.level?.run { dirty = true }
@@ -126,9 +132,10 @@ open class GameScene(val game: Game,
         guardAtlas.load(newSpec, this)
         holeAtlas.load(newSpec, this)
         fontAtlas.load(newSpec, this)
-        runnerAnims.loadAnimations(ctx)
-        guardAnims.loadAnimations(ctx)
-        holeAnims.loadAnimations(ctx)
+
+        runnerAnims.loadAnimations(newSpec, this)
+        guardAnims.loadAnimations(newSpec, this)
+        holeAnims.loadAnimations(newSpec, this)
 
         sounds.loadSounds()
     }

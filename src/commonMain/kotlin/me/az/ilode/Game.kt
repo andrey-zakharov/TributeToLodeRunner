@@ -49,7 +49,7 @@ const val SCORE_DIES     = 75
 
 enum class Sound(val fileNameO: String? = null, val fileNameCall: (() -> String)? = null) {
     BORN, DEAD, DIG, DOWN, FALL, GOLD("getGold"),
-    FINISH,
+    FINISH("goldFinish"),
     PASS,
     TRAP
     ;
@@ -123,7 +123,7 @@ class Game(val state: AppContext) : CoroutineScope {
         fsm.reset(true)
     }
 
-    private val fsm by lazy { buildStateMachine<GameState, Game>(GameState.GAME_NEW_LEVEL) {
+    private val fsm by lazy { buildStateMachine(GameState.GAME_NEW_LEVEL) {
         state(GameState.GAME_START) {
             edge(GameState.GAME_RUNNING) {
                 validWhen { runner.anyKeyPressed }
@@ -136,9 +136,6 @@ class Game(val state: AppContext) : CoroutineScope {
         }
         state(GameState.GAME_RUNNING) {
             edge(GameState.GAME_FINISH) {
-                action {
-//                    runner.sounds.playSound("pass")
-                }
                 validWhen { runner.success }
             }
             edge(GameState.GAME_RUNNER_DEAD) {
@@ -146,8 +143,10 @@ class Game(val state: AppContext) : CoroutineScope {
             }
             onUpdate {
 
-                if (playGame() && level?.status == GameLevel.Status.LEVEL_PLAYING)
+                if (playGame() && level?.status == GameLevel.Status.LEVEL_PLAYING) {
                     level?.showHiddenLadders()
+                    playSound(Sound.FINISH, runner.x, runner.y)
+                }
 
                 null
             }
@@ -175,6 +174,7 @@ class Game(val state: AppContext) : CoroutineScope {
         state(GameState.GAME_FINISH) {
             var finalScore = 0
             onEnter {
+                playSound(Sound.PASS, runner.x, runner.y)
                 // playMode = CLASSIC
                 finalScore = runner.score + SCORE_COMPLETE
                 Unit
@@ -189,7 +189,6 @@ class Game(val state: AppContext) : CoroutineScope {
 
             onUpdate {
                 runner.addScore(SCORE_COMPLETE_INC)
-                playSound(Sound.PASS, runner.x, runner.y)
                 null
             }
         }

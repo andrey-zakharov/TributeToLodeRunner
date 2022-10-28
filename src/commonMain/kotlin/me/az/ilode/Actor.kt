@@ -347,7 +347,7 @@ sealed class Actor(val game: Game) : Controllable {
                         game.playSound(Sound.FALL, x, y)
                 }}
                 onExit { with(actor) {
-                    game.stopSound(Sound.FALL)
+                    if (this is Runner) game.stopSound(Sound.FALL)
                 }}
 
                 // this if final stop after fall state.

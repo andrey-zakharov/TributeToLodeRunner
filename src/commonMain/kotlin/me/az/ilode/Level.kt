@@ -431,7 +431,9 @@ class GameLevel(
         for (x in 0 until this.width ) {
             this.act[x][this.height-1] = TileLogicType.SOLID
             this.base[x][this.height-1] = TileLogicType.SOLID
-            this[x, this.height-1] = ViewCell(false, primaryTileSet["ground"]!!)
+            primaryTileSet["ground"]?.run {
+                this@GameLevel[x, this@GameLevel.height-1] = ViewCell(false, this)
+            }
         }
 
         guard.forEach { row-> row.forEachIndexed { index, _ -> row[index] = false } }
