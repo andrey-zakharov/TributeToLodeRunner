@@ -1,9 +1,12 @@
 import de.fabmax.kool.math.MutableVec2f
 import de.fabmax.kool.math.Vec2f
 import de.fabmax.kool.math.Vec2i
+import de.fabmax.kool.math.Vec4i
 import de.fabmax.kool.modules.ui2.MutableStateValue
+import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.Attribute
 import de.fabmax.kool.pipeline.Texture2d
+import de.fabmax.kool.pipeline.Texture3d
 import de.fabmax.kool.scene.Group
 import de.fabmax.kool.scene.mesh
 import me.az.ilode.*
@@ -12,7 +15,8 @@ import me.az.shaders.TileMapShaderConf
 import me.az.view.ActorView
 
 class LevelView(
-    game: Game, level: GameLevel,
+    game: Game,
+    level: GameLevel,
     conf: ViewSpec,
     tilesAtlas: ImageAtlas,
     holesAtlas: ImageAtlas,
@@ -22,7 +26,7 @@ class LevelView(
     guardAnims: AnimationFrames
 
 ) : Group() {
-    private val tileMapShader = TileMapShader(TileMapShaderConf(tilesAtlas.tileCoords.size))
+    private val tileMapShader = TileMapShader(TileMapShaderConf())
     val runnerView by lazy { ActorView( game.runner, runnerAtlas, runnerAnims, conf.tileSize) }
     val widthInPx = conf.tileSize.x * level.width
     val heightInPx = conf.tileSize.y * level.height
@@ -43,6 +47,7 @@ class LevelView(
 
             shader = tileMapShader.apply {
                 tileSize = conf.tileSize
+                tileSizeInTileMap = tilesAtlas.getTileSize()
             }
 
             onUpdate +=  {
@@ -52,13 +57,12 @@ class LevelView(
                     with(tileMapShader) {
                         field = Texture2d(simpleValueTextureProps, level.updateTileMap())
                         fieldSize = Vec2f(level.width.toFloat(), level.height.toFloat())
-                        tiles = tilesAtlas.tex.value
-                        secondaryTiles = holesAtlas.tex.value
-                        tilesAtlas.tileCoords.forEachIndexed { index, vec2i ->
-                            this.tileFrames[index] = MutableVec2f(vec2i.x.toFloat(), vec2i.y.toFloat())
-                        }
+                        tilesAtlas.tex.value?.run { tiles = this }
+                        tileSizeInTileMap = tilesAtlas.getTileSize()
+                        tileSize = conf.tileSize
+
                     }
-                    level.dirty = false
+                    level.dirty = tileMapShader.tileSizeInTileMap.x == 0
                 }
             }
         }

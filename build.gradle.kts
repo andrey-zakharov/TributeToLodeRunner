@@ -117,6 +117,18 @@ tasks["clean"].doLast {
     delete(rootProject.buildDir)
 }
 
+tasks.register<VersionNameUpdate>("updateVersion") {
+    versionName = "$version"
+    filesToUpdate = listOf(
+        kotlin.sourceSets.findByName("commonMain")?.kotlin
+            ?.sourceDirectories
+            ?.map { File(it, "me/az/Version.kt") }
+            ?.find { it.exists() }?.absolutePath ?: ""
+    )
+}
+tasks["compileKotlinJs"].dependsOn("updateVersion")
+tasks["compileKotlinJvm"].dependsOn("updateVersion")
+
 distributions {
     main {
         distributionBaseName.set("ttld")

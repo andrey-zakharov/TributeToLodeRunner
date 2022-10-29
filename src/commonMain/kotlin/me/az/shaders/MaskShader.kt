@@ -9,12 +9,12 @@ import de.fabmax.kool.pipeline.Attribute
 import de.fabmax.kool.pipeline.BlendMode
 import de.fabmax.kool.pipeline.FullscreenShaderUtil.fullscreenQuadVertexStage
 
-open class MaskShader(cfg: Config, model: KslProgram = MaskModel(cfg)) : KslUnlitShader(cfg, model) {
+open class MaskShader(cfg: UnlitShaderConfig, model: KslProgram = MaskModel(cfg)) : KslUnlitShader(cfg, model) {
     var visibleRadius by uniform1f("radius") // in pixels
 
-    constructor(block: Config.() -> Unit) : this(Config().apply(block))
+    constructor(block: UnlitShaderConfig.() -> Unit) : this(UnlitShaderConfig().apply(block))
 
-    class MaskModel(cfg: Config) : KslProgram("Mask Shader") {
+    class MaskModel(cfg: UnlitShaderConfig) : KslProgram("Mask Shader") {
         val uv = interStageFloat2("uv")
         init {
             vertexStage {

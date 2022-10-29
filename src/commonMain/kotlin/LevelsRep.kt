@@ -13,6 +13,7 @@ enum class LevelSet(val path: String) {
     FANBOOK("fanbook"),
     PROFESSIONAL("professional"),
     REVENGE("revenge"),
+    CUSTOM("custom"),
     ;
     val dis get() = "${ordinal + 1}.${name.lowercase()}"
 }
@@ -47,13 +48,6 @@ class LevelsRep(
     }
 
     fun getLevel(id: Int, tileSet: ImageAtlas, generated: Boolean = true): GameLevel {
-
-        tileSet.frames.keys.forEach {
-            if ( !tilesByNames.containsKey(it)) {
-                //throw RuntimeException()
-                println("$it not found in $tilesByNames")
-            }
-        }
 
         val lid = id.mod(levels.size)
         return loadedLevels.getOrPut(lid) {

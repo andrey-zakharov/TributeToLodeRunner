@@ -3,6 +3,7 @@ package me.az.view
 import AnimationFrames
 import ImageAtlas
 import Sprite
+import Sprite3d
 import de.fabmax.kool.math.Vec2i
 import me.az.ilode.Actor
 import me.az.utils.addDebugAxis
@@ -11,7 +12,7 @@ class ActorView(val actor: Actor,
                 val atlas: ImageAtlas,
                 val animations: AnimationFrames,
                 val tileSize: Vec2i
-) : Sprite(tileSize, atlas.tex.value, tileSize) {
+) : Sprite3d(tileSize, atlas.tex.value, atlas.getTileSize()) {
 
 
     init {
@@ -22,7 +23,7 @@ class ActorView(val actor: Actor,
                 this@ActorView.texture = atlas.tex.value
                 val sequence = animations.sequence[actor.action.id]?: throw NullPointerException(actor.action.id)
                 if ( actor.sequenceSize == 0 ) actor.sequenceSize = sequence.size
-                textureOffset.set(atlas.getTexOffset(sequence[actor.frameIndex % sequence.size]))
+                tileIndex = sequence[actor.frameIndex % sequence.size]
 
                 setIdentity()
                 translate(

@@ -5,24 +5,38 @@ import de.fabmax.kool.math.Vec4i
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.geometry.RectProps
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.Transient
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.serializer
+import kotlinx.serialization.*
+import kotlinx.serialization.json.*
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
-enum class TileSet(val path: String, val tileWidth: Int = 20, val tileHeight: Int = 22) {
+enum class TileSet(
+    val path: String,
+    val tileWidth: Int = 20,
+    val tileHeight: Int = 22
+) {
     SPRITES_APPLE2("ap2"),
     SPRITES_COMMODORE64("c64"),
-    SPRITES_IBM("ibm"),
+    SPRITES_IBM("ibm", 12, 11),
     SPRITES_ATARI8BIT("a8b"),
     SPRITES_ZXSPECTRUM("zxs"),
     SPRITES_NES("nes"),
     ;
     val dis get() = name.removePrefix("SPRITES_")
 }
+@kotlinx.serialization.Serializable
+data class AtlasGeometry(val cols: Int, val rows: Int) {
+    companion object {
+        fun from(e: JsonElement) = from(serializer<AtlasGeometry>(), e)
+        fun from(serializer: DeserializationStrategy<AtlasGeometry>, e: JsonElement) = Json.decodeFromString(serializer, e.toString())
+    }
+}
+
+
 data class GapsSpec(
     val top: Int = 0,
     val right: Int = 0,
@@ -42,55 +56,56 @@ data class Frame(
 ) {
     val asVec: Vec2i get() = Vec2i(x, y)
     val asVec4: Vec4i get() = Vec4i(x, y, w, h)
+    fun getIndex(geometry: AtlasGeometry) = // in atlas
+        ( x / w ) + ( y / h * geometry.cols )
+
+    companion object {
+        fun from(e: JsonElement) = from(serializer<Frame>(), e)
+        fun from(serializer: DeserializationStrategy<Frame>, e: JsonElement) =
+            Json.decodeFromString(serializer, e.toString())
+    }
 }
 
-class ImageAtlas(val name: String) {
-    val tex = mutableStateOf<Texture2d?>(null)
-    val frames = mutableMapOf<String, Frame>()
-    lateinit var tileCoords: Array<Vec4i>
+class ImageAtlas(val name: String, whenLoaded: () -> Unit = {}) {
+
+    protected val job = Job()
+    val tex = mutableStateOf<Texture3d?>(null)
+    var geometry: AtlasGeometry? = null
+    val tileWidth get() = tex.value?.loadedTexture?.width  ?: 0
+    val tileHeight get() = tex.value?.loadedTexture?.height ?: 0
     val nameIndex = mutableMapOf<String, Int>()
 
-    suspend fun load(spec: ImageAtlasSpec, assets: AssetManager) {
-        val tilesTexPath = "sprites/${spec.tileset.path}/$name.png"
-        val tilesMapPath = "sprites/${spec.tileset.path}/$name.json"
-
-//        val texData = assets.loadTextureAtlasData(tilesTexPath, spec.tileWidth, spec.tileHeight)
-        //withContext()
-
-        val serializer = serializer<Frame>()
-        val content = assets.loadAsset(tilesMapPath)!!.toArray().decodeToString()
-        val framesObj = Json.decodeFromString<JsonObject>(content)
-        val res = mutableMapOf<String, Frame>()
-
-        (framesObj["frames"] as JsonObject).forEach { entry ->
-            res[entry.key] = Json.decodeFromString(serializer, (entry.value as JsonObject)["frame"].toString())
-        }
-
-        // we get real tilesizes here
-//        with(res[res.keys.first()]!!) {
-//            spec.tileWidth = w
-//            spec.tileHeight = h
-//        }
-
-        val loadedTexture = assets.loadAndPrepareTexture(tilesTexPath, simpleTextureProps)
-        val tilesInRow = loadedTexture.loadedTexture!!.width / spec.tileWidth.toFloat()
-
-        println("tiles in row = $tilesInRow")
-
-        val sortedByXYKeys = res.keys.sortedBy { res[it]!!.y * tilesInRow + res[it]!!.x }
-
-        frames.clear()
-        frames.putAll( sortedByXYKeys.associateWith { res[it]!! } )
-        sortedByXYKeys.forEachIndexed { i, s -> nameIndex[s] = i }
-        tileCoords = frames.map { it.value.asVec4 }.toTypedArray()
-
-        // done
-        tex.set( loadedTexture )
+    fun getTileSize() = Vec2i(tileWidth, tileHeight)
+    suspend fun load(tileset: TileSet, assets: AssetManager) {
+        assets.loadGeom(tileset)
+        val newTex = assets.loadAtlas(tileset, geometry!!)
+        tex.set(newTex)
     }
 
-    fun getTexOffset(frameName: String) = frames[frameName]!!.asVec
-    fun getTexOffset(frameIndex: Int): Vec2i = Vec2i(tileCoords[frameIndex].x, tileCoords[frameIndex].y)
-    fun getFrame(frameIndex: Int): Vec4i = tileCoords[frameIndex]
+    private suspend fun AssetManager.loadGeom(tileset: TileSet) {
+        val tilesMapPath = "sprites/${tileset.path}/$name.json"
+        val content = loadAsset(tilesMapPath)!!.toArray().decodeToString()
+        val jsonObj = Json.decodeFromString<JsonObject>(content)
+        if ( !jsonObj.containsKey("geom") ) throw IllegalStateException("no geom for atlas ${tileset.dis} $name")
+        geometry = AtlasGeometry.from(jsonObj["geom"]!!)
+
+        nameIndex.clear()
+        (jsonObj["frames"] as? JsonObject)?.forEach { entry ->
+            val ord: Int = when(entry.value) {
+                is JsonObject -> Frame.from(entry.value.jsonObject.get("frame")!!).getIndex( geometry!! )
+                is JsonPrimitive -> (entry.value as JsonPrimitive).int
+                JsonNull -> TODO()
+                is JsonArray -> TODO()
+            }
+            nameIndex[entry.key] = ord
+        }
+        println("NAMES=$nameIndex")
+    }
+    private suspend fun AssetManager.loadAtlas(tileset: TileSet, geometry: AtlasGeometry): Texture3d {
+        val tilesTexPath = "sprites/${tileset.path}/$name.png"
+        val data = loadTextureAtlasData(tilesTexPath, geometry.cols, geometry.rows, simpleTextureProps.format)
+        return Texture3d(simpleTextureProps, name, BufferedTextureLoader(data))
+    }
 }
 
 data class Region(val x: Double, val y: Double, val w: Double, val h: Double)

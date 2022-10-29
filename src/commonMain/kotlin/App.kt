@@ -139,9 +139,9 @@ object RunGameState : State<App>() {
         infoScene = GameUI(game, assets = app.ctx.assetMgr, app.context)
         app.ctx.scenes += gameScene!!
         app.ctx.scenes += infoScene!!
-        debugScene = Ui2Scene {
-            +UiSurface {
-                gameScene?.setupUi(this)
+        debugScene = UiScene {
+            +Panel {
+                gameScene?.setupUi(this)!!
             }
         }
 

@@ -2,7 +2,6 @@ package me.az.view
 
 import ImageAtlas
 import ImageAtlasSpec
-import de.fabmax.kool.math.MutableVec2f
 import de.fabmax.kool.math.Vec2f
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.modules.ksl.KslUnlitShader
@@ -16,7 +15,6 @@ import de.fabmax.kool.scene.*
 import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.createUint8Buffer
 import me.az.shaders.TileMapShader
-import me.az.shaders.TileMapShaderConf
 import me.az.utils.nearestTwo
 import simpleValueTextureProps
 import kotlin.experimental.and
@@ -58,9 +56,7 @@ class TextView(val text: MutableStateValue<String>,
         }
     }
 
-    private val tileMapShader = TileMapShader(
-        TileMapShaderConf(fontAtlas.tileCoords.size)
-    )
+    private val tileMapShader = TileMapShader()
 
     private fun drawFromBuffer(string: String): TextureData2d {
         buf.clear()
@@ -91,16 +87,13 @@ class TextView(val text: MutableStateValue<String>,
             +mesh(listOf(Attribute.POSITIONS, Attribute.TEXTURE_COORDS)) {
                 generate {
                     rect {
-                        //size.set(textWidth, textHeight)
                         origin.set(pads / spec.tileWidth / textWidth, pads / spec.tileHeight / textHeight, 0f)
-//                    size.set(12f, 20f)
                     }
                 }
 
                 shader = tileMapShader.apply {
-                    this.tileSize = Vec2i(spec.tileWidth, spec.tileHeight)
-                    this.secondaryTiles = fontAtlas.tex.value
-                    // TBD just by math in shader itself
+                    tileSize = Vec2i(spec.tileWidth, spec.tileHeight)
+                    tileSizeInTileMap = Vec2i(fontAtlas.tileWidth, fontAtlas.tileHeight)
                 }
             }
             scale(textWidth, textHeight, 1f)
@@ -113,10 +106,8 @@ class TextView(val text: MutableStateValue<String>,
         field = Texture2d(simpleValueTextureProps, drawFromBuffer(text.value))
         fieldSize = Vec2f(text.value.length.toFloat(), 1f)
         tiles = fontAtlas.tex.value
-//        tileSize = Vec2i(fontAtlas.getFrame(0).w, fontAtlas.getFrame(0).z)
-        fontAtlas.tileCoords.forEachIndexed { index, vec2i ->
-            this.tileFrames[index] = MutableVec2f(vec2i.x.toFloat(), vec2i.y.toFloat())
-        }
+        tileSize = fontAtlas.getTileSize()
+        tileSizeInTileMap = Vec2i(fontAtlas.tileWidth, fontAtlas.tileHeight)
     }
 
     init {
@@ -138,7 +129,9 @@ class TextView(val text: MutableStateValue<String>,
                 }
 //                rebuildMeshes() // if dims are diff
                 updateShader() // only text
-                dirty = false
+
+                // hack to wait loading, no loadAndPrepare for tex3d in lib
+                dirty = tileMapShader.tileSizeInTileMap.x == 0
             }
         }
 

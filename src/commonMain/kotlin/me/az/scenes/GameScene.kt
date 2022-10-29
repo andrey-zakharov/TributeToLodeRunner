@@ -3,7 +3,6 @@ package me.az.scenes
 import AnimationFrames
 import App
 import AppContext
-import GapsSpec
 import ImageAtlas
 import ImageAtlasSpec
 import LevelView
@@ -22,7 +21,6 @@ import de.fabmax.kool.scene.animation.LinearAnimator
 import de.fabmax.kool.util.Color
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import me.az.ilode.Game
 import me.az.ilode.GameLevel
@@ -104,14 +102,13 @@ open class GameScene(val game: Game,
     protected val sounds = SoundPlayer(assets)
 
     suspend fun reload(newts: TileSet) {
-        val newSpecWithGap = ImageAtlasSpec(tileset = newts, gap = GapsSpec(0, 0, newts.tileMarginX, newts.tileMarginY))
         val newSpec = ImageAtlasSpec(tileset = newts)
         // awaitAll
-        tilesAtlas.load(newSpecWithGap, assets)
-        runnerAtlas.load(newSpec, assets)
-        guardAtlas.load(newSpec, assets)
-        holeAtlas.load(newSpec, assets)
-        fontAtlas.load(newSpec, assets)
+        tilesAtlas.load(newts, assets)
+        runnerAtlas.load(newts, assets)
+        guardAtlas.load(newts, assets)
+        holeAtlas.load(newts, assets)
+        fontAtlas.load(newts, assets)
 
         runnerAnims.loadAnimations(newSpec, assets)
         guardAnims.loadAnimations(newSpec, assets)
@@ -127,11 +124,11 @@ open class GameScene(val game: Game,
     }
     override suspend fun loadResources(assets: AssetManager, ctx: KoolContext) = with(assets) {
         val newSpec = ImageAtlasSpec(tileset = appContext.spriteMode.value)
-        tilesAtlas.load(newSpec, this)
-        runnerAtlas.load(newSpec, this)
-        guardAtlas.load(newSpec, this)
-        holeAtlas.load(newSpec, this)
-        fontAtlas.load(newSpec, this)
+        tilesAtlas.load(appContext.spriteMode.value, this)
+        runnerAtlas.load(appContext.spriteMode.value, this)
+        guardAtlas.load(appContext.spriteMode.value, this)
+        holeAtlas.load(appContext.spriteMode.value, this)
+        fontAtlas.load(appContext.spriteMode.value, this)
 
         runnerAnims.loadAnimations(newSpec, this)
         guardAnims.loadAnimations(newSpec, this)
@@ -190,7 +187,7 @@ open class GameScene(val game: Game,
 
         cameraController?.run {
             this@GameScene += this
-            levelView?.run { startTrack(game, this@run, runnerView) }
+            levelView?.also { startTrack(game, it, it.runnerView) }
         }
 
         // minimap TBD

@@ -3,6 +3,7 @@ import de.fabmax.kool.platform.Lwjgl3Context
 
 suspend fun main() {
     println(System.getProperty("java.version"))
+    0u.toUByte() and 1u
     val assetsDir = "assets"
     val title = "Tribute to Lode Runner by Andrey Zakharov 2022"
     val ctx = /*try {
@@ -14,7 +15,7 @@ suspend fun main() {
         }
     } catch (e: java.lang.Exception) {*/
         createContext {
-            assetsBaseDir = assetsDir
+            localAssetPath = assetsDir
             renderBackend = Lwjgl3Context.Backend.OPEN_GL
             this.title = title
 //        customFonts += "text" to "fonts/daugsmith/daugsmith.ttf"

@@ -102,21 +102,22 @@ class GameLevelScene (
 
     fun setupUi(scope: UiScope) = with(scope) {
         modifier
-            .width(Grow(1f, max = WrapContent))
-            .height(WrapContent)
+            .width(Grow(1f, max = FitContent))
+            .height(FitContent)
             .margin(start = 25.dp, top = 25.dp, bottom = 60.dp)
             .layout(ColumnLayout)
             .alignX(AlignmentX.End)
             .alignY(AlignmentY.Bottom)
-        Row {
-            Text(debug.use()) {
-                modifier
-                    .width(WrapContent)
-                    .height(WrapContent)
-                onUpdate += {
-                    with(game) {
-                        debug.set(
-                            """
+        Panel {
+            Row {
+                Text(debug.use()) {
+                    modifier
+                        .width(FitContent)
+                        .height(FitContent)
+                    onUpdate += {
+                        with(game) {
+                            debug.set(
+                                """
                                 global runner center = %.1f x %.1f
                                 camera = %.1f/%.1f x %.1f/%.1f
                                 act = %s
@@ -127,28 +128,33 @@ class GameLevelScene (
                                 level.gold=%d
                                
                                 %s""".trimIndent()
-                            .format(
-                                levelView?.runnerView?.globalCenter?.x, levelView?.runnerView?.globalCenter?.y,
-                                off?.camera?.position?.x, camera.position.x, off?.camera?.position?.y, camera.position.y,
-                                level?.act?.get(runner.x)?.get(runner.y) ?: "<no level>",
-                                level?.isBarrier(runner.x, runner.y) ?: false,
-                                level?.hasGuard(runner.x, runner.y + 1) ?: false,
-                                level?.run { runner.canMoveDown } ?: false,
-                                guards.joinToString(" ") { it.hasGold.toString() },
-                                level?.gold ?: 0,
-                                runner.toString()
+                                    .format(
+                                        levelView?.runnerView?.globalCenter?.x,
+                                        levelView?.runnerView?.globalCenter?.y,
+                                        off?.camera?.position?.x,
+                                        camera.position.x,
+                                        off?.camera?.position?.y,
+                                        camera.position.y,
+                                        level?.act?.get(runner.x)?.get(runner.y) ?: "<no level>",
+                                        level?.isBarrier(runner.x, runner.y) ?: false,
+                                        level?.hasGuard(runner.x, runner.y + 1) ?: false,
+                                        level?.run { runner.canMoveDown } ?: false,
+                                        guards.joinToString(" ") { it.hasGold.toString() },
+                                        level?.gold ?: 0,
+                                        runner.toString()
+                                    )
                             )
-                        )
+                        }
                     }
                 }
             }
+            Row { LabeledSwitch("stop animations", game.stopAnims) }
+            Row { LabeledSwitch("stop guards", appContext.stopGuards) }
+            Row { LabeledSwitch("immortal", appContext.immortal) }
         }
-        Row {LabeledSwitch("stop animations", game.stopAnims) }
-        Row {LabeledSwitch("stop guards", appContext.stopGuards) }
-        Row {LabeledSwitch("immortal", appContext.immortal) }
     }
 
-    fun TextScope.labelStyle(width: Dimension = WrapContent) {
+    fun TextScope.labelStyle(width: Dimension = FitContent) {
         modifier
             .width(width)
             .align(yAlignment = AlignmentY.Center)

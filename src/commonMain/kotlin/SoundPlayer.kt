@@ -13,7 +13,10 @@ interface AudioContext {
     fun play()
     fun stop()
 }
-
+// interface SoundSource {
+// clips: list
+// SoundPlayer. addSource
+// source.playingClips...
 class SoundPlayer(private val assets: AssetManager) {
     private val sounds = mutableMapOf<String, AudioClip>()
 
@@ -27,13 +30,10 @@ class SoundPlayer(private val assets: AssetManager) {
             val ext = ((it.value as JsonObject)["type"] as JsonPrimitive).content
             it.key to assets.loadAudioClip("$soundsDir/$name.$ext")
         }.toMap())
-
-        sounds.forEach { (name, clip) ->
-
-        }
     }
 
     fun playSound(s: String, looped: Boolean = false, playSingle: Boolean = true) {
+//        println("playing $s ${sounds[s]}")
         sounds[s]?.run {
             if ( playSingle && !isEnded ) return
             if ( !isEnded ) stop() // or put over

@@ -295,7 +295,7 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
                     val version = "$Version by Andrey Zakharov"
                     +textView(version, fontAtlas, currentSpriteSet, version.length) {
 //                        translate(10f, currentSpriteSet.value.tileHeight.toFloat() / 2f , 0f)
-                        scale(currentSpriteSet.value.tileWidth / 2f, currentSpriteSet.value.tileHeight / 2f, 1f)
+                        scale(conf.tileSize.x / 2f, conf.tileSize.y / 2f, 1f)
                         translate(-(version.length/ 2f), 0f, 0f)
                     }
 

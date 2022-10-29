@@ -308,9 +308,9 @@ class GameLevel(
         println("creating level $levelId $width x $height")
         println("from map:")
         println(map.joinToString("\n"))
-
         reset()
     }
+
     fun update(runner: Runner) {
 //        anims.takeIf { it.isNotEmpty() }?.run { println(this) }
         val iter = anims.iterator()
