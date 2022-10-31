@@ -19,9 +19,11 @@ class GameUI(val game: Game,
     private var fontAtlas: ImageAtlas = ImageAtlas("text") // sub to update
 
     private val spec = mutableStateOf(ImageAtlasSpec(tileset = gameSettings.spriteMode.value))
+    private var dirty = true
 
     override suspend fun loadResources(assets: AssetManager, ctx: KoolContext) {
         fontAtlas.load(tileSet.value, assets)
+        dirty = true
     }
 
     private fun Game.getStatusText(): String {
@@ -31,12 +33,22 @@ class GameUI(val game: Game,
         return "score$scores men$lives level$level"
     }
 
+
     private val statusText = mutableStateOf(game.getStatusText())
 
     init {
         // ui camera
         camera = App.createCamera( conf.visibleWidth, conf.visibleHeight )
         mainRenderPass.clearColor = null
+        gameSettings.score.onChange {
+            dirty = true
+        }
+        gameSettings.currentLevel.onChange {
+            dirty = true
+        }
+        gameSettings.runnerLifes.onChange {
+            dirty = true
+        }
     }
     override fun setup(ctx: KoolContext) {
 //        +StatusView(game, StringDrawer(fontAtlas, spec, TextView.fontMap, TextView.fontMap[' ']!!))
@@ -45,8 +57,11 @@ class GameUI(val game: Game,
             translate(-(statusText.value.length / 2f), 0f, 0f)
         }
 
-        game.onPlayGame += { g, _ ->
-            statusText.set( g.getStatusText() )
+        onUpdate += {
+            if ( dirty ) {
+                statusText.set(game.getStatusText())
+                dirty = false
+            }
         }
     }
 }
