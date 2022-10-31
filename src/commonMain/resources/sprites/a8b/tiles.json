@@ -1,38 +1,14 @@
-{"frames": {
-"solid":
 {
-	"frame": {"x":0 ,"y":0,"w":20,"h":22}
-},
-"brick":
-{
-	"frame": {"x":23 ,"y":0,"w":20,"h":22}
-},
-"empty":
-{
-	"frame": {"x":0 ,"y":25,"w":20,"h":22}
-},
-"gold":
-{
-	"frame": {"x":23 ,"y":25,"w":20,"h":22}
-},
-"ground":
-{
-	"frame": {"x":46 ,"y":50,"w":20,"h":10}
-},
-"hladder":
-{
-	"frame": {"x":46 ,"y":0,"w":20,"h":22}
-},
-"ladder":
-{
-	"frame": {"x":46 ,"y":25,"w":20,"h":22}
-},
-"rope":
-{
-	"frame": {"x":0 ,"y":50,"w":20,"h":22}
-},
-"trap":
-{
-	"frame": {"x":23 ,"y":50,"w":20,"h":22}
-}}
+	"geom": { "cols": 3, "rows": 3 },
+	"frames": {
+		"solid": 0,
+		"brick": 1,
+		"hladder": 2,
+		"empty": 3,
+		"gold": 4,
+		"ladder": 5,
+		"rope": 6,
+		"trap": 7,
+		"ground": 8
+	}
 }

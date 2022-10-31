@@ -79,7 +79,7 @@ data class ViewCell (
 ) {
     val pack: Byte get() {
         var b: UInt = 0u
-        b = b.packHole(hole)
+        //b = b.packHole(hole)
         b = b.packFrameNum(frameNum)
         return b.toByte()
     }
@@ -87,7 +87,7 @@ data class ViewCell (
     companion object {
         fun unpack(b: Byte) = with(b.toUInt()) {
             ViewCell(
-                unpackHole(),
+                false,
                 unpackFrameNum()
             )
         }

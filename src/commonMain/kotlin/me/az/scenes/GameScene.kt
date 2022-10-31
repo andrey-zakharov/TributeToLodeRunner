@@ -92,7 +92,6 @@ open class GameScene(val game: Game,
     protected var tilesAtlas = ImageAtlas("tiles")
     protected var runnerAtlas = ImageAtlas("runner")
     protected var guardAtlas = ImageAtlas("guard")
-    protected var holeAtlas = ImageAtlas("hole")
     protected var fontAtlas = ImageAtlas("text")
 
     protected var runnerAnims = AnimationFrames("runner")
@@ -107,7 +106,6 @@ open class GameScene(val game: Game,
         tilesAtlas.load(newts, assets)
         runnerAtlas.load(newts, assets)
         guardAtlas.load(newts, assets)
-        holeAtlas.load(newts, assets)
         fontAtlas.load(newts, assets)
 
         runnerAnims.loadAnimations(newSpec, assets)
@@ -127,7 +125,6 @@ open class GameScene(val game: Game,
         tilesAtlas.load(appContext.spriteMode.value, this)
         runnerAtlas.load(appContext.spriteMode.value, this)
         guardAtlas.load(appContext.spriteMode.value, this)
-        holeAtlas.load(appContext.spriteMode.value, this)
         fontAtlas.load(appContext.spriteMode.value, this)
 
         runnerAnims.loadAnimations(newSpec, this)
@@ -154,7 +151,6 @@ open class GameScene(val game: Game,
             level,
             conf,
             tilesAtlas,
-            holeAtlas,
             runnerAtlas,
             runnerAnims,
             guardAtlas,

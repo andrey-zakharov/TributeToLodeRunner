@@ -19,7 +19,6 @@ class LevelView(
     level: GameLevel,
     conf: ViewSpec,
     tilesAtlas: ImageAtlas,
-    holesAtlas: ImageAtlas,
     runnerAtlas: ImageAtlas,
     runnerAnims: AnimationFrames,
     guardAtlas: ImageAtlas,
