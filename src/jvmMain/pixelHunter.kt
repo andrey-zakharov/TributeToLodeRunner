@@ -335,9 +335,19 @@ sealed class Command( val match: List<Int>, private val command: AppContext.() -
 
     object WidthLess : Command(KEY_MINUS, {rowWidth -= 1})
     object WidthMore : Command(KEY_PLUS, {rowWidth += 1})
-//    object PageUp : Command(listOf(ESC, CSI, CSI_CURSOR_DOWN), {this.offset += this.rowWidth * bitsPerPixel / 8 })
-//    object PageDown : Command(listOf(ESC, CSI, CSI_CURSOR_DOWN), {this.offset += this.rowWidth * bitsPerPixel / 8 })
-//    object PageUp : Command(listOf(ESC))
+    class PageUp(private val term: Term) : Command(listOf(ESC) + "[5~".map { it.code }, {
+        val rowsPass = min( limitRows, term.height - 2 )
+        this.offset -= rowsPass * this.rowWidth * bitsPerPixel / 8
+    })
+    class PageDown(private val term: Term) : Command(listOf(ESC) + "[6~".map { it.code }, {
+        val rowsPass = min( limitRows, term.height - 2 )
+        this.offset += rowsPass * this.rowWidth * bitsPerPixel / 8
+    })
+    object ScrollStart : Command(listOf(ESC) + "[H~".map { it.code }, { offset = 0 })
+    class ScrollEnd(term: Term) : Command(listOf(ESC) + "[F~".map { it.code }, {
+        offset = -(term.height -2) * this.rowWidth * bitsPerPixel / 8
+    })
+
     object Exit : Command(listOf(ESC), command = { this.exit = true })
 }
 
@@ -352,6 +362,8 @@ fun redraw(term: Term, opts: AppContext, f: File) {
 
     //validate
     val fl = f.length().toInt() // hope files not too much
+    val h = term.height
+
     if ( opts.offset >= fl ) opts.offset -= fl
     if ( opts.offset < 0 ) opts.offset += fl
 
@@ -361,14 +373,15 @@ fun redraw(term: Term, opts: AppContext, f: File) {
     with(term) {
         clear()
         labeledValue("offset", opts.offset.toString().padStart(8, '0'))
+        val p = (opts.offset * 100 / fl).toInt()
+        print("($p%)")
         labeledValue("bits per pixel", opts.bitsPerPixel.toString())
         labeledValue("row width", opts.rowWidth.toString())
     }
 
     println()
 
-    val maxRows = min( opts.limitRows, term.height - 2 )
-//    println(maxRows)
+    val maxRows = min( opts.limitRows, h - 2 )
     val reader = f.inputStream()
     reader.skip(opts.offset.toLong())
 //println(f.readBytes().joinToString(", ") { it.toUByte().toString(2).padStart(8, '0') } )
@@ -376,9 +389,17 @@ fun redraw(term: Term, opts: AppContext, f: File) {
     val redPixels = reader.printSprite(
         opts.bitsPerPixel, opts.rowWidth, maxRows, opts.skipEmptyRows, opts.export
     )
-//    println("new offset = 0x${(opts.offset + (redPixels * opts.bitsPerPixel / 8)).toString(16)}")
-    print( term.withColor( term.withBackgroundColor(" PGUP, PGDN ", 7), 0) )
-    print( term.withColor("change offset by -1 page, +1 page", 7) )
+
+    val labeledHelp = fun(keys: String, lbl: String): Unit {
+        print( term.withColor( term.withBackgroundColor("$keys", 7), 0) )
+        print( term.withColor(" $lbl ", 7) )
+    }
+    labeledHelp("ARROWS", "move offset by +-1 col or row")
+    labeledHelp("/ *", "change bits per pixel")
+    labeledHelp("- +", "change row width")
+    labeledHelp("PGUP PGDN", "move offset by -1 page, +1 page")
+    labeledHelp("HOME END", "move offset to start or end")
+    labeledHelp("ESC", "exit")
 }
 
 @kotlin.ExperimentalUnsignedTypes
@@ -422,7 +443,9 @@ fun main(args: Array<String>) {
     val commands = listOf(
         Command.MoveLeft, Command.MoveRight, Command.MoveUp, Command.MoveDown,
         Command.BitsLess, Command.BitsMore,
-        Command.WidthLess, Command.WidthMore
+        Command.WidthLess, Command.WidthMore,
+        Command.PageUp(term), Command.PageDown(term),
+        Command.ScrollStart, Command.ScrollEnd(term)
     )
 
     var redraw = true
@@ -431,7 +454,8 @@ fun main(args: Array<String>) {
             if ( redraw ) { redraw( term, opts, f ); redraw = false }
 
             val r = read()
-            println("code=${r.toString(16)} (${r.toChar()})")
+//            println("code=${r.toString(16)} (${r.toChar()})")
+
             if ( commands.none { it.accept(opts, r) } ) {
                 Command.Exit.accept(opts, r)
             } else {
