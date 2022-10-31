@@ -9,6 +9,9 @@ import kotlin.math.*
 import kotlin.reflect.typeOf
 import kotlin.system.exitProcess
 
+val headerHeight = 1
+val footerHeight = 1
+val columnsPad = 3
 // kotlinc pixelHunter.kts -include-runtime -d pixelHunter.jar
 
 // factor and its degree
@@ -114,6 +117,7 @@ fun InputStream.printSprite(
     height: Int = 11,
     skipEmptyRows: Boolean = false,
     export: Boolean = false,
+    term: Term? = null, col: Int = 0,
 ): Int {
     val bytesWindow = 8.lcm( bitsPerPixel * width ) / 8
 //    println("window size in bytes = $bytesWindow")
@@ -138,8 +142,9 @@ fun InputStream.printSprite(
             return@forEach
         }
 
-        printedRows ++
+        if ( col > 0 ) term?.move(col, printedRows + me.az.headerHeight)
         println("$rowStr\u001b[0m")
+        printedRows ++
     }
     return redPixels
 }
@@ -147,7 +152,7 @@ fun InputStream.printSprite(
 fun Int.printPixel(export: Boolean = false): String =
     if ( export ) "${toString(10)}"
     else
-        if ( this == 0 ) " "
+        if ( this == 0 ) "\u001b[0m "
         // \u001b[47m
 //        else "\u001b[38;5;${this % 255}m${palette[1]}"
         else "\u001b[48;5;${this % 255}m "
@@ -255,6 +260,7 @@ sealed class Term {
     abstract fun clear()
     abstract fun withColor(s: String, c: Int): String
     abstract fun withBackgroundColor(s: String, c: Int): String
+    abstract fun move(x: Int, y: Int): Unit
     abstract val width: Int
     abstract val height: Int
 
@@ -271,6 +277,7 @@ sealed class Term {
         override val height get() = execAndOut("$TTY size").trim().split(" ")[0].toInt()
         override fun withColor(s: String, c: Int) = "\u001b[38;5;${c % 255}m$s\u001B[0m"
         override fun withBackgroundColor(s: String, c: Int) = "\u001b[48;5;${c % 255}m$s\u001B[0m"
+        override fun move(x: Int, y: Int) = print("\u001B[${y+1};${x+1}H")
     }
 }
 
@@ -301,23 +308,26 @@ enum class BitsPerPixel(val bits: Int) {
     // full color? TBD
 }
 
+enum class MatchResult { False, Maybe, True }
+
 sealed class Command( val match: List<Int>, private val command: AppContext.() -> Unit ) {
     constructor(code: Int, command: AppContext.() -> Unit) : this(listOf(code), command)
     private var matched = 0
-    fun accept(ctx: AppContext, char: Int): Boolean {
+    fun accept(ctx: AppContext, char: Int): MatchResult {
         if ( char == match[matched] ) {
             matched ++
         } else {
             matched == 0
-            return false
+            return MatchResult.False
         }
 
         if ( matched >= match.size ) {
             //match
             command.invoke(ctx)
             matched = 0
+            return MatchResult.True
         }
-        return true // part match and full match
+        return MatchResult.Maybe
     }
 
     object MoveLeft : Command(listOf(ESC, CSI, CSI_CURSOR_BACK), {this.offset -= 1 })
@@ -363,11 +373,12 @@ fun redraw(term: Term, opts: AppContext, f: File) {
     //validate
     val fl = f.length().toInt() // hope files not too much
     val h = term.height
+    val w = term.width
 
     if ( opts.offset >= fl ) opts.offset -= fl
     if ( opts.offset < 0 ) opts.offset += fl
 
-    if ( opts.rowWidth < 0 ) opts.rowWidth += term.width
+    if ( opts.rowWidth < 0 ) opts.rowWidth += w
     if ( opts.rowWidth >= fl ) opts.rowWidth -= fl
 
     with(term) {
@@ -381,14 +392,17 @@ fun redraw(term: Term, opts: AppContext, f: File) {
 
     println()
 
-    val maxRows = min( opts.limitRows, h - 2 )
+    val maxRows = min( opts.limitRows, h - headerHeight - footerHeight )
     val reader = f.inputStream()
     reader.skip(opts.offset.toLong())
+    val cols = (w + columnsPad) / (opts.rowWidth + columnsPad)
 //println(f.readBytes().joinToString(", ") { it.toUByte().toString(2).padStart(8, '0') } )
-
-    val redPixels = reader.printSprite(
-        opts.bitsPerPixel, opts.rowWidth, maxRows, opts.skipEmptyRows, opts.export
-    )
+    var redPixels = 0
+    for ( c in 0 until cols ) {
+        redPixels += reader.printSprite(
+            opts.bitsPerPixel, opts.rowWidth, maxRows, opts.skipEmptyRows, opts.export, term, c * (opts.rowWidth + columnsPad)
+        )
+    }
 
     val labeledHelp = fun(keys: String, lbl: String): Unit {
         print( term.withColor( term.withBackgroundColor("$keys", 7), 0) )
@@ -456,15 +470,18 @@ fun main(args: Array<String>) {
             val r = read()
 //            println("code=${r.toString(16)} (${r.toChar()})")
 
-            if ( commands.none { it.accept(opts, r) } ) {
+            val results = commands.map { it.accept(opts, r) }
+            if ( results.all { MatchResult.False == it } ) {
                 Command.Exit.accept(opts, r)
             } else {
-                redraw = true
+                if ( results.any { it == MatchResult.True } )
+                    redraw = true
             }
         }
     }
 
     term.restore()
+    println()
     exitProcess(0)
 //    return 0
 }
