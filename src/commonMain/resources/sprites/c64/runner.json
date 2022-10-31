@@ -1,4 +1,6 @@
-{"frames": {
+{
+  "geom": { "cols": 9, "rows": 2 },
+  "frames": {
 "runner_00":{"frame": {"x":0,"y":0,"w":20,"h":22}},
 "runner_01":{"frame": {"x":20,"y":0,"w":20,"h":22}},
 "runner_02":{"frame": {"x":40,"y":0,"w":20,"h":22}},

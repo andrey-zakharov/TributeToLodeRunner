@@ -8,6 +8,7 @@
     "gold": 4,
     "ladder": 5,
     "rope": 6,
-    "trap": 7
+    "trap": 7,
+    "ground": 0
   }
 }

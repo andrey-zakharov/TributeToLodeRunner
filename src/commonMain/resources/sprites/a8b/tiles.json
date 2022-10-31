@@ -1,5 +1,5 @@
 {
-	"geom": { "cols": 3, "rows": 3 },
+	"geom": { "cols": 7, "rows": 5 },
 	"frames": {
 		"solid": 0,
 		"brick": 1,
