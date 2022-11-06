@@ -22,7 +22,7 @@ class AppContext {
 
     var termWidth = 0 // cache
     var offset = 0 // live var
-    var bitsPerPixel = 4
+    var bitsPerPixel = BitsPerPixel.FOUR
     var rowWidth = 32
     var limitRows = Int.MAX_VALUE // but how many for export? to take snapshots....
     // ruler
@@ -82,7 +82,8 @@ fun List<UByte>.pixelStream(
     }
 
 }
-// or use colors for 1
+
+// parse bytes to pixels bypass "bits" phase.
 fun InputStream.pixelsStream(
     bytesWindow: Int = 32,
     bitsPerPixel: Int = 2
@@ -138,6 +139,33 @@ fun InputStream.pixelsStream(
     }
 }
 
+// or we could just make bits stream, and manipulate it by sequence operators
+fun InputStream.bitsStream() = sequence {
+    val windowBuff = ByteArray(1)
+    var currentByte = Int.MAX_VALUE
+    var currentBit = 0
+
+    while (true) {
+        if (currentByte >= windowBuff.size) {
+            //read  next chunk
+            if (read(windowBuff) <= 0) break
+//            if ( verbose )
+//                println("$bytesWindow WINDOW READ= ${windowBuff.joinToString(", ") { it.toUByte().toString(2).padStart(8, '0') } }")
+            currentByte = 0
+        }
+
+        val bit = (windowBuff[currentByte].toInt() ushr (8 - currentBit - 1)) and 0x01
+        yield(bit == 1)
+
+        currentBit ++
+
+        if (currentBit >= 8) {
+            currentByte++
+            currentBit = 0
+        }
+    }
+}
+
 sealed class SpritePrinter {
     abstract var printedRows: Int
     abstract var redPixels: Int
@@ -146,16 +174,15 @@ sealed class SpritePrinter {
     class TermPrinter(
         private val term: Term,
         private val skipEmptyRows: Boolean = false,
-        private val col: Int = 0) : SpritePrinter() {
+        private val pixelTermExport: (v: Int) -> String = BitsPerPixel.ONE::exportTerm,
+        private val col: Int = 0
+    ) : SpritePrinter() {
 
         override var printedRows = 0
         override var redPixels = 0
 
         override fun visitRow(y: Int, row: List<Int>) {
-            val rowStr = row.map {
-                if ( it == 0 ) "\u001b[0m "
-                else "\u001b[48;5;${it % 255}m "
-            }.joinToString("")
+            val rowStr = row.joinToString("", transform = pixelTermExport)
 
             redPixels += row.size
 
@@ -188,25 +215,50 @@ sealed class SpritePrinter {
     }
 }
 
+val List<Boolean>.int get() = foldIndexed(0) { i, acc, v -> acc or (v.int shl (size - i - 1)) }
+val Boolean.int get() = if ( this ) 1 else 0
+
 // returns pixels red
 fun InputStream.printSprite(
     printer: SpritePrinter,
-    bitsPerPixel: Int = 2,
+    bitsPerPixel: BitsPerPixel = BitsPerPixel.TWO,
     width: Int = 12,
     height: Int = 11,
 ): Int {
-    val stream = pixelsStream(
-        bytesWindow = 8.lcm( bitsPerPixel * width ) / 8,
-        bitsPerPixel = bitsPerPixel
-    )
 
-    // BYTE ORDER????
+    if ( bitsPerPixel == BitsPerPixel.RGB1 ) {
+        sequence {
+            val bitsPerChannel = 1
+            bitsStream().takeWhile { printer.printedRows < height }.chunked(8).chunked(3).forEach {
+//                println(it.joinToString { it.joinToString("") { it.int.toString(2).padStart(2, '0') } })
+                for( px in 0 until 8) {
+                    val r = it[0][px].int shl (bitsPerChannel * 2)
+                    val g = it[1][px].int shl (bitsPerChannel)
+                    val b = it[2][px].int
+//                    println("px=$px r=$r b=$b g=$g val=${r or g or b}")
+                    yield( r or g or b)
+                }
+            }
+        }.chunked(width).forEachIndexed { y, row ->
+            printer.visitRow(y, row)
+        }
+        return 0
+    } else {
 
-    stream.takeWhile { printer.printedRows < height }.chunked(width).forEachIndexed { y, row ->
-        printer.visitRow(y, row)
+        val stream = pixelsStream(
+            bytesWindow = 8.lcm(bitsPerPixel.bits * width) / 8,
+            bitsPerPixel = bitsPerPixel.bits
+        )
+
+        // BYTE ORDER????
+
+        stream.takeWhile { printer.printedRows < height }.chunked(width).forEachIndexed { y, row ->
+            printer.visitRow(y, row)
+        }
+        return printer.redPixels
     }
-    return printer.redPixels
 }
+
 val palettes = mapOf(
     BitsPerPixel.ONE.bits to mapOf(
         0 to "0, 0, 0",
@@ -278,8 +330,8 @@ fun File.dumpAppleImages(mark: ByteArray, bitsPerPixel: Int = 2, width: Int = 12
     println(p)
 }
 
-fun File.export(offset: Int, count: Int, bitsPerPixel: Int = 2, width: Int = 12, height: Int = 11) {
-    val bytesPerRow = 8.lcm( bitsPerPixel * width ) / 8
+fun File.export(offset: Int, count: Int, bitsPerPixel: BitsPerPixel = BitsPerPixel.TWO, width: Int = 12, height: Int = 11) {
+    val bytesPerRow = 8.lcm( bitsPerPixel.bits * width ) / 8
 
     for( i in 0 until count) {
         val reader = inputStream()
@@ -289,7 +341,7 @@ fun File.export(offset: Int, count: Int, bitsPerPixel: Int = 2, width: Int = 12,
         val f = File("$t.txt")
 
         f.printWriter().use {
-            val exporter = SpritePrinter.ImageMagickExporter(it, width, height,palettes[bitsPerPixel]!!)
+            val exporter = SpritePrinter.ImageMagickExporter(it, width, height, palettes[bitsPerPixel.bits]!!)
             reader.printSprite(
                 exporter, bitsPerPixel, width, height
             )
@@ -338,9 +390,31 @@ enum class BitsPerPixel(val bits: Int) {
     FIFTEEN(15),
     SIXTEEN(16),
     EIGHTEEN(18),
+    RGB1(3) {
+        private fun toRgb(v: Int) = listOf (
+            if ((v ushr 2) == 1) 255 else 0,
+            if ((v ushr 1) and 0x01 == 1) 255 else 0,
+            if ((v and 0x01) == 1) 255 else 0
+        )
+        override fun exportRgb(v: Int) = toRgb(v).joinToString(", ")
+        override fun exportTerm(v: Int) = with(toRgb(v)) { "\u001b[48;2;${get(1)};${get(2)};${get(0)} m " }
+    }, // 1bit per pixel over 3 bytes
     RGB24(24),
     RGB30(30)
     // full color? TBD
+    ;
+    open fun exportTerm(v: Int) = if ( v == 0 ) "\u001b[0m " else "\u001b[48;5;${v % 255}m "
+    open fun exportRgb(v: Int) = palettes[FOUR.bits]!![v % FOUR.bits]!!
+    companion object {
+        fun decodeArg(a: String): BitsPerPixel {
+            val bits = a.toIntOrNull()
+            return if ( bits != null ) {
+                BitsPerPixel.values().first { it.bits == bits }
+            } else {
+                BitsPerPixel.valueOf(a.uppercase())
+            }
+        }
+    }
 }
 
 enum class MatchResult { False, Maybe, True }
@@ -367,30 +441,30 @@ sealed class Command( val match: List<Int>, private val command: AppContext.() -
 
     object MoveLeft : Command(listOf(ESC, CSI, CSI_CURSOR_BACK), {this.offset -= 1 })
     object MoveRight : Command(listOf(ESC, CSI, CSI_CURSOR_FORWARD), {this.offset += 1 })
-    object MoveUp : Command(listOf(ESC, CSI, CSI_CURSOR_UP), {this.offset -= this.rowWidth * bitsPerPixel / 8 })
-    object MoveDown : Command(listOf(ESC, CSI, CSI_CURSOR_DOWN), {this.offset += this.rowWidth * bitsPerPixel / 8 })
+    object MoveUp : Command(listOf(ESC, CSI, CSI_CURSOR_UP), {this.offset -= this.rowWidth * bitsPerPixel.bits / 8 })
+    object MoveDown : Command(listOf(ESC, CSI, CSI_CURSOR_DOWN), {this.offset += this.rowWidth * bitsPerPixel.bits / 8 })
     object BitsLess : Command(KEY_SLASH, {
-        val v = BitsPerPixel.values().indexOfFirst { it.bits == bitsPerPixel }
-        bitsPerPixel = BitsPerPixel.values()[ (v - 1).mod( BitsPerPixel.values().size  ) ].bits
+        val v = bitsPerPixel.ordinal
+        bitsPerPixel = BitsPerPixel.values()[ (v - 1).mod( BitsPerPixel.values().size  ) ]
     } )
     object BitsMore : Command(KEY_ASTERIX, {
-        val v = BitsPerPixel.values().indexOfFirst { it.bits == bitsPerPixel }
-        bitsPerPixel = BitsPerPixel.values()[ (v + 1).mod( BitsPerPixel.values().size  ) ].bits
+        val v = bitsPerPixel.ordinal
+        bitsPerPixel = BitsPerPixel.values()[ (v + 1).mod( BitsPerPixel.values().size  ) ]
     } )
 
     object WidthLess : Command(KEY_MINUS, {rowWidth -= 1})
     object WidthMore : Command(KEY_PLUS, {rowWidth += 1})
     class PageUp(private val term: Term) : Command(listOf(ESC) + "[5~".map { it.code }, {
         val rowsPass = min( limitRows, term.height - 2 )
-        this.offset -= calcColCount * rowsPass * this.rowWidth * bitsPerPixel / 8
+        this.offset -= calcColCount * rowsPass * this.rowWidth * bitsPerPixel.bits / 8
     })
     class PageDown(private val term: Term) : Command(listOf(ESC) + "[6~".map { it.code }, {
         val rowsPass = min( limitRows, term.height - 2 )
-        this.offset += calcColCount * rowsPass * this.rowWidth * bitsPerPixel / 8
+        this.offset += calcColCount * rowsPass * this.rowWidth * bitsPerPixel.bits / 8
     })
     object ScrollStart : Command(listOf(ESC) + "[H~".map { it.code }, { offset = 0 })
     class ScrollEnd(term: Term) : Command(listOf(ESC) + "[F~".map { it.code }, {
-        offset = -(term.height -2) * this.rowWidth * bitsPerPixel / 8
+        offset = -(term.height -2) * this.rowWidth * bitsPerPixel.bits / 8
     })
 
     object Exit : Command(listOf(ESC), command = { this.exit = true })
@@ -434,7 +508,7 @@ fun redraw(term: Term, opts: AppContext, f: File) {
     var redPixels = 0
     for ( c in 0 until cols ) {
         redPixels += reader.printSprite(
-            SpritePrinter.TermPrinter(term, opts.skipEmptyRows, c * (opts.rowWidth + columnsPad)),
+            SpritePrinter.TermPrinter(term, opts.skipEmptyRows, opts.bitsPerPixel::exportTerm, col = c * (opts.rowWidth + columnsPad)),
             opts.bitsPerPixel, opts.rowWidth, maxRows
         )
     }
@@ -483,7 +557,7 @@ fun main(args: Array<String>) {
                     f.export(
                         Integer.decode(args[2]),
                         Integer.decode(args[3]),
-                        Integer.decode(args[4]),
+                        BitsPerPixel.decodeArg(args[4]),
                         Integer.decode(args[5]),
                         Integer.decode(args[6]),
                     )
@@ -500,7 +574,7 @@ fun main(args: Array<String>) {
 
     val opts = AppContext().apply {
         rowWidth = try { Integer.decode(args[1]) } catch (e: Exception) {32} // in "pixels"
-        bitsPerPixel = if ( args.size > 2) Integer.decode(args[2]) else 4 //
+        bitsPerPixel = if ( args.size > 2) BitsPerPixel.decodeArg(args[2]) else BitsPerPixel.FOUR //
         offset = if ( args.size > 3 ) Integer.decode(args[3]) else 0
         limitRows = if ( args.size > 4 ) Integer.decode(args[4]) else Int.MAX_VALUE
         skipEmptyRows = if ( args.size > 5 ) args[5].toBoolean() else false
@@ -550,12 +624,12 @@ fun tests() {
 //    fun print(vararg a: UByte) = ubyteArrayOf(*a).inputStream().
     val term = Term.Posix()
 
-    ubyteArrayOf(0x5du, 0x00u).inputStream().printSprite(SpritePrinter.TermPrinter(term), 1, 3, 3)
+    ubyteArrayOf(0x5du, 0x00u).inputStream().printSprite(SpritePrinter.TermPrinter(term), BitsPerPixel.ONE, 3, 3)
     println()
-    ubyteArrayOf(0x1bu, 0x6fu, 0xbcu, 0xf0u).inputStream().printSprite(SpritePrinter.TermPrinter(term), 2, 4, 4)
+    ubyteArrayOf(0x1bu, 0x6fu, 0xbcu, 0xf0u).inputStream().printSprite(SpritePrinter.TermPrinter(term), BitsPerPixel.TWO, 4, 4)
     println()
     ubyteArrayOf(0x01u, 0x23u, 0x45u, 0x67u, 0x89u, 0xabu, 0xcdu, 0xefu).inputStream().printSprite(SpritePrinter.TermPrinter(term),
-        4, 4, 4
+        BitsPerPixel.FOUR, 4, 4
     )
     println()
 
@@ -566,9 +640,13 @@ fun tests() {
         0xe3u, 0x8eu, 0x38u,
         0x1cu, 0x71u, 0xc7u)
 
-    d.inputStream().printSprite(SpritePrinter.TermPrinter(term), 3, 8, 5)
+    d.inputStream().printSprite(SpritePrinter.TermPrinter(term), BitsPerPixel.THREE, 8, 5)
     println()
+    expect { listOf(true, false, true).int.toString(2) == "101" }
+    expect { listOf(true, true, true, false, false, true, true, false).int.toString(2) == "11100110" }
 }
+
+internal fun expect(v: () -> Boolean) = if ( !v() ) throw AssertionError("expect") else Unit
 const val ESC = 0x1b
 const val CSI = 0x5b
 const val CSI_CURSOR_UP = 'A'.code
