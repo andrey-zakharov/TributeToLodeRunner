@@ -1,11 +1,33 @@
 package me.az
 // sudo aptitude install coreutils
+// color rgb term required for searching
+// export require imagemagick 'convert'
+//
+//  ██████╗ ██╗██╗  ██╗███████╗██╗     ██╗  ██╗██╗   ██╗███╗   ██╗████████╗███████╗██████╗
+//  ██╔══██╗██║╚██╗██╔╝██╔════╝██║     ██║  ██║██║   ██║████╗  ██║╚══██╔══╝██╔════╝██╔══██╗
+//  ██████╔╝██║ ╚███╔╝ █████╗  ██║     ███████║██║   ██║██╔██╗ ██║   ██║   █████╗  ██████╔╝
+//  ██╔═══╝ ██║ ██╔██╗ ██╔══╝  ██║     ██╔══██║██║   ██║██║╚██╗██║   ██║   ██╔══╝  ██╔══██╗
+//  ██║     ██║██╔╝ ██╗███████╗███████╗██║  ██║╚██████╔╝██║ ╚████║   ██║   ███████╗██║  ██║
+//  ╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ╚══════╝╚═╝  ╚═╝
+//
+// compile: kotlinc pixelHunter.kts -include-runtime -d pixelHunter.jar
+// run: java -cp pixelHunter.jar:kotlin-stdlib.jar me.az.PixelHunterKt $* (tool ./run.sh)
+//
+// Tool to search, analyse and export 1, 2, 4, etc.-bit sprites from old-old games for Apple ][, NEC series, IBM, etc..
+// Better results could be archived, when converting floppy or hdd image to "raw" data binary image without any
+// sectors marks, etc.
+// Usage (subject of change): pixelHunter <file> <sprite width> <bit per pixel> <offset> <limit rows> <skip empty rows>
+// keyboard
+// 2022 by Andrey Zakharov /aazaharov81+pixelhunter@gmail.com/, CC BY-NC-SA 4.0
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
 import java.io.PrintWriter
-import java.lang.Exception
 import java.nio.charset.StandardCharsets
-import kotlin.math.*
+import kotlin.math.ceil
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.pow
 import kotlin.system.exitProcess
 
 const val headerHeight = 1
@@ -15,7 +37,6 @@ const val columnsPad = 3
 const val lblColor = 14
 const val valColor = 2
 var verbose = false
-// kotlinc pixelHunter.kts -include-runtime -d pixelHunter.jar
 
 class AppContext {
     val calcColCount get() = (termWidth + columnsPad) / (rowWidth + columnsPad)
@@ -27,7 +48,6 @@ class AppContext {
     var limitRows = Int.MAX_VALUE // but how many for export? to take snapshots....
     // ruler
     var skipEmptyRows = false
-    var export = false
     var exit = false
 }
 
@@ -56,32 +76,6 @@ fun Int.lcm(o: Int): Int {
 }
 
 val Map<Int, Int>.factor get() = entries.fold(1) { r, e -> r * e.key.toFloat().pow( e.value ).toInt() }
-
-@ExperimentalUnsignedTypes
-fun List<UByte>.pixelStream(
-    bitsPerPixel: Int = 2
-) = sequence {
-
-    val mask = (2f.pow( bitsPerPixel ) - 1).toUInt()
-    var currentByte = 0
-    var currentShift = 0
-    var currentMask = (mask shl (8 - bitsPerPixel)).toUByte()
-
-    while( currentByte < size ) {
-        val f = this@pixelStream[currentByte] and currentMask
-        val res = f.toInt() shr (8 - currentShift - bitsPerPixel)
-        yield( res )
-
-        currentMask = (currentMask.toInt() shr bitsPerPixel).toUByte()
-        currentShift += bitsPerPixel
-        if ( currentShift >= 8 ) { // byte border TBD for 3 bits per pixel!
-            ++currentByte
-            currentShift = 0
-            currentMask = (mask shl (8 - bitsPerPixel)).toUByte()
-        }
-    }
-
-}
 
 // parse bytes to pixels bypass "bits" phase.
 fun InputStream.pixelsStream(
@@ -197,7 +191,7 @@ sealed class SpritePrinter {
     }
 
     class ImageMagickExporter(private val out: PrintWriter, width: Int, height: Int,
-                              private val palette: Map<Int, String>): SpritePrinter() {
+                              private val palette: (Int) -> String): SpritePrinter() {
         override var printedRows: Int = 0
         override var redPixels: Int = 0
 
@@ -207,7 +201,7 @@ sealed class SpritePrinter {
 
         override fun visitRow(y: Int, row: List<Int>) {
             row.forEachIndexed { x, p ->
-                out.println("$x,$y: (${palette[p]})")
+                out.println("$x,$y: (${palette(p)})")
             }
             redPixels + row.size
             printedRows ++
@@ -272,63 +266,49 @@ val palettes = mapOf(
     )
 )
 
-@ExperimentalUnsignedTypes
-fun File.dumpAppleImages(mark: ByteArray, bitsPerPixel: Int = 2, width: Int = 12, height: Int = 11, export: Boolean = false) {
+// export to png
+fun InputStream.exportSprite(baseName: String, bitsPerPixel: BitsPerPixel = BitsPerPixel.TWO, width: Int = 12, height: Int = 11) {
+    File("$baseName.txt").printWriter().use {
+        val exporter = SpritePrinter.ImageMagickExporter(it, width, height, bitsPerPixel::exportRgb)
+        printSprite(exporter, bitsPerPixel, width, height)
+    }
+    execAndOut("convert -transparent black txt:$baseName.txt -define png:color-type=3 -define png:bit-depth=${bitsPerPixel.bits} -quality 100 $baseName.png")
+    if ( !verbose ) execAndOut("rm $baseName.txt")
+}
 
-    // apple dump
-    var p = 0
-    val b = readBytes().asUByteArray()
-    val m1 = 0x0b.toUByte()
-    val m2 = 0x03.toUByte()
+fun File.dumpByMark(mark: ByteArray, bitsPerPixel: BitsPerPixel, width: Int = 12, height: Int = 11, dryRun: Boolean = false) {
+    val b = readBytes()
+    var foundSprites = 0
 
-    for ( i in 0 until b.size - 1 ) {
-        if (b[i] == m1 && b[i+1] == m2) {
-            val px = b.slice( i + 2 until i + 2 + (width * height * bitsPerPixel / 8) )
-                .pixelStream(bitsPerPixel)
+    for ( i in 0 until b.size - mark.size ) {
+        val marked = mark.foldIndexed(true) { index, res, byte -> res && byte == b[i + index] }
+        if ( marked ) {
+            val data = b.sliceArray( i + mark.size until i + mark.size + (width * height * bitsPerPixel.bits / 8) )
+            val t = "${(i + mark.size).toString(16)}.${(foundSprites+1).toString(10).padStart(3, '0')}"
 
-//            val channels = Array(cga.size) { mutableListOf<Pair<Int, Int>>() }
-
-//            val resFile = File("${(i + 2).toString(16)}.png")
-            val resFile = File("${(i + 2).toString(16)}.txt")
-            println("\u001B[0m = Sprite #${p+1} (${(i + 2).toString(16)}) =")
-
-            // could not print at once. some imagemagick errors. draw each channel sep
-//            val closeFile = " -quality 100 ${resFile.name}"
-
-//            val openFile = "convert -size ${width}x$height xc:transparent $closeFile"
-
-            resFile.printWriter().use { out ->
-                out.println("# ImageMagick pixel enumeration: $width,$height,255,rgb")
-                px.chunked(width).mapIndexed { y, r ->
-                    r.forEachIndexed { x, p ->
-//                        if ( p == 0 ) return@forEachIndexed
-//                    channels[p].add(Pair(x, y))
-                       out.println("$x,$y: (${palettes[bitsPerPixel]!![p]})")
-                    }
-                }.toList()
+            if ( !dryRun ) {
+                ByteArrayInputStream(data).exportSprite(t, bitsPerPixel, width, height)
+            } else {
+                println("\u001B[0m = Sprite #${foundSprites+1} (${(i + mark.size).toString(16)}) =")
+                ByteArrayInputStream(data).printSprite(
+                    SpritePrinter.TermPrinter(Term.Posix(), pixelTermExport = bitsPerPixel::exportTerm), bitsPerPixel, width, height
+                )
             }
-
-            // for t in *.txt; do convert -transparent black txt:$t -define png:color-type=3 -define png:bit-depth=4 -quality 100 `basename $t .txt`.png; done
-            // convert -transparent black txt:ddc0.txt ddc0.png
-            // montage cf98.png cfbb.png cfde.png ca0d.png d06a.png d08d.png ccff.png cd22.png cd45.png cd68.png cd8b.png cdae.png cdae.left.png cdae.right.png cdd1.png cdd1.left.png cdd1.rigth.png cdf4.png ce17.png ce3a.png cec6.png cee9.png cf0c.png dc85.png dca8.png  -transparent white -geometry +0 -quality 100 out.png
-            // montage c8cf.png c93b.png c9c7.png c918.png c9ea.png c95e.png c981.png c9a4.png dd11.png dd34.png dd57.png dd7a.png dd9d.png ddc0.png dde3.png de06.png de29.png de4c.png dccb.png dcee.png dc3f.png dc62.png -transparent white -geometry +0 -quality 100 out.png
-//            Runtime.getRuntime().exec(openFile)
-//
-//            val command = channels.mapIndexed { color, cells ->
-//                "convert ${resFile.name} -fill \"#${cga[color]!!.toString(16).padStart(3, '0')}\" ${cells.map { (x, y) ->
-//                    "-draw 'point $x,$y'"
-//                }.joinToString(" ")} $closeFile"
-//            }.map {
-//                println(it)
-//                Runtime.getRuntime().exec(it)
-//            }
-
-            p++
-
+            foundSprites ++
         }
     }
-    println(p)
+
+    println("Exported $foundSprites sprites")
 }
+
+/// NEC
+// rgb1 mark = 0x0a 0x03 width=24 height = 10
+
+/// dumpAppleImages mark: ByteArray = 0x0b 0x03, bitsPerPixel = 2, width = 12, height = 11
+// for t in *.txt; do convert -transparent black txt:$t -define png:color-type=3 -define png:bit-depth=4 -quality 100 `basename $t .txt`.png; done
+// convert -transparent black txt:ddc0.txt ddc0.png
+// montage cf98.png cfbb.png cfde.png ca0d.png d06a.png d08d.png ccff.png cd22.png cd45.png cd68.png cd8b.png cdae.png cdae.left.png cdae.right.png cdd1.png cdd1.left.png cdd1.rigth.png cdf4.png ce17.png ce3a.png cec6.png cee9.png cf0c.png dc85.png dca8.png  -transparent white -geometry +0 -quality 100 out.png
+// montage c8cf.png c93b.png c9c7.png c918.png c9ea.png c95e.png c981.png c9a4.png dd11.png dd34.png dd57.png dd7a.png dd9d.png ddc0.png dde3.png de06.png de29.png de4c.png dccb.png dcee.png dc3f.png dc62.png -transparent white -geometry +0 -quality 100 out.png
 
 fun File.export(offset: Int, count: Int, bitsPerPixel: BitsPerPixel = BitsPerPixel.TWO, width: Int = 12, height: Int = 11) {
     val bytesPerRow = 8.lcm( bitsPerPixel.bits * width ) / 8
@@ -338,17 +318,10 @@ fun File.export(offset: Int, count: Int, bitsPerPixel: BitsPerPixel = BitsPerPix
         reader.skip((offset + i * bytesPerRow * height).toLong())
 
         val t = "${offset.toString(16)}.${(i+1).toString(10).padStart(3, '0')}"
-        val f = File("$t.txt")
-
-        f.printWriter().use {
-            val exporter = SpritePrinter.ImageMagickExporter(it, width, height, palettes[bitsPerPixel.bits]!!)
-            reader.printSprite(
-                exporter, bitsPerPixel, width, height
-            )
-        }
-        execAndOut("convert -transparent black txt:$t.txt -define png:color-type=3 -define png:bit-depth=$bitsPerPixel -quality 100 $t.png")
+        reader.exportSprite(t, bitsPerPixel, width, height)
     }
 }
+
 // stdout catch
 fun execAndOut(command:String): String {
     val p = Runtime.getRuntime().exec(command)
@@ -391,13 +364,15 @@ enum class BitsPerPixel(val bits: Int) {
     SIXTEEN(16),
     EIGHTEEN(18),
     RGB1(3) {
-        private fun toRgb(v: Int) = listOf (
+        private fun unpack(v: Int) = listOf (
             if ((v ushr 2) == 1) 255 else 0,
             if ((v ushr 1) and 0x01 == 1) 255 else 0,
             if ((v and 0x01) == 1) 255 else 0
         )
-        override fun exportRgb(v: Int) = toRgb(v).joinToString(", ")
-        override fun exportTerm(v: Int) = with(toRgb(v)) { "\u001b[48;2;${get(1)};${get(2)};${get(0)} m " }
+        //channel ordered messed, not r, g, b. looks like b, r, g
+        private fun toRgb(v: Int) = with(unpack(v)) { listOf( get(1), get(2), get(0) ) }
+        override fun exportRgb(v: Int) =  toRgb(v).joinToString(", ")
+        override fun exportTerm(v: Int) = with(toRgb(v)) { "\u001b[48;2;${get(0)};${get(1)};${get(2)} m " }
     }, // 1bit per pixel over 3 bytes
     RGB24(24),
     RGB30(30)
@@ -532,7 +507,7 @@ fun main(args: Array<String>) {
 //    println(args.joinToString(", "))
 
     if (args.isEmpty()) {
-        println("Usage: pixelHunter <file> <sprite width> <bit per pixel> <offset> <limit rows> <skip empty rows> <export>")
+        println("Usage: pixelHunter <file> <sprite width> <bit per pixel> <offset> <limit rows> <skip empty rows>")
         exitProcess(-1)
     }
 
@@ -547,13 +522,27 @@ fun main(args: Array<String>) {
     if ( args.size > 1 ) {
         when(args[1]) {
             "mark" -> {
-                val mark = ByteArray(2) { listOf(0x0b, 0x03)[it].toByte() }
-                //check
-                f.dumpAppleImages(mark, 2, 12, 11)
-                exitProcess(0)
+                try {
+                    val mark = ByteArray(ceil(args[2].length / 2f).toInt()) { i->
+                        args[2].substring(i*2, i*2+2).toInt(16).toByte()
+                    }
+//                val mark = ByteArray(2) { listOf(0x0b, 0x03)[it].toByte() }
+                    //check
+//                f.dumpAppleImages(mark, 2, 12, 11)
+                    f.dumpByMark(mark, BitsPerPixel.RGB1, 24, 10)
+                    exitProcess(0)
+                } catch (e: Throwable) {
+                    println("Error: $e")
+                    println("Usage: pixelHunter mark <mark as hex string e.g. 0b03> <offset> <bitsPerPixel> <sprite width> <sprite height>")
+                    e.printStackTrace()
+                    exitProcess(-1)
+                }
+
             }
+
             "export" -> {
                 try {
+
                     f.export(
                         Integer.decode(args[2]),
                         Integer.decode(args[3]),
@@ -578,7 +567,6 @@ fun main(args: Array<String>) {
         offset = if ( args.size > 3 ) Integer.decode(args[3]) else 0
         limitRows = if ( args.size > 4 ) Integer.decode(args[4]) else Int.MAX_VALUE
         skipEmptyRows = if ( args.size > 5 ) args[5].toBoolean() else false
-        export = if ( args.size > 6 ) args[6].toBoolean() else false
     }
 
     val term = Term.Posix()
