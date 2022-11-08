@@ -26,11 +26,12 @@ fun textView(text: String, fontAtlas: ImageAtlas,
     mutableStateOf(text), fontAtlas, imageAtlasSpec, capacity, init
 )
 
-class TextView(val text: MutableStateValue<String>,
-               private val fontAtlas: ImageAtlas,
-               spec: MutableStateValue<ImageAtlasSpec>,
-               capacity: Int = 1000,
-               init: TextView.() -> Unit = {}
+class TextView(
+    private val text: MutableStateValue<String>,
+    private val fontAtlas: ImageAtlas,
+    spec: MutableStateValue<ImageAtlasSpec>,
+    capacity: Int = 1000,
+    init: TextView.() -> Unit = {}
 ): Group() {
 
     private var dirty = true
@@ -63,8 +64,10 @@ class TextView(val text: MutableStateValue<String>,
         for ( c in string.lowercase() ) {
             buf.put((fontMap[c] ?: fallbackChar).toByte() and 0x7f)
         }
+//        val l = buf.position.nearestTwo
+//        while( buf.position < l ) buf.put(0)
         buf.flip()
-        return TextureData2d(buf, buf.limit.nearestTwo, 1, TexFormat.R)
+        return TextureData2d(buf, buf.limit, 1, TexFormat.R)
     }
 
     private var lastWidth = 0
