@@ -1,6 +1,7 @@
 package me.az.ilode
 
 import de.fabmax.kool.math.Vec2i
+import de.fabmax.kool.math.min
 import de.fabmax.kool.math.randomI
 import me.az.utils.format
 import kotlin.math.abs
@@ -78,6 +79,13 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
             (level.hasGuard(x, y + 1) && oy > game.getGuard(x, y + 1).oy)
     )
 
+    override val availableSpaceDown: Int
+        get() = if (level.hasGuard(x, y + 1)) min(game.getGuard(x, y + 1).oy - oy, yMove)
+            else super.availableSpaceDown
+
+    override val availableSpaceUp: Int
+        get() = if (level.hasGuard(x, y - 1)) min(oy - game.getGuard(x, y - 1).oy, yMove)
+            else super.availableSpaceUp
 
     fun updateGuard(runner: Runner) {
         if ( fsm.currentState is ActorState.ControllableState ) {

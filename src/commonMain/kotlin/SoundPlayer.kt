@@ -28,7 +28,9 @@ class SoundPlayer(private val assets: AssetManager) {
         sounds.putAll( (clipsObj["clips"] as JsonObject).map {
             val name = it.key
             val ext = ((it.value as JsonObject)["type"] as JsonPrimitive).content
-            it.key to assets.loadAudioClip("$soundsDir/$name.$ext")
+            name to assets.loadAudioClip("$soundsDir/$name.$ext").also { clip->
+                clip.masterVolume = 0.2f
+            }
         }.toMap())
     }
 

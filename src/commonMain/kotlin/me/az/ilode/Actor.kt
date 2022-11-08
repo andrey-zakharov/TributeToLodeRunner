@@ -74,15 +74,15 @@ sealed class Actor(val game: Game) : Controllable {
     var block = MutableVec2i(Vec2i.ZERO)
     var offset = MutableVec2i(Vec2i.ZERO)
     val level get() = game.level!!
-
+    // shortcuts
     val absolutePosX get() = block.x * TILE_WIDTH + offset.x
     val absolutePosY get() = block.y * TILE_HEIGHT + offset.y
     val x get() = block.x
     val y get() = block.y
     val ox get() = offset.x
     val oy get() = offset.y
-    val isLadder get() = level.isLadder(x, y)
-    val isBar get() = level.isBar(x, y)
+
+    //state
     var action: ActorSequence = ActorSequence.RunRight // sequence name
         set(v) {
             if ( field != v) {
@@ -108,7 +108,7 @@ sealed class Actor(val game: Game) : Controllable {
     // controls
     override val inputVec = MutableVec2i()
 
-    var nextMove = Action.ACT_NONE //left or right
+    var nextMove = Action.ACT_NONE // left or right
     // BAD BAD BAD but this is plan C, A & B failed
 
     // runner
@@ -128,6 +128,20 @@ sealed class Actor(val game: Game) : Controllable {
     // strict check is where needed
 
     open val onFallStop: (() -> Unit)? = null
+
+    // raycasting :)
+    open val availableSpaceDown get() =
+        if ( level.isBarrier(x, y) ) 0
+        else if (oy < -yMove) yMove
+            else if ( level.isPassableForDown(x, y + 1) ) yMove
+                else -oy // to center
+
+    open val availableSpaceUp get() =
+        if ( level.isBarrier(x, y) ) 0 // or -oy?
+        else if ( oy > yMove ) yMove
+            else if (!level.isBarrier(x, y - 1)) yMove
+                else -oy
+
     open val canMoveUp get() =
         (oy <= 0 && level.isLadder(x, y) && !level.isBarrier(x, y - 1)) || // in ladder
         (oy > 0 && level.isLadder(x, y + 1)) // at ladder
@@ -167,12 +181,13 @@ sealed class Actor(val game: Game) : Controllable {
             onEnter { animName?.run { actor.action = this } }
         }
 
-        fun Actor.centerX() {
+        fun Actor.centerX(delta: Float) {
+            val dx = (xMove * delta).toInt()
             if ( ox > 0 ) {
-                offset.x -= xMove
+                offset.x -= dx
                 if ( offset.x < 0) offset.x = 0 //move to center X
             } else if ( ox < 0 ) {
-                offset.x += xMove
+                offset.x += dx
                 if ( offset.x > 0) offset.x = 0 //move to center X
             }
         }
@@ -191,8 +206,11 @@ sealed class Actor(val game: Game) : Controllable {
         fun ActorState.BehaviorMoveDown(onCenter: (Actor.() -> String?)? = null) = apply {
             onUpdate {
 
-                offset.y += yMove
-                centerX()
+                val delta = availableSpaceDown
+                offset.y += delta
+                centerX(delta.toFloat() / yMove)
+                if ( delta == 0 ) return@onUpdate StopState.name
+
                 if (oy in 0 until yMove) { // bypass center on this tick
                     onCenter?.invoke(this)?.run {
                         // return new state
@@ -416,28 +434,6 @@ sealed class Actor(val game: Game) : Controllable {
             }
         }
 
-        class MoveLeftState(actor: Actor) : CompoundState<String, Actor>(name) {
-            companion object {
-                const val name = "moveleft"
-            }
-
-            override val internalFsm by lazy {
-                buildStateMachine(ActorSequence.RunLeft.id) {
-                    this += MoveLeft.RunLeft(actor)
-                    this += MoveLeft.BarLeft(actor)
-                }
-            }
-
-            init {
-                onEnter {
-
-                    println("enter")
-                }
-            }
-
-
-        }
-
         // bar and simple walk
         sealed class MoveLeft(actor: Actor, animName: ActorSequence ) : MovementState(actor, animName) {
 
@@ -472,7 +468,9 @@ sealed class Actor(val game: Game) : Controllable {
                     centerY()
                     if ( ox > 0 ) return@onUpdate null
                     if ( !canMoveLeft ) {
-                        offset.x = 0
+                        offset.x = if ( level.hasGuard( x - 1, y ) && ox < game.getGuard(x - 1, y).ox )
+                            game.getGuard(x - 1, y).ox
+                        else 0
                         return@onUpdate StopState.name
                     }
                     if (ox < -W2) { //move to x-1 position
@@ -492,7 +490,9 @@ sealed class Actor(val game: Game) : Controllable {
                     offset.x += xMove
                     centerY()
                     if ( !canMoveRight ) {
-                        offset.x = 0
+                        offset.x = if ( level.hasGuard( x + 1, y ) && ox > game.getGuard(x + 1, y).ox )
+                            game.getGuard(x + 1, y).ox
+                        else 0
                         return@onUpdate StopState.name
                     }
                     if ( ox > W2 ) { //move to x+1 position
@@ -537,7 +537,12 @@ sealed class Actor(val game: Game) : Controllable {
                 }
                 BehaviorMoveDown {// onCenterTile
                     if ( !canMoveDown ) {
-                        offset.y = 0 // prevent redraw lag
+                        offset.y = when( this ) {
+                            is Guard -> if (level.hasGuard(x, y + 1) && oy < game.getGuard(x, y + 1).oy) // prevent redraw lag
+                                game.getGuard(x, y + 1).oy
+                            else 0
+                            else -> 0
+                        }
                     }
                     null
                 }
@@ -551,8 +556,11 @@ sealed class Actor(val game: Game) : Controllable {
             init {
                 onUpdate {
                     val pos = oy > 0
-                    offset.y -= yMove
-                    centerX()
+                    val delta = availableSpaceUp
+                    offset.y -= delta
+                    centerX(delta.toFloat() / yMove)
+                    if ( delta == 0 ) return@onUpdate StopState.name
+
                     if ( pos && oy <= 0 && onCenter?.invoke(this) == true) {
                         offset.y = 0
                         null // next tick
