@@ -2,6 +2,7 @@ package me.az.scenes
 
 import AnimationFrames
 import App
+import App.Companion.bg
 import AppContext
 import ImageAtlas
 import ImageAtlasSpec
@@ -13,12 +14,14 @@ import ViewSpec
 import backgroundImageFile
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
+import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.*
 import de.fabmax.kool.scene.animation.InterpolatedFloat
 import de.fabmax.kool.scene.animation.LinearAnimator
 import de.fabmax.kool.util.Color
+import dump
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -35,10 +38,10 @@ import kotlin.math.min
 import kotlin.math.sqrt
 
 open class GameScene(val game: Game,
-                val assets: AssetManager,
-                val appContext: AppContext,
-                val conf: ViewSpec = ViewSpec(),
-                name: String?,
+                     val assets: AssetManager,
+                     val appContext: AppContext,
+                     val conf: ViewSpec = ViewSpec(tileSize = Vec2i(game.state.spriteMode.value.tileWidth, game.state.spriteMode.value.tileHeight)),
+                     name: String?,
 ) : AsyncScene(name) {
     val currentShutter get() = shatterRadiusAnim.value.value
     var levelView: LevelView? = null
@@ -79,13 +82,14 @@ open class GameScene(val game: Game,
             }
         }
 
+        // recreate on tileWidth change TBD
 
         camera = App.createCamera( conf.visibleWidth, conf.visibleHeight ).apply {
             projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
         }
 
 
-        mainRenderPass.clearColor = null
+        mainRenderPass.clearColor = Color.BLACK
     }
 
     protected val currentSpriteSet = mutableStateOf(ImageAtlasSpec(appContext.spriteMode.value))
@@ -117,7 +121,11 @@ open class GameScene(val game: Game,
 //        holeAnims = AnimationFrames("hole")
 
         currentSpriteSet.set(ImageAtlasSpec(appContext.spriteMode.value))
-        game.level?.run { dirty = true }
+
+        game.level?.run {
+            fillGround(tilesAtlas.nameIndex)
+            dirty = true
+        }
 
     }
     override suspend fun loadResources(assets: AssetManager, ctx: KoolContext) = with(assets) {
@@ -207,7 +215,10 @@ open class GameScene(val game: Game,
                 onUpdate += {
                     (shader as MaskShader).visibleRadius = shatterRadiusAnim.tick(it.ctx)
                     // hack to sync anims
-                    if (shatterRadiusAnim.progress >= 1f) game.animEnds = true
+                    if (shatterRadiusAnim.progress >= 1f) {
+                        shatterRadiusAnim.progress = 0f
+                        game.animEnds = true
+                    }
                     else if (game.runner.anyKeyPressed) {
                         stopIntro(it.ctx)
                         game.skipAnims = true
@@ -244,19 +255,7 @@ open class GameScene(val game: Game,
         levelView = null
     }
 
-    private val bg by lazy {
-        sprite( texture = Texture2d(simpleTextureProps) {
-            it.loadTextureData(backgroundImageFile, simpleTextureProps.format)
-        } ).apply {
-            grayScaled = true
-            onResize += { w, h ->
-                val imageMinSide = min(w, h)
-                val camSide = max((camera as OrthographicCamera).width, (camera as OrthographicCamera).height)
-                scale(camSide / imageMinSide)
-            }
-            // paralax TBD
-        }
-    }
+    private val bg by lazy { bg() }
 
     protected fun startOutro(ctx: KoolContext) =
         shatterRadiusAnim.apply {

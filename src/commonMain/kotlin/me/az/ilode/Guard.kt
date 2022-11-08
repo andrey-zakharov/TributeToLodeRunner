@@ -141,6 +141,7 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
 
             state(ActorSequence.Reborn.id) {
                 onEnter {
+
                     val gen = randomRangeGenerator(0, level.width).iterator()
                     for ( bornY in 1 until level.height ) {
                         val bornX = gen.next()
@@ -150,6 +151,7 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
 
                             action = ActorSequence.Reborn
                             // play this state until anim ends
+                            game.runner.addScore(SCORE_DIES)
                             break
                         }
                     }
@@ -182,7 +184,7 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
         init {
             onEnter { with(actor) {
                 if (hasGold > 0) {
-                    println("has gold: empty: ${level.isEmpty(x, y - 1)}")
+//                    println("has gold: empty: ${level.isEmpty(x, y - 1)}")
                     if (level.isEmpty(x, y - 1)) {
                         level.dropGold(x, y - 1)
                         hasGold = 0
@@ -196,6 +198,7 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
             BehaviorMoveDown { // on center
                 offset.y = 0
                 game.playSound(Sound.TRAP, x, y)
+                game.runner.addScore(SCORE_FALL)
                 when(action) {
                     ActorSequence.FallRight -> ActorSequence.ShakeRight
                     else -> ActorSequence.ShakeLeft
@@ -211,7 +214,7 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
                 if ( frameIndex < sequenceSize ) {
 
                 } else {
-                    println("done")
+                    println("done in shake")
                     return@onUpdate RunUp.name
                 }
 

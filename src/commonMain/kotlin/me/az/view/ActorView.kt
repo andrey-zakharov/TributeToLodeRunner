@@ -21,9 +21,10 @@ class ActorView(val actor: Actor,
             actor.level?.run {
 
                 this@ActorView.texture = atlas.tex.value
-                val sequence = animations.sequence[actor.action.id]?: throw NullPointerException(actor.action.id)
-                if ( actor.sequenceSize == 0 ) actor.sequenceSize = sequence.size
-                tileIndex = sequence[actor.frameIndex % sequence.size]
+                animations.sequence[actor.action.id]?.run {
+                    if ( actor.sequenceSize == 0 ) actor.sequenceSize = size
+                    tileIndex = get(actor.frameIndex.mod(size))
+                }
 
                 setIdentity()
                 translate(

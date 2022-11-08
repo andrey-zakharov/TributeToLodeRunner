@@ -7,9 +7,13 @@ import de.fabmax.kool.KoolContext
 import de.fabmax.kool.UniversalKeyCode
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.math.isFuzzyZero
-import de.fabmax.kool.modules.ui2.*
+import de.fabmax.kool.modules.ui2.MutableStateValue
+import de.fabmax.kool.modules.ui2.UiScene
+import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.*
-import de.fabmax.kool.scene.*
+import de.fabmax.kool.scene.Camera
+import de.fabmax.kool.scene.OrthographicCamera
+import de.fabmax.kool.scene.Scene
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -20,7 +24,10 @@ import me.az.utils.buildStateMachine
 import me.az.utils.choice
 import me.az.utils.enumDelegate
 import me.az.view.GameControls
-import kotlin.native.concurrent.ThreadLocal
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.random.Random
 
 val simpleTextureProps = TextureProps(TexFormat.RGBA,
@@ -123,12 +130,14 @@ object RunGameState : State<App>() {
     var gameScene: GameLevelScene? = null
     var infoScene: Scene? = null
     var debugScene: Scene? = null
-    private var listener: InputManager.KeyEventListener? = null
+    private val keyListeners = mutableListOf<InputManager.KeyEventListener>()
+    var exit = false
+
 
     override fun enterState(app: App) {
         super.enterState(app)
+        exit = false
         val game = Game(app.context)
-        val conf = ViewSpec()
 
         gameScene = GameLevelScene(game, app.ctx,
             appContext = app.context,
@@ -140,12 +149,10 @@ object RunGameState : State<App>() {
         app.ctx.scenes += gameScene!!
         app.ctx.scenes += infoScene!!
         debugScene = UiScene {
-            +Panel {
-                gameScene?.setupUi(this)!!
-            }
+            gameScene?.setupUi(this)!!
         }
 
-        listener = app.ctx.inputMgr.registerKeyListener(UniversalKeyCode('d'), "toggle debug") {
+        keyListeners.add( app.ctx.inputMgr.registerKeyListener(UniversalKeyCode('d'), "toggle debug") {
             when {
                 debugScene == null -> Unit
                 it.isPressed -> if ( app.ctx.scenes.contains(debugScene) ) {
@@ -153,6 +160,22 @@ object RunGameState : State<App>() {
                 } else {
                     app.ctx.scenes += debugScene!!
                 }
+            }
+        } )
+        keyListeners.add( app.ctx.inputMgr.registerKeyListener(InputManager.KEY_ESC, "escape") {
+            when {
+                it.isReleased -> {
+                    if ( game.isOver ) exit = true
+                }
+            }
+        })
+
+        game.onStateChanged += {
+            when (this.name) {
+                GameState.GAME_OVER_ANIMATION -> app.ctx.runDelayed((app.ctx.fps * 7).toInt()) {
+                    exit = true
+                }
+                else -> { }
             }
         }
 
@@ -162,7 +185,7 @@ object RunGameState : State<App>() {
     override fun exitState(app: App) {
         super.exitState(app)
         with(app.ctx) {
-            listener?.run { inputMgr.removeKeyListener(this) }
+            keyListeners.forEach { inputMgr.removeKeyListener(it) }
             gameScene?.run { scenes -= this; runDelayed(1) { dispose(this@with) } }
             gameScene = null
             infoScene?.run { scenes -= this; runDelayed(1) { dispose(this@with) } }
@@ -173,9 +196,30 @@ object RunGameState : State<App>() {
     }
 
     override fun update(app: App): State<App>? {
+        if ( exit ) return MainMenuState
         return null
     }
 
+}
+
+object ScoresState : State<App>() {
+    var scoresScreen: Scene? = null
+    override fun enterState(obj: App) {
+        scoresScreen = HiScoreScene()
+        obj.ctx.scenes += scoresScreen!!
+    }
+    override fun update(obj: App): State<App>? {
+        return null
+    }
+
+    override fun exitState(obj: App) {
+        super.exitState(obj)
+        scoresScreen?.run {
+            obj.ctx.scenes -= this
+            dispose(obj.ctx)
+        }
+        scoresScreen = null
+    }
 }
 
 object Exit : State<App>() {
@@ -196,6 +240,8 @@ class GameSettings(val settings: Settings) {
     // { s:curScore, l:curLevel, r:runnerLife, m: maxLevel, g: sometimePlayInGodMode, p: passedLevel};
     var immortal by settings.boolean(defaultValue = true)
     var stopGuards by settings.boolean(defaultValue = false)
+    var actorMoveX = 4
+    var actorMoveY = 4
 }
 
 class AppContext(val gameSettings: GameSettings) {
@@ -262,17 +308,22 @@ class App(val ctx: KoolContext) {
             newState?.run { changeState(this) }
         }
 
+        scope.launch { test4() }
         ctx.run()
 
         job.cancel()
 
         test1()
+
     }
 
+    // need to pixelize in updateCamera
+    class GameCamera : OrthographicCamera("plain") {
+    }
     companion object {
         // for 3 scenes
         fun createCamera(width: Int, height: Int): OrthographicCamera {
-            return OrthographicCamera("plain").apply {
+            return GameCamera().apply {
                 projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
                 isClipToViewport = false
                 isKeepAspectRatio = true
@@ -285,6 +336,24 @@ class App(val ctx: KoolContext) {
                 clipNear = 0.1f
             }
         }
+
+        fun Scene.bg() =
+            sprite(
+                texture = Texture2d(simpleTextureProps) {
+                    it.loadTextureData(backgroundImageFile, simpleTextureProps.format)
+                },
+                name = "bg"
+            ).apply {
+                grayScaled = true
+                onResize += { w, h ->
+                    val imageMinSide = min(w, h)
+                    val camSide = max((camera as OrthographicCamera).width, (camera as OrthographicCamera).height)
+                    transform.resetScale()
+                    scale(camSide / imageMinSide.toDouble())
+                }
+                // paralax TBD
+            }
+
     }
 
     private fun changeState(newState: State<App>) {
@@ -329,7 +398,18 @@ class App(val ctx: KoolContext) {
         expect( a.contentHashCode() == b.contentHashCode() ) { "expect $a.hashCode = ${a.contentHashCode()} == $b.hashCode = ${b.contentHashCode()}"}
         expect ( a.contentHashCode() != c.contentHashCode() )
         expect ( b.contentHashCode() != c.contentHashCode())
+    }
 
+    suspend fun test4() {
+        val rep = LevelsRep(ctx.assetMgr, scope)
+        for (s in LevelSet.values()) {
+            rep.load(s)
+            println("${s.dis} has ${rep.levels.size} levels:")
+            rep.levels.forEachIndexed { levelId, strings ->
+                println("level #${levelId+1}: ${strings.first().length}x${strings.size}")
+            }
+            println()
+        }
     }
 
     private fun expect(cond: Boolean, msg: () -> String = { "assert error" }) {
@@ -339,7 +419,7 @@ class App(val ctx: KoolContext) {
     enum class AppActions(override val keyCode: InputSpec,
                           override val onPress: App.(InputManager.KeyEvent) -> Unit,
                           override val onRelease: App.(InputManager.KeyEvent) -> Unit) : Action<App> {
-        ESC(InputManager.KEY_ESC.toInputSpec(), onPress = {
+        EXIT(InputManager.KEY_BACKSPACE.toInputSpec(), onPress = {
             fsm.popState()
             changeState(MainMenuState)
         }, onRelease = {})

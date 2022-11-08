@@ -19,11 +19,12 @@ enum class TileSet(
     val tileWidth: Int = 20,
     val tileHeight: Int = 22
 ) {
-    SPRITES_APPLE2("ap2"),
-    SPRITES_COMMODORE64("c64"),
-    SPRITES_IBM("ibm", 12, 11),
+    SPRITES_APPLE2("ap2"), // 560 x 384, 28 wide levels (20x22 tiles)
     SPRITES_ATARI8BIT("a8b"),
+    SPRITES_COMMODORE64("c64"),
     SPRITES_ZXSPECTRUM("zxs"),
+    SPRITES_IBM("ibm", 24, 22), // has 640x400 original and 26-tiles wide levels (24x20 tiles)
+    SPRITES_NEC("nec", 24, 20), // has 640x400 original and 26-tiles wide levels
     SPRITES_NES("nes"),
     ;
     val dis get() = name.removePrefix("SPRITES_")

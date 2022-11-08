@@ -1,30 +1,34 @@
 package me.az.scenes
 
-import App
 import AppContext
-import LevelSet
-import LevelView
 import LevelsRep
 import ViewSpec
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
-import de.fabmax.kool.math.*
+import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.math.spatial.BoundingBox
 import de.fabmax.kool.modules.ui2.*
-import de.fabmax.kool.pipeline.*
-import de.fabmax.kool.scene.*
+import de.fabmax.kool.pipeline.Texture2d
+import de.fabmax.kool.scene.Group
+import de.fabmax.kool.scene.OrthographicCamera
+import de.fabmax.kool.scene.Scene
 import de.fabmax.kool.scene.animation.*
-import de.fabmax.kool.util.Color
+import dump
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.yield
-import me.az.ilode.*
-import me.az.shaders.MaskShader
+import me.az.ilode.Game
+import me.az.ilode.GameState
 import me.az.utils.format
-import me.az.view.CameraController
+import simpleTextureProps
+import sprite
 import kotlin.coroutines.CoroutineContext
-import kotlin.math.ceil
-import kotlin.math.sqrt
+import kotlin.math.abs
+import kotlin.math.sign
+
+fun<V, T : InterpolatedValue<V>> Animator<V, T>.dis(): String = "duration=%.3f speed=%.3f progress=%.3f repeating=%d".format(
+    duration, speed, progress, repeating
+)
 
 class GameLevelScene (
     game: Game,
@@ -32,11 +36,53 @@ class GameLevelScene (
     assets: AssetManager = ctx.assetMgr,
     appContext: AppContext,
     name: String? = null,
-    ) : GameScene(game, assets, appContext, ViewSpec(), name), CoroutineScope {
+) : GameScene(game, assets, appContext, name = name), CoroutineScope {
+
+    val gameOverSprite by lazy {
+        // on exit - break anim. TBD
+
+        sprite(gameOverTex, "gameover", mirrorTexCoordsY = false).also {
+            val startSpeed = 10f
+            val speedAnim = InverseSquareAnimator(InterpolatedFloat(startSpeed, 1f)).apply {
+                speed = 0.75f
+            }
+
+            val scaleAnim = CosAnimator(InterpolatedFloat(-1f, 1f)).apply {
+                repeating = Animator.REPEAT_TOGGLE_DIR
+                speed = startSpeed
+            }
+
+//            it.translate(this@GameLevelScene.camera.globalCenter)
+            it.translate( 0f, conf.visibleSize.y / 2f, 0f)
+            onUpdate += { ev->
+                it.transform.resetScale() // still remains negative -1
+                // -1.0 zoom glitches?
+                val scale = scaleAnim.tick(ev.ctx) / conf.tileSize.y
+                it.scale(1.0 / conf.tileSize.x, scale.toDouble()
+                        //hack
+                         * it.transform[1, 1].sign, 1.0)
+
+                scaleAnim.speed = speedAnim.tick(ev.ctx) * scaleAnim.speed.sign
+                if ( scaleAnim.speed > 0 && scaleAnim.speed <= 1f && scaleAnim.repeating != Animator.ONCE ) {
+                    scaleAnim.repeating = Animator.ONCE
+                }
+                if (scaleAnim.progress == 1f && scaleAnim.repeating == Animator.ONCE && !game.animEnds) {// end game
+                    println("game over done")
+                    game.animEnds = true
+                }
+            }
+        }
+    }
 
     init {
         game.onStateChanged += {
             println("GameScene. gameState = ${this.name}")
+            if ( this.name != GameState.GAME_OVER_ANIMATION ) {
+                // exit state
+                if (levelView?.findNode("gameover") != null) {
+                    levelView?.run { -gameOverSprite }
+                }
+            }
             when(this.name) {
                 GameState.GAME_START -> {
                     // timer to demo, or run
@@ -80,6 +126,14 @@ class GameLevelScene (
                         addLevelView(ctx, this)
                     }
                 }
+                GameState.GAME_OVER_ANIMATION -> {
+
+                    levelView?.run { +gameOverSprite }
+                    ctx.runDelayed((ctx.fps * 5).toInt()) {
+                        game.animEnds = false
+                        startOutro(ctx) // await
+                    }
+                }
                 else -> Unit
             }
         }
@@ -91,24 +145,26 @@ class GameLevelScene (
     override val coroutineContext: CoroutineContext
         get() = job
 
+    private lateinit var gameOverTex: Texture2d
     private val levels = LevelsRep(assets, this)
 
     val debug = MutableStateValue("")
 
     override suspend fun loadResources(assets: AssetManager, ctx: KoolContext) {
         super.loadResources(assets, ctx)
+        gameOverTex = assets.loadAndPrepareTexture("images/game-over.png", simpleTextureProps)
         levels.load(appContext.levelSet.value)
     }
 
-    fun setupUi(scope: UiScope) = with(scope) {
-        modifier
-            .width(Grow(1f, max = FitContent))
-            .height(FitContent)
-            .margin(start = 25.dp, top = 25.dp, bottom = 60.dp)
-            .layout(ColumnLayout)
-            .alignX(AlignmentX.End)
-            .alignY(AlignmentY.Bottom)
-        Panel {
+    fun setupUi(scene: Scene) = with(scene) {
+        +Panel {
+            modifier
+                .width(Grow(1f, max = FitContent))
+                .height(FitContent)
+                .margin(start = 25.dp, top = 25.dp, bottom = 60.dp)
+                .layout(ColumnLayout)
+                .alignX(AlignmentX.End)
+                .alignY(AlignmentY.Bottom)
             Row {
                 Text(debug.use()) {
                     modifier
@@ -118,6 +174,9 @@ class GameLevelScene (
                         with(game) {
                             debug.set(
                                 """
+                                    #speedAnim = %%s %%.3f
+                                    #scaleAnim = %%s %%.3f
+                                    
                                 global runner center = %.1f x %.1f
                                 camera = %.1f/%.1f x %.1f/%.1f
                                 act = %s
@@ -129,6 +188,8 @@ class GameLevelScene (
                                
                                 %s""".trimIndent()
                                     .format(
+//                                        speedAnim.dis(), speedAnim.value.value, scaleAnim.dis(), scaleAnim.value.value,
+
                                         levelView?.runnerView?.globalCenter?.x,
                                         levelView?.runnerView?.globalCenter?.y,
                                         off?.camera?.position?.x,

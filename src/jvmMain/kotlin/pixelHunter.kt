@@ -284,7 +284,7 @@ fun File.dumpByMark(mark: ByteArray, bitsPerPixel: BitsPerPixel, width: Int = 12
         val marked = mark.foldIndexed(true) { index, res, byte -> res && byte == b[i + index] }
         if ( marked ) {
             val data = b.sliceArray( i + mark.size until i + mark.size + (width * height * bitsPerPixel.bits / 8) )
-            val t = "${(i + mark.size).toString(16)}.${(foundSprites+1).toString(10).padStart(3, '0')}"
+            val t = "${(foundSprites+1).toString(10).padStart(3, '0')}.${(i + mark.size).toString(16)}"
 
             if ( !dryRun ) {
                 ByteArrayInputStream(data).exportSprite(t, bitsPerPixel, width, height)
@@ -305,9 +305,8 @@ fun File.dumpByMark(mark: ByteArray, bitsPerPixel: BitsPerPixel, width: Int = 12
 // rgb1 mark = 0x0a 0x03 width=24 height = 10
 
 /// dumpAppleImages mark: ByteArray = 0x0b 0x03, bitsPerPixel = 2, width = 12, height = 11
-// for t in *.txt; do convert -transparent black txt:$t -define png:color-type=3 -define png:bit-depth=4 -quality 100 `basename $t .txt`.png; done
-// convert -transparent black txt:ddc0.txt ddc0.png
-// montage cf98.png cfbb.png cfde.png ca0d.png d06a.png d08d.png ccff.png cd22.png cd45.png cd68.png cd8b.png cdae.png cdae.left.png cdae.right.png cdd1.png cdd1.left.png cdd1.rigth.png cdf4.png ce17.png ce3a.png cec6.png cee9.png cf0c.png dc85.png dca8.png  -transparent white -geometry +0 -quality 100 out.png
+
+// montage cf98.png cfbb.png cfde.png ca0d.png d06a.png d08d.png ccff.png cd22.png cd45.png cd68.png cd8b.png cdae.png cdae.left.png cdae.right.png cdd1.png cdd1.left.png cdd1.rigth.png cdf4.png ce17.png ce3a.png cec6.png cee9.png cf0c.png dc85.png dca8.png
 // montage c8cf.png c93b.png c9c7.png c918.png c9ea.png c95e.png c981.png c9a4.png dd11.png dd34.png dd57.png dd7a.png dd9d.png ddc0.png dde3.png de06.png de29.png de4c.png dccb.png dcee.png dc3f.png dc62.png -transparent white -geometry +0 -quality 100 out.png
 
 fun File.export(offset: Int, count: Int, bitsPerPixel: BitsPerPixel = BitsPerPixel.TWO, width: Int = 12, height: Int = 11) {
@@ -317,7 +316,7 @@ fun File.export(offset: Int, count: Int, bitsPerPixel: BitsPerPixel = BitsPerPix
         val reader = inputStream()
         reader.skip((offset + i * bytesPerRow * height).toLong())
 
-        val t = "${offset.toString(16)}.${(i+1).toString(10).padStart(3, '0')}"
+        val t = "${(i+1).toString(10).padStart(3, '0')}.${offset.toString(16)}"
         reader.exportSprite(t, bitsPerPixel, width, height)
     }
 }
@@ -466,7 +465,7 @@ fun redraw(term: Term, opts: AppContext, f: File) {
     with(term) {
         clear()
         labeledValue("offset", opts.offset.toString().padStart(8, '0'))
-        val p = (opts.offset * 100 / fl).toInt()
+        val p = (opts.offset * 100 / fl)
         print("($p%)")
         labeledValue("bits per pixel", opts.bitsPerPixel.toString())
         labeledValue("row width", opts.rowWidth.toString())

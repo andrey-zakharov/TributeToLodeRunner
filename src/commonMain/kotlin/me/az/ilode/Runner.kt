@@ -6,6 +6,14 @@ import kotlin.math.abs
 
 const val START_HEALTH = 5
 const val MAX_HEALTH = 100
+
+const val SCORE_COUNTER = 15 // how much scores bumbs in finish anim
+const val SCORE_COMPLETE = 1500
+const val SCORE_COMPLETE_INC = SCORE_COMPLETE / SCORE_COUNTER
+const val SCORE_GOLD     = 250
+const val SCORE_FALL     = 75
+const val SCORE_DIES     = 75
+
 val Controllable.anyKeyPressed get() = digLeft || digRight || inputVec.x != 0 || inputVec.y != 0
 
 class Runner(game: Game) : Actor(game), Controllable {

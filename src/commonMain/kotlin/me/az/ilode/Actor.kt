@@ -67,8 +67,8 @@ sealed class Actor(val game: Game) : Controllable {
     }
 
     // conf
-    var xMove = 4
-    var yMove = 4
+    val xMove = game.state.gameSettings.actorMoveX
+    var yMove = game.state.gameSettings.actorMoveY
 
     var alive: Boolean = true
     var block = MutableVec2i(Vec2i.ZERO)
@@ -406,7 +406,11 @@ sealed class Actor(val game: Game) : Controllable {
                 }
 
                 onUpdate {
-                    frameIndex ++
+                    // fix long animations for up down and waiting guards on ladders
+                    if ( this@MovementState is RunDown )
+                        frameIndex--
+                    else
+                        frameIndex ++
                     null
                 }
             }

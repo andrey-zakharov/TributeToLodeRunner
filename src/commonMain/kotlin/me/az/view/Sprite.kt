@@ -1,12 +1,13 @@
+import de.fabmax.kool.math.Mat4d
 import de.fabmax.kool.math.MutableVec2i
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.modules.ksl.KslShader
 import de.fabmax.kool.modules.ksl.blocks.mvpMatrix
 import de.fabmax.kool.modules.ksl.lang.*
 import de.fabmax.kool.pipeline.*
-import de.fabmax.kool.scene.Group
-import de.fabmax.kool.scene.Scene
-import de.fabmax.kool.scene.mesh
+import de.fabmax.kool.scene.*
+import me.az.utils.format
+
 // represent both simple texture2d or frame in atlas
 fun sprite(texture: Texture2d,
                  name: String? = null,
@@ -38,46 +39,49 @@ open class Sprite(
         onUpdate += {
             if ( _spriteSize == Vec2i.ZERO || _regionSize == Vec2i.ZERO ) {
                 if ( texture?.loadingState == Texture.LoadingState.LOADED ) {
+                    if ( _regionSize == Vec2i.ZERO ) {
+                        _regionSize.x = texture!!.loadedTexture!!.width
+                        _regionSize.y = texture!!.loadedTexture!!.height
+                    }
                     if ( _spriteSize == Vec2i.ZERO ) {
                         _spriteSize.x = texture!!.loadedTexture!!.width
                         _spriteSize.y = texture!!.loadedTexture!!.height
                         onResize.forEach { it(this, _spriteSize.x, _spriteSize.y) }
                     }
-                    if ( _regionSize == Vec2i.ZERO ) {
-                        _regionSize.x = texture!!.loadedTexture!!.width
-                        _regionSize.y = texture!!.loadedTexture!!.height
-                    }
-
-                    transform.scale(_spriteSize.x.toDouble(), _spriteSize.y.toDouble(), 1.0)
                 }
             }
-            //transform.pus
 
+//            println(this.dump())
         }
     }
 
     private fun buildMesh() {
         removeAllChildren()
         setIdentity()
-        +mesh(SpriteShader.SPRITE_MESH_ATTRIBS, name) {
-            generate {
-                rect {
-                    width = 1f//(spriteSize ?: fullTexSize).x.toFloat()
-                    height = 1f//(spriteSize ?: fullTexSize).y.toFloat()
-                    origin.set(-width / 2f, -height / 2f, 0f)
+        +group("scaler") {
+            +mesh(SpriteShader.SPRITE_MESH_ATTRIBS, "${this@Sprite.name} mesh") {
+                generate {
+                    rect {
+                        origin.set(-width / 2f, -height / 2f, 0f)
 
-                    if (mirrorTexCoordsY) {
-                        mirrorTexCoordsY()
+                        if (mirrorTexCoordsY) {
+                            mirrorTexCoordsY()
+                        }
                     }
+                    shader = spriteShader
                 }
-                shader = spriteShader
+
+                onUpdate += {
+                    spriteShader.texture = texture
+                    spriteShader.textureOffset = this@Sprite.textureOffset
+                    spriteShader.tileSize = _regionSize
+                    spriteShader.grayScaled = if (grayScaled) 1 else 0
+                }
             }
 
-            onUpdate += {
-                spriteShader.texture = texture
-                spriteShader.textureOffset = this@Sprite.textureOffset
-                spriteShader.tileSize = _regionSize
-                spriteShader.grayScaled = if ( grayScaled ) 1 else 0
+            onResize += {w, h ->
+                this@group.transform.resetScale()
+                this@group.scale(w.toDouble(), h.toDouble(), 1.0)
             }
         }
     }
@@ -137,6 +141,29 @@ open class Sprite(
             }
         }
     }
+}
+fun Mat4d.dis(): String {
+    return (0..3).joinToString(" |\t") { r ->
+        (0..3).joinToString(", ") { c ->
+            if ( c == 0 ) "0" else "%.3f".format(this[r, c])
+        }
+    }
+}
+
+fun Node.dump(nestLevel: Int = 0): String {
+    val tab = nestLevel * 2
+    val c = if ( tab > 0 ) " ".repeat(tab) + "\u2514\u2500" else ""
+    return "${c}name=$name modelMat=${modelMat.dis()}"
+}
+fun Group.dump(level: Int = 0): String {
+    return "${(this as Node).dump(level)} transform=${transform.dis()} children=${children.size}\n" +
+        children.joinToString("\n") {
+            when (it) {
+                is Group -> it.dump(level + 1)
+                is Node -> it.dump(level + 1)
+                else -> "$it"
+            }
+        }
 }
 
 

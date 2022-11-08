@@ -1,0 +1,17 @@
+{
+  "geom": {
+    "cols": 6,
+    "rows": 4
+  },
+  "frames": {
+    "solid": 0,
+    "brick": 1,
+    "hladder": 2,
+    "empty": 3,
+    "gold": 4,
+    "ladder": 5,
+    "rope": 6,
+    "trap": 7,
+    "ground": 8
+  }
+}

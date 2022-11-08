@@ -293,6 +293,13 @@ class StackedStateMachine<STATEKEY, E>(private val initialState: STATEKEY) {
     }
     val finished get() = states.isEmpty()
 
+    fun toggleState(stateName: STATEKEY) = if ( currentStateName == stateName ) {
+        popState()!!
+    } else {
+        pushState(getState(stateName), false)
+        currentStateName
+    }
+
     fun popState(): STATEKEY? {
         val old = states.pop()?.run { getState(this) }.also { it?.exitState() }
         if ( states.isEmpty() ) states.add(initialState)

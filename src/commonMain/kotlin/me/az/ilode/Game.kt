@@ -40,13 +40,6 @@ enum class GameState {
 }
 
 
-const val SCORE_COUNTER = 15 // how much scores bumbs in finish anim
-const val SCORE_COMPLETE = 1500
-const val SCORE_COMPLETE_INC = SCORE_COMPLETE / SCORE_COUNTER
-const val SCORE_GOLD     = 250
-const val SCORE_FALL     = 75
-const val SCORE_DIES     = 75
-
 enum class Sound(val fileNameO: String? = null, val fileNameCall: (() -> String)? = null) {
     BORN, DEAD, DIG, DOWN, FALL, GOLD("getGold"),
     FINISH("goldFinish"),
@@ -83,6 +76,7 @@ class Game(val state: AppContext) : CoroutineScope {
 //        }
     val isPlaying get() = fsm.currentStateName == GameState.GAME_RUNNING
     val isPaused get() = fsm.currentStateName == GameState.GAME_PAUSE
+    val isOver get() = fsm.currentStateName == GameState.GAME_OVER_ANIMATION || fsm.currentStateName == GameState.GAME_OVER
 
     var level: GameLevel? = null
         set(v) {
@@ -109,12 +103,13 @@ class Game(val state: AppContext) : CoroutineScope {
 
     fun startGame() { fsm.reset(true) }
     //@ActionSpec(defaultSpec = KeySpec('a'+ctrl))
-    fun abortGame() { fsm.setState(GameState.GAME_RUNNER_DEAD) }
+    fun abortGame() { fsm.setState(GameState.GAME_START) }
 
     //@ActionSpec(defaultSpec = KeySpec('f'+ctrl))
-    fun finishGame() { fsm.setState(GameState.GAME_FINISH) }
-    fun prevLevel() { fsm.setState(GameState.GAME_PREV_LEVEL) }
-    fun nextLevel() { fsm.setState(GameState.GAME_NEXT_LEVEL) }
+    fun finishGame() = fsm.setState(GameState.GAME_FINISH) // cheat
+    fun prevLevel() = fsm.setState(GameState.GAME_PREV_LEVEL) // cheat
+    fun nextLevel() = fsm.setState(GameState.GAME_NEXT_LEVEL) // cheat
+    fun overGame() = fsm.setState(GameState.GAME_OVER_ANIMATION) // cheat
 
     fun reset() {
         nextGuard = 0
@@ -139,7 +134,10 @@ class Game(val state: AppContext) : CoroutineScope {
                 validWhen { runner.success }
             }
             edge(GameState.GAME_RUNNER_DEAD) {
-                validWhen { !runner.alive }
+                validWhen { !runner.alive && runner.health > 1 }
+            }
+            edge(GameState.GAME_OVER_ANIMATION) {
+                validWhen { !runner.alive && runner.health <= 1 }
             }
             onUpdate {
 
@@ -163,7 +161,7 @@ class Game(val state: AppContext) : CoroutineScope {
 
                 animEnds = false
             }
-            edge(GameState.GAME_OVER) {
+            edge(GameState.GAME_OVER_ANIMATION) {
                 validWhen { state.runnerLifes.value <= 0 }
             }
             edge(GameState.GAME_NEW_LEVEL) {
@@ -215,6 +213,18 @@ class Game(val state: AppContext) : CoroutineScope {
             onExit {
 
             }
+        }
+
+        state(GameState.GAME_OVER_ANIMATION) {
+            // final state. exit to menu by external code or start new
+            onEnter {
+                runner.health = 0
+                playSound(Sound.DEAD, runner.x, runner.y)
+                animEnds = false // animEnds - used by shatter, always true :)
+                level?.status = GameLevel.Status.LEVEL_PAUSED
+                // show hiscores?
+            }
+            // pause all game until anim
         }
 
         this.onStateChanged += { this@Game.onStateChanged.forEach { it(this) }}

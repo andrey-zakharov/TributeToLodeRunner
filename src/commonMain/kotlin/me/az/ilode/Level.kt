@@ -428,19 +428,24 @@ class GameLevel(
             }
         }
 
-        for (x in 0 until this.width ) {
-            this.act[x][this.height-1] = TileLogicType.SOLID
-            this.base[x][this.height-1] = TileLogicType.SOLID
-            primaryTileSet["ground"]?.run {
-                this@GameLevel[x, this@GameLevel.height-1] = ViewCell(false, this)
-            }
-        }
+        fillGround(primaryTileSet)
 
         guard.forEach { row-> row.forEachIndexed { index, _ -> row[index] = false } }
         guardsPos.forEach {
             guard[it.x][it.y] = true
         }
         dirty = true
+    }
+
+    fun fillGround(tileSet: Map<String, Int>) {
+
+        for (x in 0 until this.width ) {
+            this.act[x][this.height-1] = TileLogicType.SOLID
+            this.base[x][this.height-1] = TileLogicType.SOLID
+            tileSet["ground"]?.run {
+                this@GameLevel[x, this@GameLevel.height-1] = ViewCell(false, this)
+            }
+        }
     }
 
     private fun stopAllAnims() {

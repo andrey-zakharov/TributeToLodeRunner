@@ -15,8 +15,7 @@ class GameControls(val game: Game, val inputManager: InputManager): Node() {
             inputManager.registerKeyListener(
                 keyCode = action.keyCode.code,
                 name = action.name,
-                filter = { ev -> (action.keyCode.modificatorBitMask xor ev.modifiers) == 0
-                }
+                filter = { ev -> (action.keyCode.modificatorBitMask xor ev.modifiers) == 0 }
             ) { ev ->
                 if ( ev.isReleased ) action.onRelease.invoke(game, ev)
                 else if (ev.isPressed) action.onPress.invoke(game, ev)
@@ -38,6 +37,9 @@ enum class GameAction(
     }),
     RESPAWN('a'.toInputSpec(InputManager.KEY_MOD_CTRL), onRelease = {
         abortGame()
+    }),
+    GAMEOVER('f'.toInputSpec(InputManager.KEY_MOD_CTRL), onRelease = {
+        overGame()
     }),
     FINISH('s'.toInputSpec(InputManager.KEY_MOD_CTRL), onRelease = {
         finishGame()

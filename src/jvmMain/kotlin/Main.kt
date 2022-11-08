@@ -3,7 +3,6 @@ import de.fabmax.kool.platform.Lwjgl3Context
 
 suspend fun main() {
     println("Starting with Java = ${System.getProperty("java.version")}")
-    0u.toUByte() and 1u
     val assetsDir = "assets"
     val title = "Tribute to Lode Runner by Andrey Zakharov 2022"
     val ctx = /*try {

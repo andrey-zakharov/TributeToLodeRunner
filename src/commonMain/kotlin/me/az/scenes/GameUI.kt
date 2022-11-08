@@ -40,6 +40,7 @@ class GameUI(val game: Game,
         // ui camera
         camera = App.createCamera( conf.visibleWidth, conf.visibleHeight )
         mainRenderPass.clearColor = null
+        game.onStateChanged += { dirty = true }
         gameSettings.score.onChange {
             dirty = true
         }
