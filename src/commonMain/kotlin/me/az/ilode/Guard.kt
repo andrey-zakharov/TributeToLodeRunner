@@ -42,7 +42,7 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
 
     init {
         game.onLevelStart += {
-            action = ActorSequence.RunRight
+            action = ActorSequence.RunLeft
         }
     }
 

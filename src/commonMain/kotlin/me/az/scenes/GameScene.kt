@@ -17,6 +17,7 @@ import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.*
+import de.fabmax.kool.pipeline.FullscreenShaderUtil.generateFullscreenQuad
 import de.fabmax.kool.scene.*
 import de.fabmax.kool.scene.animation.InterpolatedFloat
 import de.fabmax.kool.scene.animation.LinearAnimator
@@ -28,6 +29,7 @@ import kotlinx.coroutines.launch
 import me.az.ilode.Game
 import me.az.ilode.GameLevel
 import me.az.ilode.anyKeyPressed
+import me.az.shaders.CRTShader
 import me.az.shaders.MaskShader
 import me.az.view.CameraController
 import simpleTextureProps
@@ -58,8 +60,8 @@ open class GameScene(val game: Game,
         duration = 1f
     }
 
-
     protected var off: OffscreenRenderPass2d? = null
+    protected var crt: OffscreenRenderPass2d? = null
 
 
     var lastUpdate = 0.0 // last game tick
@@ -179,14 +181,45 @@ open class GameScene(val game: Game,
             })
         }
 
-        off?.run {
-            camera = App.createCamera( visibleWidth, visibleHeight ).apply {
+        off?.let { pass ->
+            pass.camera = App.createCamera( visibleWidth, visibleHeight ).apply {
                 projCorrectionMode = Camera.ProjCorrectionMode.OFFSCREEN
             }
-            clearColor = Color(0.00f, 0.00f, 0.00f, 0.00f)
-            addOffscreenPass(this)
+            pass.clearColor = Color(0.00f, 0.00f, 0.00f, 0.00f)
+            addOffscreenPass(pass)
 
-            cameraController = CameraController(this@run.camera as OrthographicCamera, ctx = ctx)
+            cameraController = CameraController(pass.camera as OrthographicCamera, ctx = ctx)
+
+            crt = OffscreenRenderPass2d(Group(), renderPassConfig {
+                setDynamicSize()
+                setDepthTexture(false)
+                addColorTexture {
+                    colorFormat = TexFormat.RGBA
+                    minFilter = FilterMethod.NEAREST
+                    magFilter = FilterMethod.NEAREST
+                }
+            })
+
+            crt?.let {
+                (it.drawNode as Group).apply {
+                    +textureMesh {
+                        generateFullscreenQuad()
+                        shader = CRTShader().apply {
+                            tex = off!!.colorTexture!!
+                        }
+                    }
+                }
+                it.dependsOn(pass)
+                addOffscreenPass(it)
+                onRenderScene += { ctx ->
+                    val mapW = off!!.viewport.width
+                    val mapH = off!!.viewport.height
+
+                    if (it.isEnabled && mapW > 0 && mapH > 0 && (mapW != it.width || mapH != it.height)) {
+                        it.resize(mapW, mapH, ctx)
+                    }
+                }
+            }
         }
 
         cameraController?.run {
@@ -211,7 +244,7 @@ open class GameScene(val game: Game,
                         mirrorTexCoordsY()
                     }
                 }
-                shader = MaskShader { color { textureColor(off!!.colorTexture) } }
+                shader = MaskShader { color { textureColor(crt!!.colorTexture) } }
                 onUpdate += {
                     (shader as MaskShader).visibleRadius = shatterRadiusAnim.tick(it.ctx)
                     // hack to sync anims

@@ -64,16 +64,3 @@ class TileMapShader(conf: TileMapShaderConf = TileMapShaderConf()) : KslShader(P
         }
     }
 }
-
-fun Mesh.generateQuad(width: Float, height: Float, mirrorTexCoordsY: Boolean = true) {
-    isFrustumChecked = false
-    generate {
-        rect {
-            origin.set(-width/2f, -height/2f, 0f)
-            size.set(width, height)
-            if (mirrorTexCoordsY) {
-                mirrorTexCoordsY()
-            }
-        }
-    }
-}
