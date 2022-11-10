@@ -1,6 +1,7 @@
 package me.az.ilode
 
 import de.fabmax.kool.math.Vec2i
+import de.fabmax.kool.math.clamp
 import de.fabmax.kool.math.min
 import de.fabmax.kool.math.randomI
 import me.az.utils.format
@@ -55,17 +56,36 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
     override val canStay: Boolean
         get() = super.canStay || inHole // when running up from hole
 
-    override val canMoveRight get() =
-        super.canMoveRight && (
-                !level.hasGuard(x + 1, y) ||
-                (level.hasGuard(x + 1, y) && ox < game.getGuard(x + 1, y).ox)
-        )
+    override val availableSpaceRight: Int get() {
+        if ( level.hasGuard(x + 1, y) ) return (game.getGuard(x + 1, y).ox - ox).clamp(0, xMove)
+        // guard down right not moving enough
+        if ( level.hasGuard(x + 1, y + 1)) {
+            val g = game.getGuard(x + 1, y + 1)
+            if ( g.oy < 0 ) return ( g.ox - ox ).clamp(0, xMove)
+        }
+        if ( level.hasGuard(x + 1, y - 1)) {
+            val g = game.getGuard(x + 1, y - 1)
+            if ( g.oy > 0 ) return ( ox - g.ox ).clamp(0, xMove)
+        }
 
-    override val canMoveLeft get() =
-        super.canMoveLeft && (
-                !level.hasGuard(x - 1, y) ||
-                (level.hasGuard(x - 1, y) && ox > game.getGuard(x - 1, y).ox)
-        )
+        return super.availableSpaceRight
+    }
+
+    override val availableSpaceLeft: Int get() {
+        if ( level.hasGuard(x - 1, y) ) return (ox - game.getGuard(x - 1, y).ox).clamp(0, xMove)
+
+        // guard down right not moving enough
+        if ( level.hasGuard(x - 1, y + 1)) {
+            val g = game.getGuard(x - 1, y + 1)
+            if ( g.oy < 0 ) return ( g.ox - ox ).clamp(0, xMove)
+        }
+        if ( level.hasGuard(x - 1, y - 1)) {
+            val g = game.getGuard(x - 1, y - 1)
+            if ( g.oy > 0 ) return ( ox - g.ox ).clamp(0, xMove)
+        }
+
+        return super.availableSpaceLeft
+    }
 
     override val canMoveUp get() = (
         super.canMoveUp && (

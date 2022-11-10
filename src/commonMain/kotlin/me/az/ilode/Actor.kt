@@ -129,18 +129,28 @@ sealed class Actor(val game: Game) : Controllable {
 
     open val onFallStop: (() -> Unit)? = null
 
-    // raycasting :)
+    // raycasting
     open val availableSpaceDown get() =
-        if ( level.isBarrier(x, y) ) 0
-        else if (oy < -yMove) yMove
+        if ( !level.isPassableForDown(x, y) ) 0
+        else if (oy <= -yMove) yMove
             else if ( level.isPassableForDown(x, y + 1) ) yMove
                 else -oy // to center
 
     open val availableSpaceUp get() =
         if ( level.isBarrier(x, y) ) 0 // or -oy?
-        else if ( oy > yMove ) yMove
+        else if ( oy >= yMove ) yMove
             else if (!level.isBarrier(x, y - 1)) yMove
                 else -oy
+
+    open val availableSpaceRight get() =
+        if ( ox <= -xMove ) xMove
+        else if (!level.isBarrier(x + 1, y)) xMove
+            else -ox
+
+    open val availableSpaceLeft get() =
+        if ( ox >= xMove ) xMove
+        else if ( !level.isBarrier(x - 1, y) ) xMove
+            else -ox
 
     open val canMoveUp get() =
         (oy <= 0 && level.isLadder(x, y) && !level.isBarrier(x, y - 1)) || // in ladder
@@ -149,10 +159,6 @@ sealed class Actor(val game: Game) : Controllable {
     open val canMoveDown get() =
         level.isLadder(x, y) &&
                 oy < 0 || level.isPassableForDown(x, y + 1)
-
-
-    open val canMoveRight get() = ox < 0 || (ox >= 0 && !level.isBarrier(x + 1, y))
-    open val canMoveLeft get() = ox > 0 || (ox <= 0 && !level.isBarrier(x - 1, y))
 
     abstract fun takeGold(): Boolean
 
@@ -192,13 +198,14 @@ sealed class Actor(val game: Game) : Controllable {
             }
         }
 
-        fun Actor.centerY() {
-            if ( offset.y > 0 ) {
-                offset.y -= yMove
-                if ( offset.y < 0)  offset.y = 0 //move to center Y
-            } else if (offset.y < 0) {
-                offset.y += yMove
-                if ( offset.y > 0 ) offset.y = 0 //move to center Y
+        fun Actor.centerY(delta: Float) {
+            val dy = (yMove * delta).toInt()
+            if ( oy > 0 ) {
+                offset.y -= dy
+                if ( oy < 0)  offset.y = 0 //move to center Y
+            } else if (oy < 0) {
+                offset.y += dy
+                if ( oy > 0 ) offset.y = 0 //move to center Y
             }
         }
 
@@ -277,31 +284,27 @@ sealed class Actor(val game: Game) : Controllable {
 
                 edge(ActorSequence.BarLeft.id) {
                     validWhen {
-                        inputVec.x < 0 && ((ox > 0 && level.isBar(x, y)) || (ox <= 0 && level.isBar(x - 1, y)))
+                        inputVec.x < 0 && ((ox > 0 && level.isBar(x, y)) || (ox <= 0 && level.isBar(x - 1, y))) &&
+                                availableSpaceLeft > 0
                     }
                 }
 
                 edge(ActorSequence.BarRight.id) {
                     validWhen {
-                        inputVec.x > 0 && ((ox < 0 && level.isBar(x, y)) || (ox >= 0 && level.isBar(x + 1, y)))
+                        inputVec.x > 0 && ((ox < 0 && level.isBar(x, y)) || (ox >= 0 && level.isBar(x + 1, y))) &&
+                                availableSpaceRight > 0
                     }
                 }
 
                 edge(ActorSequence.RunLeft.id) {
                     validWhen {
-                        inputVec.x < 0 && // got input
-                                ( ox > 0 || ( ox <= 0 && !level.isBarrier(x - 1, y) ) ) && // no obstacle ahead left
-//                    (level.isFloor(x, y + 1) || level.isLadder(x, y)) )
-                                !level.isBar(if ( ox > 0 ) x else x - 1, y)
-//                )
+                        inputVec.x < 0 && availableSpaceLeft > 0 && !level.isBar(if ( ox > 0 ) x else x - 1, y)
                     }
                 }
 
                 edge(ActorSequence.RunRight.id) {
                     validWhen {
-                        inputVec.x > 0 && (
-                                (ox < 0) || (ox >= 0 && !(level.isBarrier(x + 1, y)))
-                                ) && !level.isBar(if ( ox >= 0 ) x + 1 else x, y)
+                        inputVec.x > 0 && availableSpaceRight > 0 && !level.isBar(if ( ox >= 0 ) x + 1 else x, y)
                     }
                 }
 
@@ -459,18 +462,12 @@ sealed class Actor(val game: Game) : Controllable {
             }
 
             init {
-                // so we have entered state - set animation, but stop before update
-                edge(StopState.name) {
-                    validWhen { !canMoveLeft }
-                }
                 onUpdate {
-                    offset.x -= xMove
-                    centerY()
-                    if ( ox > 0 ) return@onUpdate null
-                    if ( !canMoveLeft ) {
-                        offset.x = if ( level.hasGuard( x - 1, y ) && ox < game.getGuard(x - 1, y).ox )
-                            game.getGuard(x - 1, y).ox
-                        else 0
+                    val delta = availableSpaceLeft
+                    offset.x -= delta
+                    centerY(delta / yMove.toFloat())
+                    //if ( ox > 0 ) return@onUpdate null
+                    if ( delta == 0 ) {
                         return@onUpdate StopState.name
                     }
                     if (ox < -W2) { //move to x-1 position
@@ -487,12 +484,10 @@ sealed class Actor(val game: Game) : Controllable {
         sealed class MoveRight(actor: Actor, animName: ActorSequence) : MovementState(actor, animName) {
             init {
                 onUpdate {
-                    offset.x += xMove
-                    centerY()
-                    if ( !canMoveRight ) {
-                        offset.x = if ( level.hasGuard( x + 1, y ) && ox > game.getGuard(x + 1, y).ox )
-                            game.getGuard(x + 1, y).ox
-                        else 0
+                    val delta = availableSpaceRight
+                    offset.x += delta
+                    centerY(delta / xMove.toFloat())
+                    if ( delta == 0 ) {
                         return@onUpdate StopState.name
                     }
                     if ( ox > W2 ) { //move to x+1 position
