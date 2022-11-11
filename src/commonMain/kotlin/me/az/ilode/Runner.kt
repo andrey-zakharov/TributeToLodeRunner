@@ -53,9 +53,6 @@ class Runner(game: Game) : Actor(game), Controllable {
     } // game will handle this
     // should prevent others transitions for a while dig stops
     sealed class DigState(actor: Runner, animName: ActorSequence) : ActorState(actor, animName, animName.id) {
-        companion object {
-            const val digRunnerAnimLength = 1
-        }
         init {
             onEnter {
                 with(actor) {
@@ -77,7 +74,7 @@ class Runner(game: Game) : Actor(game), Controllable {
 
             onUpdate {
                 // if state expired and not loop
-                if ( frameIndex >= digRunnerAnimLength ) {
+                if ( sequenceSize > 0 && frameIndex >= sequenceSize ) {
                     //hack
                     actor.action = when(this@DigState) {
                         is DigLeft -> ActorSequence.RunLeft

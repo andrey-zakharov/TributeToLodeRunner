@@ -1,11 +1,11 @@
 {
   "sequence":
   {
-    "runRight":  [0, 4, 2],
-    "runLeft":   [6, 10, 8],
+    "runRight":  [0, 1, 2],
+    "runLeft":   [6, 7, 8],
     "runUpDown": [12, 13, 14, 15, 16],
-    "barRight":  [17, 18, 19, 20, 21, 22],
-    "barLeft":   [23, 24, 25, 26, 27, 28],
+    "barRight":  [17, 18, 19],
+    "barLeft":   [23, 24, 25],
     "fallLeft":  [29],
     "fallRight": [30],
     "reborn":    [32, 32, 32, 32, 33, 33, 33],

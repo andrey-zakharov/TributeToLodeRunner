@@ -141,7 +141,7 @@ distributions {
                 from(main.runtimeDependencyFiles)
             }
             into("assets/") {
-                from("src/commonMain/resources/assets")
+                from("src/commonMain/resources/")
             }
         }
     }
