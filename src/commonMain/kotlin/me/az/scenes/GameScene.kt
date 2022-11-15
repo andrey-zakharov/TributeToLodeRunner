@@ -14,6 +14,7 @@ import ViewSpec
 import backgroundImageFile
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
+import de.fabmax.kool.math.MutableVec3d
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.*
@@ -175,8 +176,8 @@ open class GameScene(val game: Game,
                 setDepthTexture(false)
                 addColorTexture {
                     colorFormat = TexFormat.RGBA
-                    minFilter = FilterMethod.NEAREST
-                    magFilter = FilterMethod.NEAREST
+                    minFilter = FilterMethod.LINEAR
+                    magFilter = FilterMethod.LINEAR
                 }
             })
         }
@@ -190,15 +191,15 @@ open class GameScene(val game: Game,
 
             cameraController = CameraController(pass.camera as OrthographicCamera, ctx = ctx)
 
-            crt = OffscreenRenderPass2d(Group(), renderPassConfig {
-                setDynamicSize()
-                setDepthTexture(false)
-                addColorTexture {
-                    colorFormat = TexFormat.RGBA
-                    minFilter = FilterMethod.NEAREST
-                    magFilter = FilterMethod.NEAREST
-                }
-            })
+//            crt = OffscreenRenderPass2d(Group(), renderPassConfig {
+//                setDynamicSize()
+//                setDepthTexture(false)
+//                addColorTexture {
+//                    colorFormat = TexFormat.RGBA
+//                    minFilter = FilterMethod.NEAREST
+//                    magFilter = FilterMethod.NEAREST
+//                }
+//            })
 
             crt?.let {
                 (it.drawNode as Group).apply {
@@ -244,7 +245,7 @@ open class GameScene(val game: Game,
                         mirrorTexCoordsY()
                     }
                 }
-                shader = MaskShader { color { textureColor(crt!!.colorTexture) } }
+                shader = MaskShader { color { textureColor((crt?:off!!).colorTexture) } }
                 onUpdate += {
                     (shader as MaskShader).visibleRadius = shatterRadiusAnim.tick(it.ctx)
                     // hack to sync anims
@@ -252,7 +253,7 @@ open class GameScene(val game: Game,
                         shatterRadiusAnim.progress = 0f
                         game.animEnds = true
                     }
-                    else if (game.runner.anyKeyPressed) {
+                    else if (!game.animEnds && game.runner.anyKeyPressed) {
                         stopIntro(it.ctx)
                         game.skipAnims = true
                     }

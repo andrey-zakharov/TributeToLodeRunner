@@ -7,9 +7,14 @@ import ImageAtlasSpec
 import ViewSpec
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
+import de.fabmax.kool.math.MutableVec3d
+import de.fabmax.kool.math.MutableVec3f
 import de.fabmax.kool.modules.ui2.mutableStateOf
+import de.fabmax.kool.pipeline.Texture2d
 import me.az.ilode.Game
 import me.az.view.TextView
+import simpleTextureProps
+import sprite
 
 class GameUI(val game: Game,
              val assets: AssetManager,
@@ -23,6 +28,7 @@ class GameUI(val game: Game,
 
     override suspend fun loadResources(assets: AssetManager, ctx: KoolContext) {
         fontAtlas.load(tileSet.value, assets)
+
         dirty = true
     }
 

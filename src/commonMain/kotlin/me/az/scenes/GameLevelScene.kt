@@ -13,6 +13,7 @@ import de.fabmax.kool.scene.Group
 import de.fabmax.kool.scene.OrthographicCamera
 import de.fabmax.kool.scene.Scene
 import de.fabmax.kool.scene.animation.*
+import de.fabmax.kool.util.MsdfFont
 import dump
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -176,6 +177,7 @@ class GameLevelScene (
                                 """
                                     #speedAnim = %%s %%.3f
                                     #scaleAnim = %%s %%.3f
+                                    shatter = %.3f
                                     
                                 global runner center = %.1f x %.1f
                                 camera = %.1f/%.1f x %.1f/%.1f
@@ -189,7 +191,7 @@ class GameLevelScene (
                                 %s""".trimIndent()
                                     .format(
 //                                        speedAnim.dis(), speedAnim.value.value, scaleAnim.dis(), scaleAnim.value.value,
-
+                                        currentShutter,
                                         levelView?.runnerView?.globalCenter?.x,
                                         levelView?.runnerView?.globalCenter?.y,
                                         off?.camera?.position?.x,

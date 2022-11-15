@@ -266,8 +266,6 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
         super.setup(ctx)
         game.level = GameLevel(0, map, primaryTileSet = tilesAtlas.nameIndex ).also {
             it.holesAnims = holeAnims
-
-            // additions
         }
 
         game.onPlayGame += { g: Game, _ ->
@@ -281,9 +279,8 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
             }
         }
 
-
         game.onStateChanged += {
-            println(name)
+            println("main menu game change: $name")
             when(name) {
                 GameState.GAME_NEW_LEVEL -> {
                     addLevelView(ctx, game.level!!)
@@ -349,7 +346,7 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
         //game.stop()
         game.runner.stop()
         super.dispose(ctx)
-        unregisterActions(ctx.inputMgr, subs)
+        ctx.inputMgr.unregisterActions(subs)
         subs.clear()
     }
 

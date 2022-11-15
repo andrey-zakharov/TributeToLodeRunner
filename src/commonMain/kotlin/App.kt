@@ -5,15 +5,14 @@ import com.russhwolf.settings.int
 import de.fabmax.kool.InputManager
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.UniversalKeyCode
-import de.fabmax.kool.math.Vec2i
-import de.fabmax.kool.math.isFuzzyZero
-import de.fabmax.kool.modules.ui2.MutableStateValue
-import de.fabmax.kool.modules.ui2.UiScene
-import de.fabmax.kool.modules.ui2.mutableStateOf
+import de.fabmax.kool.math.*
+import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.Camera
 import de.fabmax.kool.scene.OrthographicCamera
 import de.fabmax.kool.scene.Scene
+import de.fabmax.kool.util.Color
+import de.fabmax.kool.util.WalkAxes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -24,8 +23,7 @@ import me.az.utils.buildStateMachine
 import me.az.utils.choice
 import me.az.utils.enumDelegate
 import me.az.view.GameControls
-import kotlin.math.ceil
-import kotlin.math.floor
+import kotlin.math.*
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
@@ -38,12 +36,17 @@ val simpleValueTextureProps = TextureProps(TexFormat.R,
     AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE,
     FilterMethod.NEAREST, FilterMethod.NEAREST, mipMapping = false, maxAnisotropy = 1
 )
+
+val bluredTextureProps = TextureProps(TexFormat.RGBA,
+    AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE,
+    FilterMethod.LINEAR, FilterMethod.LINEAR, mipMapping = false, maxAnisotropy = 1
+)
 enum class GameSpeed(val fps: Int) {
     SPEED_VERY_SLOW(14),
     SPEED_SLOW      (18),
-    SPEED_NORMAL    (23),
-    SPEED_FAST      (29),
-    SPEED_VERY_FAST (35), // 14, 18, 23, 29, 35
+    SPEED_NORMAL    (28),
+    SPEED_FAST      (35),
+    SPEED_VERY_FAST (40), // 14, 18, 23, 29, 35
     ;
     val msByPass get() = 1000 / fps
     val dis get() = name.removePrefix("SPEED_").lowercase().replace('_', ' ')
@@ -82,6 +85,7 @@ object MainMenuState : State<App>() {
 //            mainUiMenu = it.setupUi()
         }
         mainUiMenu?.run { app.ctx.scenes += this }
+        app.ctx.scenes += touchControls(game.runner)
 
         game.reset()
     }
@@ -101,6 +105,7 @@ object MainMenuState : State<App>() {
             app.ctx.runDelayed(1) { dispose(app.ctx) }
         }
         mainMenu = null
+        app.ctx.scenes.clear()
     }
     override fun update(obj: App): State<App>? {
 
@@ -127,12 +132,33 @@ object MainMenuState : State<App>() {
 
 object RunGameState : State<App>() {
 
+    enum class LocalActions(
+        override val keyCode: InputSpec,
+        override val onPress: App.(InputManager.KeyEvent) -> Unit = {},
+        override val onRelease: App.(InputManager.KeyEvent) -> Unit = {}
+    ) : KeyAction<App> {
+        DEBUGTOGGLE('d'.toInputSpec(InputManager.KEY_MOD_CTRL), onRelease = {
+            when (debugScene) {
+                null -> {}
+                else -> {
+                    if ( ctx.scenes.contains(debugScene) ) {
+                        ctx.scenes -= debugScene!!
+                    } else {
+                        ctx.scenes += debugScene!!
+                    }
+                }
+            }
+        }),
+        EXIT(InputManager.KEY_ESC.toInputSpec(), onRelease = {
+            exit = true
+        })
+    }
+
     var gameScene: GameLevelScene? = null
     var infoScene: Scene? = null
     var debugScene: Scene? = null
     private val keyListeners = mutableListOf<InputManager.KeyEventListener>()
     var exit = false
-
 
     override fun enterState(app: App) {
         super.enterState(app)
@@ -152,23 +178,7 @@ object RunGameState : State<App>() {
             gameScene?.setupUi(this)!!
         }
 
-        keyListeners.add( app.ctx.inputMgr.registerKeyListener(UniversalKeyCode('d'), "toggle debug") {
-            when {
-                debugScene == null -> Unit
-                it.isPressed -> if ( app.ctx.scenes.contains(debugScene) ) {
-                    app.ctx.scenes -= debugScene!!
-                } else {
-                    app.ctx.scenes += debugScene!!
-                }
-            }
-        } )
-        keyListeners.add( app.ctx.inputMgr.registerKeyListener(InputManager.KEY_ESC, "escape") {
-            when {
-                it.isReleased -> {
-                    if ( game.isOver ) exit = true
-                }
-            }
-        })
+        keyListeners.addAll( app.ctx.inputMgr.registerActions(app, LocalActions.values().asIterable()) )
 
         game.onStateChanged += {
             when (this.name) {
@@ -178,6 +188,9 @@ object RunGameState : State<App>() {
                 else -> { }
             }
         }
+
+        // controller
+        app.ctx.scenes += touchControls(game.runner)
 
 //        app.ctx.scenes += debugScene!!
     }
@@ -192,6 +205,8 @@ object RunGameState : State<App>() {
             infoScene = null
             debugScene?.run { app.ctx.scenes -= this; runDelayed(1) { dispose(this@with) } }
             debugScene = null
+            //app.ctx.scenes -= app.touchControls
+            app.ctx.scenes.clear()
         }
     }
 
@@ -298,7 +313,7 @@ class App(val ctx: KoolContext) {
         test3()
         test2()
 
-        registerActions(ctx.inputMgr, this, AppActions.values().asIterable())
+        ctx.inputMgr.registerActions(this, AppActions.values().asIterable())
         changeState(MainMenuState)
 //        changeState(RunGameState)
 
@@ -318,12 +333,55 @@ class App(val ctx: KoolContext) {
     }
 
     // need to pixelize in updateCamera
-    class GameCamera : OrthographicCamera("plain") {
+    class GameCamera(
+        private val originalWidth: Int, private val originalHeight: Int
+    ) : OrthographicCamera("plain") {
+        init {
+            println("created camera $originalWidth x $originalHeight")
+        }
+        override fun updateCamera(renderPass: RenderPass, ctx: KoolContext) {
+
+            /* fit pixel perfect
+            val maxRatioX = floor(renderPass.viewport.width / originalWidth.toFloat())
+            val maxRatioY = floor(renderPass.viewport.height / originalHeight.toFloat())
+            var approxW = maxRatioX * originalWidth
+            var approxH = maxRatioY * originalHeight
+            val targetRatio = originalWidth.toFloat() / originalHeight.toFloat()
+            val approxRatio = approxW / approxH
+
+            when {
+                approxRatio < targetRatio -> approxH = approxW / renderPass.viewport.aspectRatio
+                approxRatio > targetRatio -> approxW = approxH * renderPass.viewport.aspectRatio
+            }
+            var scaleX = max(1f, approxW / originalWidth.toFloat())
+            var scaleY = max(1f, approxH / originalHeight.toFloat())
+
+            var err = Float.MAX_VALUE
+            for( sx in listOf(floor(scaleX), ceil(scaleX))) {
+                for ( sy in listOf(floor(scaleY), ceil(scaleY))) {
+                    if ( abs((sx / sy) - targetRatio ) < err ) {
+                        err = abs((sx / sy) - targetRatio )
+                        scaleX = sx
+                        scaleY = sy
+                    }
+                }
+            }
+
+            // final width height
+//            top = scaleY * originalHeight.toFloat()
+            top = renderPass.viewport.height.toFloat() /  scaleY
+                    bottom = 0f
+            val hw = renderPass.viewport.width / 2f /  scaleX //scaleX * originalWidth.toFloat() / 2f
+            right = hw
+            left = -hw*/
+
+            super.updateCamera(renderPass, ctx)
+        }
     }
     companion object {
         // for 3 scenes
         fun createCamera(width: Int, height: Int): OrthographicCamera {
-            return GameCamera().apply {
+            return GameCamera(width, height).apply {
                 projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
                 isClipToViewport = false
                 isKeepAspectRatio = true
@@ -417,44 +475,232 @@ class App(val ctx: KoolContext) {
     }
 
     enum class AppActions(override val keyCode: InputSpec,
-                          override val onPress: App.(InputManager.KeyEvent) -> Unit,
-                          override val onRelease: App.(InputManager.KeyEvent) -> Unit) : Action<App> {
+                          override val onPress: App.(InputManager.KeyEvent) -> Unit = {},
+                          override val onRelease: App.(InputManager.KeyEvent) -> Unit) : KeyAction<App> {
         EXIT(InputManager.KEY_BACKSPACE.toInputSpec(), onPress = {
             fsm.popState()
             changeState(MainMenuState)
-        }, onRelease = {})
+        }, onRelease = {}),
+        DEBUG('d'.toInputSpec(InputManager.KEY_MOD_CTRL), onRelease = {
+            if ( ctx.scenes.any { it.name == "debug-overlay" } ) {
+                ctx.scenes.removeAll { it.name == "debug-overlay" }
+            } else {
+                ctx.scenes += de.fabmax.kool.util.debugOverlay()
+            }
+        })
     }
 }
 
-interface Action<E> {
+
+internal fun touchControls(controllable: Controllable): Scene {
+//    val currentInputAxis = object : Controllable {
+//        override val inputVec = MutableVec2i(0, 0)
+//        override var digLeft: Boolean = false
+//        override var digRight: Boolean = false
+//    }
+    val currentAnalog = object {
+        val inputVec = MutableVec2f(0f, 0f)
+    }
+    val deadZone = 0.2f
+    val vjcTex by lazy {
+        Texture2d(bluredTextureProps) {
+            return@Texture2d it.loadTextureData("images/JoystickSplitted.png", bluredTextureProps.format)
+        }
+    }
+    val handleTex by lazy {
+        Texture2d(bluredTextureProps) {
+            return@Texture2d it.loadTextureData("images/SmallHandleFilledGrey.png", bluredTextureProps.format)
+        }
+    }
+    val colors = Colors.darkColors(
+        background = Color(0f, 0f, 0f, 0.25f)
+    )
+    val tmp = MutableVec3f()
+    val ray = Ray()
+    return UiScene("virtual joystick", false) {
+
+        +sprite(vjcTex).apply {
+//            onProcessInput += {
+            onUpdate += { ev->
+
+                // min Width
+                // max width
+                setIdentity()
+                translate(
+                    ev.viewport.width - this.bounds.width / 2.0,
+                    - ev.viewport.height + this.bounds.height / 2.0,
+                    0.0
+                )
+                currentAnalog.inputVec.x = 0f
+                currentAnalog.inputVec.y = 0f
+                controllable.inputVec.x = 0
+                controllable.inputVec.y = 0
+                if (handleTex.loadedTexture != null && vjcTex.loadedTexture != null) {
+                    ev.ctx.inputMgr.pointerState.pointers
+                        .filter { it.isValid && !it.isConsumed() && it.isAnyButtonDown }
+                        .forEach {
+                            if (!camera.computePickRay(ray, it, ev.viewport, ev.ctx))
+                                return@forEach
+                            ray.origin.z = 0f
+
+                            if (bounds.contains(ray.origin)) {
+                                handleTex.loadedTexture?.let { ht ->
+                                    tmp.set(ray.origin)
+                                    toLocalCoords(tmp)
+                                    tmp.x /= (vjcTex.loadedTexture!!.width - handleTex.loadedTexture!!.width) / 2f
+                                    tmp.y /= (vjcTex.loadedTexture!!.height - handleTex.loadedTexture!!.height) / 2f
+                                    controllable.inputVec.x = if (tmp.x < -deadZone) -1 else if (tmp.x > deadZone) 1 else 0
+                                    controllable.inputVec.y = - if (tmp.y < -deadZone) -1 else if (tmp.y > deadZone) 1 else 0
+                                    currentAnalog.inputVec.x = tmp.x.clamp(-1f, 1f)
+                                    currentAnalog.inputVec.y = tmp.y.clamp(-1f, 1f)
+                                    val l = currentAnalog.inputVec.length()
+                                    if ( l > 1 ) {
+                                        currentAnalog.inputVec.x /= l
+                                        currentAnalog.inputVec.y /= l
+                                    }
+                                    println(currentAnalog.inputVec)
+                                    it.consume()
+                                }
+
+                            }
+                        }
+                }
+            }
+
+            +sprite(handleTex).also { inner ->
+
+                inner.onUpdate += {
+                    if ( vjcTex.loadedTexture != null && handleTex.loadedTexture != null ) {
+                        inner.setIdentity()
+                        inner.translate(
+                            ((currentAnalog.inputVec.x) * (vjcTex.loadedTexture!!.width - handleTex.loadedTexture!!.width) / 2f).clamp(
+                                -vjcTex.loadedTexture!!.width + handleTex.loadedTexture!!.width / 2f,
+                                vjcTex.loadedTexture!!.width - handleTex.loadedTexture!!.width / 2f
+                            ),
+                            ((currentAnalog.inputVec.y) * (vjcTex.loadedTexture!!.height - handleTex.loadedTexture!!.height) / 2f).clamp(
+                                -vjcTex.loadedTexture!!.height + handleTex.loadedTexture!!.height / 2f,
+                                vjcTex.loadedTexture!!.height - handleTex.loadedTexture!!.height / 2f
+                            ),
+                            0f
+                        )
+                    }
+                }
+            }
+
+        }
+
+        +Panel(colors = Colors.darkColors(
+            background = Color(0f, 0f, 0f, 0.5f)
+        )) {
+
+            val W = 360.dp
+            val H = 360.dp
+
+            modifier.apply {
+                alignY = AlignmentY.Bottom
+                width( FitContent )
+                height(FitContent)
+                margin(30f.dp, 30f.dp)
+            }
+            Row(FitContent, FitContent) {
+                Column(Grow.Std, FitContent) {
+                    modifier.alignX = AlignmentX.Start
+                    Row(Grow.Std, FitContent) {
+                        Column(Grow.Std, FitContent) {
+                            Button("dig left") {
+                                modifier.apply {
+                                    isClickFeedback = false
+                                    textColor = Color.WHITE
+                                    buttonColor = Color(0.5f, 0.5f, 0.5f, 0.25f)
+                                    width( 45f.dp )
+                                    height(45f.dp )
+                                    margin(30f.dp, 30f.dp)
+                                    onClick += {
+                                        controllable.digLeft = true
+                                    }
+                                }
+
+                            }
+                        }
+                        Column(Grow.Std, FitContent) {
+                            Button("dig right") {
+                                modifier.apply {
+                                    isClickFeedback = false
+                                    textColor = Color.WHITE
+                                    buttonColor = Color(0.5f, 0.5f, 0.5f, 0.25f)
+                                    width( 45f.dp )
+                                    height(45f.dp )
+                                    margin(30f.dp, 30f.dp)
+                                    onClick += {
+                                        controllable.digRight = true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+//                Column(Grow.Std, FitContent) {
+//
+////                    Image(vjcTex) {
+////                        modifier.alignX(AlignmentX.End)
+////                            .width(W)
+////                            .height(H)
+////                            .onClick { ev->
+////                                val axisGap = 50.dp.px
+////                                val res = MutableVec2f(- W.px / 2f,  - H.px / 2f)
+////
+////                                res += ev.position
+////
+////                                currentInputAxis.inputVec.x = sign(res.x / W.px).toInt()
+////                                currentInputAxis.inputVec.y = sign( res.y / H.px).toInt()
+////                            }
+////
+////
+////
+////                        Image(handleTex) {
+////
+////                            onRenderScene += {
+////                                this.modifier.margin(
+////                                    start = ((currentInputAxis.inputVec.x - 1f) * W.px / 2f ).dp, end = 0f.dp,
+////                                    top = ((currentInputAxis.inputVec.y -1f) * H.px / 2f).dp, bottom = 0f.dp
+////                                )
+////                                println(this.modifier.marginTop)
+////                            }
+////                            //translate( 360.dp.px / 2f, 360.dp.px / 2f, 0f )
+////
+////                        }
+////                    }
+//
+//                }
+            }
+        }
+    }
+}
+
+
+interface KeyAction<E> {
     val name: String
     val keyCode: InputSpec
     val onPress: E.(InputManager.KeyEvent) -> Unit
     val onRelease: E.(InputManager.KeyEvent) -> Unit
 }
-
-fun<E> registerActions(inputManager: InputManager, root: E, actions: Iterable<Action<E>>, ) =
+fun<E> InputManager.registerActions(root: E, actions: Array<KeyAction<E>>) = registerActions(root, actions.asIterable())
+fun<E> InputManager.registerActions(root: E, actions: Iterable<KeyAction<E>>, ) =
     actions.map { action ->
-        inputManager.registerKeyListener(
+        registerKeyListener(
             keyCode = action.keyCode.code,
             name = action.name,
-            filter = {ev ->
-                ev.isPressed &&
-                (action.keyCode.modificatorBitMask or ev.modifiers) xor action.keyCode.modificatorBitMask == 0
-            }
+            filter = { ev -> (action.keyCode.modificatorBitMask xor ev.modifiers) == 0 }
         ) { ev ->
             if ( ev.isReleased ) action.onRelease.invoke(root, ev)
-            else
-                if (ev.isPressed) action.onPress.invoke(root, ev)
+            else if (ev.isPressed) action.onPress.invoke(root, ev)
         }
     }
 
-fun unregisterActions(inputManager: InputManager, actions: Iterable<InputManager.KeyEventListener>) {
-    actions.forEach {
-        inputManager.removeKeyListener(it)
-    }
+fun InputManager.unregisterActions(actions: Iterable<InputManager.KeyEventListener>) {
+    actions.forEach { removeKeyListener(it) }
 }
-
 
 /*
     Game(settings).startLevel()

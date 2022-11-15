@@ -127,6 +127,7 @@ class Game(val state: AppContext) : CoroutineScope {
             onEnter {
                 animEnds = false
                 level!!.reset()
+                onLevelStart.forEach { it.invoke(level!!) }
             }
         }
         state(GameState.GAME_RUNNING) {

@@ -30,6 +30,19 @@ class LevelView(
     val widthInPx = conf.tileSize.x * level.width
     val heightInPx = conf.tileSize.y * level.height
 
+    private val onLevelStart = { gameLevel: GameLevel ->
+
+        var n = findNode("guard")
+        while(n != null) {
+            removeNode(n)
+            n = findNode("guard")
+        }
+
+        game.guards.forEach {
+            +ActorView(it, guardAtlas, guardAnims, conf.tileSize, "guard")
+        }
+    }
+
     init {
 
         scale(conf.tileSize.x.toFloat(), conf.tileSize.y.toFloat(), 1f)
@@ -67,9 +80,14 @@ class LevelView(
         }
 
         +runnerView
-        game.guards.forEach {
-            +ActorView(it, guardAtlas, guardAnims, conf.tileSize)
-        }
+        game.onLevelStart += onLevelStart
+        onLevelStart(game.level!!)
+
+        println("level px=${widthInPx}x${heightInPx}")
     }
 
 }
+//150: 0b 04 18 05 05 08 03 0e 16 0e 0d 0a 05 01 17 01 00 00
+//149: 09 01 0a 01 0f 01 10 01 ff ff 0e 0e 04 01 10 01 00 00
+//148: 01 01 0a 05 13 05 15 09 ff ff 0d 01 04 01 0a 01 00
+

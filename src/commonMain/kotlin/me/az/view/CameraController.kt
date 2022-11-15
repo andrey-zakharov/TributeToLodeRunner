@@ -9,6 +9,7 @@ import de.fabmax.kool.scene.Group
 import de.fabmax.kool.scene.Node
 import de.fabmax.kool.scene.OrthographicCamera
 import de.fabmax.kool.scene.animation.*
+import de.fabmax.kool.util.Viewport
 import me.az.ilode.Game
 import me.az.scenes.height
 import me.az.scenes.width
@@ -59,13 +60,8 @@ class CameraController(private val cameraToControl: OrthographicCamera, name: St
         game.onPlayGame -= cameraUpdater
     }
 
-    private fun calculateCamera(boundNode: Group, followNode: Node): () -> MutableVec3f {
-        val deadZone = with(cameraToControl) {
-            BoundingBox().apply {
-                add(Vec3f(-this@with.width / 4, -this@with.height / 4, 0f))
-                add(Vec3f(this@with.width / 4, this@with.height / 4, 0f))
-            }
-        }
+    private fun calculateCamera(boundNode: Group, followNode: Node): (viewport: Viewport) -> MutableVec3f {
+
         val borderZone = with(cameraToControl) {
             val scaledMin = MutableVec3f(boundNode.bounds.min)
             val scaledMax = MutableVec3f(boundNode.bounds.max)
@@ -78,8 +74,12 @@ class CameraController(private val cameraToControl: OrthographicCamera, name: St
             }
         }
 
-        return {
+        return { viewport ->
             val resultPos = MutableVec3f(followNode.globalCenter)
+            val deadZone = BoundingBox().apply {
+                add(Vec3f(-viewport.width / 4f, -viewport.height / 4f, 0f))
+                add(Vec3f(viewport.width / 4f, viewport.height / 4f, 0f))
+            }
 
             with(cameraToControl) {
                 //camera shift
@@ -124,7 +124,7 @@ class CameraController(private val cameraToControl: OrthographicCamera, name: St
 
         return { ev: RenderPass.UpdateEvent ->
             if (game.isPlaying) {
-                val pos = calculator()
+                val pos = calculator(ev.viewport)
                 // anim?
                 cameraPos.to.set(
                     pos.x /*+ (ctx.inputMgr.pointerState.primaryPointer.x.toFloat() - it.viewport.me.az.view.getWidth/2) / 50f*/,

@@ -1,34 +1,29 @@
 package me.az.view
 
+import KeyAction
 import de.fabmax.kool.InputManager
-import de.fabmax.kool.UniversalKeyCode
+import de.fabmax.kool.KoolContext
 import de.fabmax.kool.scene.Node
 import me.az.ilode.Game
 import me.az.ilode.InputSpec
 import me.az.ilode.toInputSpec
+import registerActions
+import unregisterActions
 
 class GameControls(val game: Game, val inputManager: InputManager): Node() {
 
-    init {
-
-        GameAction.values().forEach {  action ->
-            inputManager.registerKeyListener(
-                keyCode = action.keyCode.code,
-                name = action.name,
-                filter = { ev -> (action.keyCode.modificatorBitMask xor ev.modifiers) == 0 }
-            ) { ev ->
-                if ( ev.isReleased ) action.onRelease.invoke(game, ev)
-                else if (ev.isPressed) action.onPress.invoke(game, ev)
-            }
-        }
+    val subs = inputManager.registerActions(game, GameKeyAction.values().asIterable())
+    override fun dispose(ctx: KoolContext) {
+        super.dispose(ctx)
+        inputManager.unregisterActions(subs)
     }
 }
 
-enum class GameAction(
-    val keyCode: InputSpec, // or no
-    val onPress: Game.(InputManager.KeyEvent) -> Unit = {},
-    val onRelease: Game.(InputManager.KeyEvent) -> Unit = {}
-) {
+enum class GameKeyAction(
+    override val keyCode: InputSpec, // or no
+    override val onPress: Game.(InputManager.KeyEvent) -> Unit = {},
+    override val onRelease: Game.(InputManager.KeyEvent) -> Unit = {}
+) : KeyAction<Game> {
     BACK(InputManager.KEY_BACKSPACE.toInputSpec(), onRelease = {
         // stopAudio
         // destroy chars

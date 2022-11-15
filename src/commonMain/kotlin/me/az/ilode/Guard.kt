@@ -489,7 +489,7 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
 
     val isReborn get() = action == ActorSequence.Reborn
 
-    override fun toString() = "guard %d+%d x %d+%d state=%s gold=%d inhole=%s".format(
-        x, ox, y, oy, fsm.currentStateName, hasGold, inHole
+    override fun toString() = "%s guard %d+%d x %d+%d state=%s gold=%d inhole=%s".format(
+        super.toString(), x, ox, y, oy, fsm.currentStateName, hasGold, inHole
     )
 }

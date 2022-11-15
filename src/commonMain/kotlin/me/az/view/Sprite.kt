@@ -18,9 +18,9 @@ fun sprite(texture: Texture2d,
 }
 
 open class Sprite(
-    private val spriteSize: Vec2i?, // in pixels size of sprite view
+    spriteSize: Vec2i?, // in pixels size of sprite view
     var texture: Texture2d?,
-    private val regionSize: Vec2i?, // how much get from texture by pixels
+    regionSize: Vec2i?, // how much get from texture by pixels
     name: String? = null,
     private val mirrorTexCoordsY: Boolean = false
 ) : Group("sprite $name group") {
@@ -102,7 +102,7 @@ open class Sprite(
 
             val SPRITE_MESH_ATTRIBS = listOf(Attribute.POSITIONS, Attribute.TEXTURE_COORDS, Attribute.COLORS)
             private val pipelineConfig = PipelineConfig().apply {
-                blendMode = BlendMode.BLEND_PREMULTIPLIED_ALPHA
+                blendMode = BlendMode.BLEND_ADDITIVE
                 cullMethod = CullMethod.NO_CULLING
                 depthTest = DepthCompareOp.DISABLED
             }
