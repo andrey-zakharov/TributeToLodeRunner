@@ -102,9 +102,10 @@ class MainMenuState(private val app: App) : StackedState<AppState, App>(AppState
                         with( context ) {
                             currentLevel.set(menuContext.level.value)
                             levelSet.set(menuContext.levelSet.value)
-                            runnerLifes.set(me.az.ilode.START_HEALTH)
+                            runnerLifes.set(START_HEALTH)
                             score.set(0)
                         }
+                        gameSettings.sometimePlayInGodMode = false
                     }
                     startnewGame = false
                     continueGame = false
@@ -272,14 +273,14 @@ class GameSettings(val settings: Settings) {
     var curScore: Int by settings.int(defaultValue = 0)
     var currentLevel: Int by settings.int(defaultValue = 0)
     var runnerLifes by settings.int(defaultValue = START_HEALTH) // max = MAX_HEALTH
-    var speed: GameSpeed by enumDelegate(settings, defaultValue = GameSpeed.SPEED_SLOW)
+    var speed: GameSpeed by enumDelegate(settings, defaultValue = GameSpeed.SPEED_NORMAL)
     var spriteMode: TileSet by enumDelegate(settings, defaultValue = TileSet.SPRITES_APPLE2)
     var version: LevelSet by enumDelegate(settings, defaultValue = LevelSet.CLASSIC)
     var introDuration by settings.float(defaultValue = 60f)
     var sometimePlayInGodMode by settings.boolean()
 
     // { s:curScore, l:curLevel, r:runnerLife, m: maxLevel, g: sometimePlayInGodMode, p: passedLevel};
-    var immortal by settings.boolean(defaultValue = true)
+    var immortal by settings.boolean(defaultValue = false)
     var stopGuards by settings.boolean(defaultValue = false)
     var actorMoveX = 4
     var actorMoveY = 4
@@ -287,13 +288,18 @@ class GameSettings(val settings: Settings) {
 
 class AppContext(val gameSettings: GameSettings) {
     val score = mutableStateOf(gameSettings.curScore).also { it.onChange { gameSettings.curScore = it } }
-
     val spriteMode = mutableStateOf(gameSettings.spriteMode).also { it.onChange { gameSettings.spriteMode = it } }
     val levelSet = mutableStateOf(gameSettings.version).also { it.onChange { gameSettings.version = it } }
     val currentLevel = mutableStateOf(gameSettings.currentLevel).also { it.onChange { gameSettings.currentLevel = it } }
     val speed = mutableStateOf(gameSettings.speed).also { it.onChange { gameSettings.speed = it } }
-    val stopGuards = MutableStateValue(gameSettings.stopGuards).also { it.onChange { v -> gameSettings.stopGuards = v } }
-    val immortal = MutableStateValue(gameSettings.immortal).also { it.onChange { v -> gameSettings.immortal = v } }
+    val stopGuards = MutableStateValue(gameSettings.stopGuards).also { it.onChange { v ->
+        gameSettings.stopGuards = v
+        gameSettings.sometimePlayInGodMode = true
+    } }
+    val immortal = MutableStateValue(gameSettings.immortal).also { it.onChange { v ->
+        gameSettings.immortal = v
+        gameSettings.sometimePlayInGodMode = true
+    } }
     val runnerLifes = MutableStateValue(gameSettings.runnerLifes).also { it.onChange { v -> gameSettings.runnerLifes = v } }
 }
 
