@@ -10,10 +10,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import me.az.utils.component1
 import me.az.utils.component2
+import me.az.utils.nearestTwo
 import org.mifek.wfc.core.Cartesian2DWfcAlgorithm
 import org.mifek.wfc.datastructures.IntArray2D
 import org.mifek.wfc.models.OverlappingCartesian2DModel
 import org.mifek.wfc.models.options.Cartesian2DModelOptions
+import kotlin.math.pow
 import kotlin.time.ExperimentalTime
 import kotlin.time.measureTime
 import kotlin.time.measureTimedValue
@@ -268,7 +270,7 @@ fun loadGameLevel(
     tilesAtlasIndex: Map<String, Int>,
 ) = GameLevel(levelId, map, tilesAtlasIndex)
 
-data class Anim( val pos: Vec2i, val name: String, var currentFrame: Int = 0 )
+data class Anim( val pos: Vec2i, val name: String, var currentFrame: Int = 0, val onFinish: () -> Unit = {})
 
 class GameLevel(
     val levelId: Int,
@@ -279,6 +281,7 @@ class GameLevel(
     // for load
     val width = map.first().length
     val height = map.size + 1 // ground
+    private val textureWidth = width.nearestTwo
     enum class Status {
         LEVEL_STARTUP,
         LEVEL_PAUSED,
@@ -286,7 +289,7 @@ class GameLevel(
         LEVEL_DONE
     }
     // store view info
-    val buf = createUint8Buffer(width * height)
+    private val buf = createUint8Buffer(textureWidth * height)
     var runnerPos = MutableVec2i()
     val guardsPos = mutableListOf<Vec2i>()
     var gold = 0
@@ -308,6 +311,7 @@ class GameLevel(
         println("creating level $levelId $width x $height")
         println("from map:")
         println(map.joinToString("\n"))
+        println("texture width = $textureWidth")
         reset()
     }
 
@@ -339,6 +343,7 @@ class GameLevel(
                 }
 
             } else {
+                entry.onFinish()
                 // on exit
                 if ( animName == "fillHole" ) {
                     this[pos] = ViewCell(false, primaryTileSet[Tile.BRICK.frame]!!)
@@ -367,8 +372,8 @@ class GameLevel(
     // 0 - 6 bits
     // 7 bit - for hole as frame tile set
 
-    operator fun get(x: Int, y: Int): ViewCell? = if ( isValid(x, y) ) ViewCell.unpack(buf[y * width + x]) else null
-    operator fun set(x: Int, y: Int, v: ViewCell)  { if ( isValid(x, y) ) buf[y * width + x] = v.pack; dirty = true }
+    operator fun get(x: Int, y: Int): ViewCell? = if ( isValid(x, y) ) ViewCell.unpack(buf[y * textureWidth + x]) else null
+    operator fun set(x: Int, y: Int, v: ViewCell)  { if ( isValid(x, y) ) buf[y * textureWidth + x] = v.pack; dirty = true }
 
     operator fun get(at: Vec2i) = get(at.x, at.y)
     operator fun set(at: Vec2i, v: ViewCell) = set(at.x, at.y, v)
@@ -464,7 +469,7 @@ class GameLevel(
     fun updateTileMap(): TextureData2d {
 //        println("updating field($width x $height)")
 //        println(buf.toArray().mapIndexed { index, byte -> if (index % width == 0) "\n$byte" else byte.toString() }.joinToString(""))
-        return TextureData2d(buf, width, height, TexFormat.R)
+        return TextureData2d(buf, textureWidth, height, TexFormat.R)
     }
 
     fun showHiddenLadders() {

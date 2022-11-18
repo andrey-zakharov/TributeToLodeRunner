@@ -65,17 +65,20 @@ class Runner(game: Game) : Actor(game), Controllable {
                     } else {
                         Pair(x + 1, "digHoleRight")
                     }
+                    //hack
 
-                    level.act[digTileX][y + 1] = TileLogicType.EMPTY
                     level.anims.add(Anim(Vec2i(digTileX, y), bitmap))
-                    level.anims.add(Anim(Vec2i(digTileX, y + 1), "${bitmap}Base"))
+                    val holePos = Vec2i(digTileX, y + 1)
+                    level.anims.add(Anim(holePos, "${bitmap}Base") {
+                        level.act[digTileX][y + 1] = TileLogicType.EMPTY
+//                        level.anims.add(Anim(holePos, "fillHole"))
+                    })
                 }
             }
 
             onUpdate {
                 // if state expired and not loop
                 if ( sequenceSize > 0 && frameIndex >= sequenceSize ) {
-                    //hack
                     actor.action = when(this@DigState) {
                         is DigLeft -> ActorSequence.RunLeft
                         is DigRight -> ActorSequence.RunRight
@@ -95,7 +98,8 @@ class Runner(game: Game) : Actor(game), Controllable {
 
     //Page 276 misc.c (book)
     fun ok2Dig(nx: Int): Boolean {
-        return level.isBlock(nx, y + 1) && level.isEmpty(nx, y)
+        return level.isBlock(nx, y + 1) && level.isEmpty(nx, y) &&
+                !level.anims.any { it.pos.x == nx && it.pos.y == y + 1 }
     }
 
     fun addScore(points: Int) {

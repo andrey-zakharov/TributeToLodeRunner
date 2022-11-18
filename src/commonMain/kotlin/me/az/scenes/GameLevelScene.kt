@@ -2,19 +2,14 @@ package me.az.scenes
 
 import AppContext
 import LevelsRep
-import ViewSpec
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
-import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.math.spatial.BoundingBox
 import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.Texture2d
-import de.fabmax.kool.scene.Group
 import de.fabmax.kool.scene.OrthographicCamera
 import de.fabmax.kool.scene.Scene
 import de.fabmax.kool.scene.animation.*
-import de.fabmax.kool.util.MsdfFont
-import dump
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.yield
@@ -24,7 +19,6 @@ import me.az.utils.format
 import simpleTextureProps
 import sprite
 import kotlin.coroutines.CoroutineContext
-import kotlin.math.abs
 import kotlin.math.sign
 
 fun<V, T : InterpolatedValue<V>> Animator<V, T>.dis(): String = "duration=%.3f speed=%.3f progress=%.3f repeating=%d".format(

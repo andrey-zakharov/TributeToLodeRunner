@@ -13,7 +13,20 @@ enum class LevelSet(val path: String) {
     FANBOOK("fanbook"),
     PROFESSIONAL("professional"),
     REVENGE("revenge"),
-    CUSTOM("custom"),
+    DMG("dmg"),
+    FCSLR1("fc_slr1"),
+    FCSLR2("fc_slr2"),
+    HIRRCNT("hir_rcnt"),
+    HISSHO2("hissho2"),
+    LRPRO68K("lrpro68k"),
+    MISC("misc"),
+    MSX("msx"),
+    MSX2("msx2"),
+    MSX_CHP("msx_chp"),
+    PC100("pc100"),
+    PCENGINE("pcengine"),
+    BUG("bug"),
+//    CUSTOM("custom"),
     ;
     val dis get() = "${ordinal + 1}.${name.lowercase()}"
 }
@@ -34,12 +47,15 @@ class LevelsRep(
         val obj = Json.decodeFromString<JsonObject>(json)
 
         with(obj["levels"] as JsonObject) {
-            val total = this["total"] as JsonPrimitive
-
+            val levelKeys = mutableSetOf(*keys.toTypedArray())
+            levelKeys.remove("total")
+            levelKeys.remove("name")
+            levelKeys.remove("desc")
+            levelKeys.remove("levelsDesc")
             levels.clear()
 
-            for (i in 1 .. total.int) {
-                val rows = this["level-" + i.toString().padStart(3, '0')] as JsonArray
+            for (levelName in levelKeys) {
+                val rows = this[levelName] as JsonArray
                 val map = rows.map { it.jsonPrimitive.content }
 //                res.add(loadGameLevel(i, map, tileSet.nameIndex))
                 levels.add(map)

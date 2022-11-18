@@ -4,8 +4,6 @@ import AppContext
 import GameSpeed
 import LevelSet
 import LevelsRep
-import MainMenuState.continueGame
-import MainMenuState.startnewGame
 import TileSet
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.InputManager
@@ -57,6 +55,9 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
 
     private val commands = mutableListOf<MenuCommand>()
     private val staticLabels = mutableListOf<StaticLabel>()
+
+    var startnewGame = false
+    var continueGame = false
 
     private val map by lazy {
         val mx = 16
@@ -239,8 +240,6 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
         ) {
             startnewGame = true
         }
-
-
     }
 
     data class StaticLabel(

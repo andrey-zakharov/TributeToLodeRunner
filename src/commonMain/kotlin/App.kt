@@ -4,7 +4,6 @@ import com.russhwolf.settings.float
 import com.russhwolf.settings.int
 import de.fabmax.kool.InputManager
 import de.fabmax.kool.KoolContext
-import de.fabmax.kool.UniversalKeyCode
 import de.fabmax.kool.math.*
 import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.*
@@ -12,18 +11,13 @@ import de.fabmax.kool.scene.Camera
 import de.fabmax.kool.scene.OrthographicCamera
 import de.fabmax.kool.scene.Scene
 import de.fabmax.kool.util.Color
-import de.fabmax.kool.util.WalkAxes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.az.ilode.*
 import me.az.scenes.*
-import me.az.utils.b
-import me.az.utils.buildStateMachine
-import me.az.utils.choice
-import me.az.utils.enumDelegate
+import me.az.utils.*
 import me.az.view.GameControls
-import kotlin.math.*
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
@@ -62,89 +56,92 @@ class ViewSpec (
 
 const val backgroundImageFile = "images/cover.jpg"
 
-sealed class State <T> {
-    open fun enterState(obj: T) {}
-    open fun exitState(obj: T) {}
-    abstract fun update(obj: T): State<T>?
+enum class AppState {
+    MAINMENU, RUNGAME, EXIT, SCORES, DEBUG
 }
 
-object MainMenuState : State<App>() {
-    var continueGame = false
-    var startnewGame = false
+class MainMenuState(private val app: App) : StackedState<AppState, App>(AppState.MAINMENU) {
     var exitGame = false
-    var mainMenu: Scene? = null
+    var mainMenu: MainMenuScene? = null
     var mainUiMenu: Scene? = null
-    val menuContext get() = (mainMenu as? MainMenuScene)?.menuContext ?: throw IllegalStateException()
+    val menuContext get() = mainMenu?.menuContext ?: throw IllegalStateException()
 
-    override fun enterState(app: App) {
-        super.enterState(app)
-        val game = Game(app.context)
-        // preload
-        mainMenu = MainMenuScene(app.context, game, app.ctx.assetMgr).also {
-            app.ctx.scenes += it
+    init {
+        onEnter {
+            val game = Game(app.context)
+            // preload
+            mainMenu = MainMenuScene(app.context, game, app.ctx.assetMgr).also {
+                app.ctx.scenes += it
 //            mainUiMenu = it.setupUi()
+            }
+            mainUiMenu?.run { app.ctx.scenes += this }
+//            app.ctx.scenes += touchControls(game.runner)
+
+            game.reset()
         }
-        mainUiMenu?.run { app.ctx.scenes += this }
-        app.ctx.scenes += touchControls(game.runner)
 
-        game.reset()
-    }
+        onExit {
+            mainUiMenu?.run {
+                app.ctx.scenes -= this
+                app.ctx.runDelayed(1) { dispose(app.ctx) }
+            }
+            mainUiMenu = null
 
-    override fun exitState(app: App) {
-        super.exitState(app)
-        //game.stop()
-
-        mainUiMenu?.run {
-            app.ctx.scenes -= this
-            app.ctx.runDelayed(1) { dispose(app.ctx) }
+            mainMenu?.run {
+                app.ctx.scenes -= this
+                app.ctx.runDelayed(1) { dispose(app.ctx) }
+            }
+            mainMenu = null
+            app.ctx.scenes.clear()
         }
-        mainUiMenu = null
 
-        mainMenu?.run {
-            app.ctx.scenes -= this
-            app.ctx.runDelayed(1) { dispose(app.ctx) }
-        }
-        mainMenu = null
-        app.ctx.scenes.clear()
-    }
-    override fun update(obj: App): State<App>? {
-
-        if ( startnewGame || continueGame ) {
-            if ( startnewGame  || obj.context.runnerLifes.value <= 0 ) {
-                with( obj.context ) {
-                    currentLevel.set(menuContext.level.value)
-                    levelSet.set(menuContext.levelSet.value)
-                    runnerLifes.set( START_HEALTH )
-                    score.set(0)
+        onUpdate {
+            mainMenu?.run {
+                if ( startnewGame || continueGame ) {
+                    if ( startnewGame  || context.runnerLifes.value <= 0 ) {
+                        with( context ) {
+                            currentLevel.set(menuContext.level.value)
+                            levelSet.set(menuContext.levelSet.value)
+                            runnerLifes.set(me.az.ilode.START_HEALTH)
+                            score.set(0)
+                        }
+                    }
+                    startnewGame = false
+                    continueGame = false
+                    return@onUpdate AppState.RUNGAME
                 }
             }
-            startnewGame = false
-            continueGame = false
-            return RunGameState
+
+            if ( exitGame ) {
+                exitGame = false
+                return@onUpdate AppState.EXIT
+            }
+            null
         }
-        if ( exitGame ) {
-            exitGame = false
-            return Exit
-        }
-        return null
     }
 }
 
-object RunGameState : State<App>() {
+class RunGameState(private val app: App) : StackedState<AppState, App>(AppState.RUNGAME) {
+
+    var gameScene: GameLevelScene? = null
+    var infoScene: Scene? = null
+    var debugScene: Scene? = null
+    private val keyListeners = mutableListOf<InputManager.KeyEventListener>()
+    var exit = false
 
     enum class LocalActions(
         override val keyCode: InputSpec,
-        override val onPress: App.(InputManager.KeyEvent) -> Unit = {},
-        override val onRelease: App.(InputManager.KeyEvent) -> Unit = {}
-    ) : KeyAction<App> {
+        override val onPress: RunGameState.(InputManager.KeyEvent) -> Unit = {},
+        override val onRelease: RunGameState.(InputManager.KeyEvent) -> Unit = {}
+    ) : KeyAction<RunGameState> {
         DEBUGTOGGLE('d'.toInputSpec(InputManager.KEY_MOD_CTRL), onRelease = {
             when (debugScene) {
                 null -> {}
                 else -> {
-                    if ( ctx.scenes.contains(debugScene) ) {
-                        ctx.scenes -= debugScene!!
+                    if ( app.ctx.scenes.contains(debugScene) ) {
+                        app.ctx.scenes -= debugScene!!
                     } else {
-                        ctx.scenes += debugScene!!
+                        app.ctx.scenes += debugScene!!
                     }
                 }
             }
@@ -154,92 +151,121 @@ object RunGameState : State<App>() {
         })
     }
 
-    var gameScene: GameLevelScene? = null
-    var infoScene: Scene? = null
-    var debugScene: Scene? = null
-    private val keyListeners = mutableListOf<InputManager.KeyEventListener>()
-    var exit = false
+    init {
+        onEnter {
+            exit = false
+            val game = Game(app.context)
 
-    override fun enterState(app: App) {
-        super.enterState(app)
-        exit = false
-        val game = Game(app.context)
+            gameScene = GameLevelScene(game, app.ctx,
+                appContext = app.context,
+                name = "level").apply {
+                +GameControls(game, app.ctx.inputMgr)
+            }
 
-        gameScene = GameLevelScene(game, app.ctx,
-            appContext = app.context,
-            name = "level").apply {
-            +GameControls(game, app.ctx.inputMgr)
-        }
+            infoScene = GameUI(game, assets = app.ctx.assetMgr, app.context)
+            app.ctx.scenes += gameScene!!
+            app.ctx.scenes += infoScene!!
+            debugScene = UiScene {
+                gameScene?.setupUi(this)!!
+            }
 
-        infoScene = GameUI(game, assets = app.ctx.assetMgr, app.context)
-        app.ctx.scenes += gameScene!!
-        app.ctx.scenes += infoScene!!
-        debugScene = UiScene {
-            gameScene?.setupUi(this)!!
-        }
+            keyListeners.addAll( app.ctx.inputMgr.registerActions(this, LocalActions.values().asIterable()) )
 
-        keyListeners.addAll( app.ctx.inputMgr.registerActions(app, LocalActions.values().asIterable()) )
-
-        game.onStateChanged += {
-            when (this.name) {
-                GameState.GAME_OVER_ANIMATION -> app.ctx.runDelayed((app.ctx.fps * 7).toInt()) {
-                    exit = true
+            game.onStateChanged += {
+                when (this.name) {
+                    GameState.GAME_OVER_ANIMATION -> app.ctx.runDelayed((app.ctx.fps * 7).toInt()) {
+                        exit = true
+                    }
+                    else -> { }
                 }
-                else -> { }
+            }
+
+            // controller
+//            app.ctx.scenes += touchControls(game.runner)
+        }
+
+        onExit {
+            with(app.ctx) {
+                keyListeners.forEach { inputMgr.removeKeyListener(it) }
+                gameScene?.run { scenes -= this; runDelayed(1) { dispose(this@with) } }
+                gameScene = null
+                infoScene?.run { scenes -= this; runDelayed(1) { dispose(this@with) } }
+                infoScene = null
+                debugScene?.run { app.ctx.scenes -= this; runDelayed(1) { dispose(this@with) } }
+                debugScene = null
+                //app.ctx.scenes -= app.touchControls
+                app.ctx.scenes.clear()
             }
         }
 
-        // controller
-        app.ctx.scenes += touchControls(game.runner)
-
-//        app.ctx.scenes += debugScene!!
-    }
-
-    override fun exitState(app: App) {
-        super.exitState(app)
-        with(app.ctx) {
-            keyListeners.forEach { inputMgr.removeKeyListener(it) }
-            gameScene?.run { scenes -= this; runDelayed(1) { dispose(this@with) } }
-            gameScene = null
-            infoScene?.run { scenes -= this; runDelayed(1) { dispose(this@with) } }
-            infoScene = null
-            debugScene?.run { app.ctx.scenes -= this; runDelayed(1) { dispose(this@with) } }
-            debugScene = null
-            //app.ctx.scenes -= app.touchControls
-            app.ctx.scenes.clear()
+        onUpdate {
+            if ( exit ) AppState.MAINMENU
+            else null
         }
     }
-
-    override fun update(app: App): State<App>? {
-        if ( exit ) return MainMenuState
-        return null
-    }
-
 }
 
-object ScoresState : State<App>() {
+class ScoresState(private val app: App) : StackedState<AppState, App>(AppState.SCORES) {
     var scoresScreen: Scene? = null
-    override fun enterState(obj: App) {
-        scoresScreen = HiScoreScene()
-        obj.ctx.scenes += scoresScreen!!
-    }
-    override fun update(obj: App): State<App>? {
-        return null
-    }
-
-    override fun exitState(obj: App) {
-        super.exitState(obj)
-        scoresScreen?.run {
-            obj.ctx.scenes -= this
-            dispose(obj.ctx)
+    init {
+        onEnter {
+            scoresScreen = HiScoreScene()
+            app.ctx.scenes += scoresScreen!!
         }
-        scoresScreen = null
+
+        onExit {
+            scoresScreen?.run {
+                app.ctx.scenes -= this
+                dispose(app.ctx)
+            }
+            scoresScreen = null
+        }
+
+
     }
 }
 
-object Exit : State<App>() {
-    override fun enterState(obj: App) = obj.ctx.close()
-    override fun update(obj: App): State<App>? = null
+class ExitState(private val app: App) : StackedState<AppState, App>(AppState.EXIT) {
+    init {
+        onEnter { app.ctx.close() }
+    }
+}
+
+class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DEBUG) {
+
+    val debug = mutableStateOf("")
+
+    init {
+        onEnter {
+            app.ctx.scenes += UiScene() {
+                +Panel(sizes = Sizes.medium) {
+                    modifier
+                        .alignY(AlignmentY.Top)
+                        .alignX (AlignmentX.Start)
+
+                    Row {
+                        Text(debug.use()) {
+//                            modifier.font.setScale(.3f, app.ctx)
+
+                        }
+                    }
+
+                }
+            }
+        }
+
+        onUpdate {
+            debug.set( ctx.inputMgr.pointerState.pointers
+                .filter { it.isValid && !it.isConsumed() && it.isAnyButtonDown }
+                .joinToString("\n") {
+                "id: %d\t valid: %s\t %5.5f x %5.5f mask=%d"
+                    .format( it.id, it.isValid, it.x, it.y, it.buttonMask,
+
+                        )
+            } )
+
+        }
+    }
 }
 
 class GameSettings(val settings: Settings) {
@@ -279,33 +305,11 @@ class App(val ctx: KoolContext) {
     val gameSettings = GameSettings(settings)
     val context = AppContext(gameSettings)
 
-    private var state: State<App>? = null
-
-    val fsm = buildStateMachine<String, App>("mainmenu") {
-        state("mainmenu") {
-
-            onEnter {
-
-            }
-
-            onExit {
-
-            }
-
-            edge("play game") {
-
-            }
-        }
-
-        state("play game") {
-            onEnter {
-
-            }
-
-            onExit {
-
-            }
-        }
+    val fsm = buildStateMachine(AppState.MAINMENU) {
+        this += MainMenuState(this@App)
+        this += RunGameState(this@App)
+        this += ExitState(this@App)
+        this += DebugState(this@App)
     }
 
     init {
@@ -314,14 +318,14 @@ class App(val ctx: KoolContext) {
         test2()
 
         ctx.inputMgr.registerActions(this, AppActions.values().asIterable())
-        changeState(MainMenuState)
 //        changeState(RunGameState)
 
 
         ctx.onRender += {
-            val newState = state?.update(this)
-            newState?.run { changeState(this) }
+            fsm.update(this)
         }
+
+        fsm.reset(false)
 
         scope.launch { test4() }
         ctx.run()
@@ -411,13 +415,6 @@ class App(val ctx: KoolContext) {
                 }
                 // paralax TBD
             }
-
-    }
-
-    private fun changeState(newState: State<App>) {
-        state?.exitState(this@App)
-        state = newState
-        state?.enterState(this@App)
     }
 
     fun test1() {
@@ -464,7 +461,7 @@ class App(val ctx: KoolContext) {
             rep.load(s)
             println("${s.dis} has ${rep.levels.size} levels:")
             rep.levels.forEachIndexed { levelId, strings ->
-                println("level #${levelId+1}: ${strings.first().length}x${strings.size}")
+                println("#${levelId+1}: ${strings.first().length}x${strings.size}")
             }
             println()
         }
@@ -479,7 +476,7 @@ class App(val ctx: KoolContext) {
                           override val onRelease: App.(InputManager.KeyEvent) -> Unit) : KeyAction<App> {
         EXIT(InputManager.KEY_BACKSPACE.toInputSpec(), onPress = {
             fsm.popState()
-            changeState(MainMenuState)
+            fsm.setState(AppState.MAINMENU)
         }, onRelease = {}),
         DEBUG('d'.toInputSpec(InputManager.KEY_MOD_CTRL), onRelease = {
             if ( ctx.scenes.any { it.name == "debug-overlay" } ) {
@@ -487,6 +484,10 @@ class App(val ctx: KoolContext) {
             } else {
                 ctx.scenes += de.fabmax.kool.util.debugOverlay()
             }
+        }),
+
+        DEBUGMODE(InputManager.KEY_F1.toInputSpec(), onRelease = {
+            fsm.toggleState(AppState.DEBUG)
         })
     }
 }
@@ -533,16 +534,18 @@ internal fun touchControls(controllable: Controllable): Scene {
                 )
                 currentAnalog.inputVec.x = 0f
                 currentAnalog.inputVec.y = 0f
-                controllable.inputVec.x = 0
-                controllable.inputVec.y = 0
+//                controllable.inputVec.x = 0
+//                controllable.inputVec.y = 0
                 if (handleTex.loadedTexture != null && vjcTex.loadedTexture != null) {
                     ev.ctx.inputMgr.pointerState.pointers
                         .filter { it.isValid && !it.isConsumed() && it.isAnyButtonDown }
                         .forEach {
+
                             if (!camera.computePickRay(ray, it, ev.viewport, ev.ctx))
                                 return@forEach
                             ray.origin.z = 0f
 
+                            println("$bounds ${ray.origin} ${bounds.contains(ray.origin)}")
                             if (bounds.contains(ray.origin)) {
                                 handleTex.loadedTexture?.let { ht ->
                                     tmp.set(ray.origin)
@@ -558,7 +561,7 @@ internal fun touchControls(controllable: Controllable): Scene {
                                         currentAnalog.inputVec.x /= l
                                         currentAnalog.inputVec.y /= l
                                     }
-                                    println(currentAnalog.inputVec)
+//                                    println(currentAnalog.inputVec)
                                     it.consume()
                                 }
 

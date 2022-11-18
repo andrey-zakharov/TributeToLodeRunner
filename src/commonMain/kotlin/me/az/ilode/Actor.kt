@@ -52,7 +52,7 @@ sealed class Actor(val game: Game) : Controllable {
 
     open val fsm by lazy {
         val stopState = ActorState.StopState(this)
-        buildStateMachine<String, Actor>(stopState.name) {
+        buildStateMachine(stopState.name) {
             this += stopState
             this += ActorState.MoveLeft.RunLeft(this@Actor)
             this += ActorState.MoveLeft.BarLeft(this@Actor)
