@@ -242,7 +242,6 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
                 if ( frameIndex < sequenceSize ) {
 
                 } else {
-                    println("done in shake")
                     return@onUpdate RunUp.name
                 }
 

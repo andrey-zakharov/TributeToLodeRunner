@@ -10,14 +10,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import me.az.utils.component1
 import me.az.utils.component2
+import me.az.utils.logd
 import me.az.utils.nearestTwo
 import org.mifek.wfc.core.Cartesian2DWfcAlgorithm
 import org.mifek.wfc.datastructures.IntArray2D
 import org.mifek.wfc.models.OverlappingCartesian2DModel
 import org.mifek.wfc.models.options.Cartesian2DModelOptions
-import kotlin.math.pow
 import kotlin.time.ExperimentalTime
-import kotlin.time.measureTime
 import kotlin.time.measureTimedValue
 
 // game rules: allowing entrance for each base block
@@ -126,7 +125,7 @@ fun OverlappingCartesian2DModel.dis(algo: Cartesian2DWfcAlgorithm) {
             }
         }.joinToString("")
     }
-    println(map)
+    logd { map }
 }
 expect fun debugAlgoStart(levelId: Int, model: OverlappingCartesian2DModel, algo: Cartesian2DWfcAlgorithm)
 
@@ -159,11 +158,11 @@ fun generateGameLevel(
 ): GameLevel {
     val patternSize = 3 // n , m
 
-    println("input = $exampleWidth x $exampleHeight, output = $mapWidth x $mapHeight example origin= $exampleOriginX x $exampleOriginY")
-    println(exampleMap.joinToString("\n"))
-    println("for generator")
-    println(exampleMap.joinToString("\n") { it.map { Tile.values()[Tile.byChar[it]!!.exportForGenerator()].char }.joinToString("")})
-    println("raw patterns count: ${(exampleWidth - patternSize + 1) * (exampleHeight - patternSize + 1)}")
+    logd { "input = $exampleWidth x $exampleHeight, output = $mapWidth x $mapHeight example origin= $exampleOriginX x $exampleOriginY" }
+    logd { exampleMap.joinToString("\n") }
+    logd { "for generator" }
+    logd { exampleMap.joinToString("\n") { it.map { Tile.values()[Tile.byChar[it]!!.exportForGenerator()].char }.joinToString("")} }
+    logd { "raw patterns count: ${(exampleWidth - patternSize + 1) * (exampleHeight - patternSize + 1)}" }
 
     val initials = IntArray2D(exampleWidth, exampleHeight) { idx ->
         val x = idx % exampleWidth
@@ -205,16 +204,17 @@ fun generateGameLevel(
 //            println(formatPatterns(wcf.patterns.toList().toTypedArray(), patternSize))
 
             val (algo, buildTime) = measureTimedValue { wcf.build() }
-            println("algorithm build in $buildTime")
+            logd { "algorithm build in $buildTime" }
 
             algo.afterFail += {
+                //log error
                 println("failed")
             }
 
             val (res, dur) = measureTimedValue {
                 algo.run(seed = 2)
             }
-            println("wcf run in $dur with result = $res")
+            logd { "wcf run in $dur with result = $res" }
             wcf.dis(algo)
 
             val out = wcf.constructNullableOutput(algo)
@@ -223,13 +223,13 @@ fun generateGameLevel(
             println((0 until mapWidth).map { i -> if ( i % 10 == 0 ) i / 10 else " "}.joinToString(""))
             println((0 until mapWidth).map { i -> (i % 10) }.joinToString(""))
 
-            println( out.joinToString("\n") { row ->
+            logd { out.joinToString("\n") { row ->
                 row.joinToString("") { when(it) {
                     null -> "."
                     Int.MIN_VALUE -> "!"
                     else -> "$it"
                 } }
-            } )
+            } }
             // print original (example) level to map without filtering
 
             exampleMap.forEachIndexed { y, row ->
@@ -308,10 +308,8 @@ class GameLevel(
     var holesAnims: AnimationFrames? = null
 
     init {
-        println("creating level $levelId $width x $height")
-        println("from map:")
-        println(map.joinToString("\n"))
-        println("texture width = $textureWidth")
+        logd {"creating level $levelId $width x $height texture width = $textureWidth\" from map:" }
+        logd {map.joinToString("\n")}
         reset()
     }
 

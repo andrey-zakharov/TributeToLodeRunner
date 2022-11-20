@@ -15,7 +15,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.yield
 import me.az.ilode.Game
 import me.az.ilode.GameState
+import me.az.utils.debugOnly
 import me.az.utils.format
+import me.az.utils.logd
 import simpleTextureProps
 import sprite
 import kotlin.coroutines.CoroutineContext
@@ -62,7 +64,7 @@ class GameLevelScene (
                     scaleAnim.repeating = Animator.ONCE
                 }
                 if (scaleAnim.progress == 1f && scaleAnim.repeating == Animator.ONCE && !game.animEnds) {// end game
-                    println("game over done")
+                    logd { "game over done" }
                     game.animEnds = true
                 }
             }
@@ -71,7 +73,7 @@ class GameLevelScene (
 
     init {
         game.onStateChanged += {
-            println("GameScene. gameState = ${this.name}")
+            logd { "GameScene. gameState = ${this.name}" }
             if ( this.name != GameState.GAME_OVER_ANIMATION ) {
                 // exit state
                 if (levelView?.findNode("gameover") != null) {
@@ -151,7 +153,7 @@ class GameLevelScene (
         levels.load(appContext.levelSet.value)
     }
 
-    fun setupUi(scene: Scene) = with(scene) {
+    fun setupUi(scene: Scene) = debugOnly { with(scene) {
         +Panel {
             modifier
                 .width(Grow(1f, max = FitContent))
@@ -209,7 +211,7 @@ class GameLevelScene (
             Row { LabeledSwitch("stop guards", appContext.stopGuards) }
             Row { LabeledSwitch("immortal", appContext.immortal) }
         }
-    }
+    } }
 
     fun TextScope.labelStyle(width: Dimension = FitContent) {
         modifier

@@ -14,10 +14,10 @@ import de.fabmax.kool.util.Color
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import me.az.ilode.*
 import me.az.scenes.*
 import me.az.utils.*
-import me.az.view.GameControls
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
@@ -58,152 +58,6 @@ const val backgroundImageFile = "images/cover.jpg"
 
 enum class AppState {
     MAINMENU, RUNGAME, EXIT, SCORES, DEBUG
-}
-
-class MainMenuState(private val app: App) : StackedState<AppState, App>(AppState.MAINMENU) {
-    var exitGame = false
-    var mainMenu: MainMenuScene? = null
-    var mainUiMenu: Scene? = null
-    val menuContext get() = mainMenu?.menuContext ?: throw IllegalStateException()
-
-    init {
-        onEnter {
-            val game = Game(app.context)
-            // preload
-            mainMenu = MainMenuScene(app.context, game, app.ctx.assetMgr).also {
-                app.ctx.scenes += it
-//            mainUiMenu = it.setupUi()
-            }
-            mainUiMenu?.run { app.ctx.scenes += this }
-//            app.ctx.scenes += touchControls(game.runner)
-
-            game.reset()
-        }
-
-        onExit {
-            mainUiMenu?.run {
-                app.ctx.scenes -= this
-                app.ctx.runDelayed(1) { dispose(app.ctx) }
-            }
-            mainUiMenu = null
-
-            mainMenu?.run {
-                app.ctx.scenes -= this
-                app.ctx.runDelayed(1) { dispose(app.ctx) }
-            }
-            mainMenu = null
-            app.ctx.scenes.clear()
-        }
-
-        onUpdate {
-            mainMenu?.run {
-                if ( startnewGame || continueGame ) {
-                    if ( startnewGame  || context.runnerLifes.value <= 0 ) {
-                        with( context ) {
-                            currentLevel.set(menuContext.level.value)
-                            levelSet.set(menuContext.levelSet.value)
-                            runnerLifes.set(START_HEALTH)
-                            score.set(0)
-                        }
-                        gameSettings.sometimePlayInGodMode = false
-                    }
-                    startnewGame = false
-                    continueGame = false
-                    return@onUpdate AppState.RUNGAME
-                }
-            }
-
-            if ( exitGame ) {
-                exitGame = false
-                return@onUpdate AppState.EXIT
-            }
-            null
-        }
-    }
-}
-
-class RunGameState(private val app: App) : StackedState<AppState, App>(AppState.RUNGAME) {
-
-    var gameScene: GameLevelScene? = null
-    var infoScene: Scene? = null
-    var debugScene: Scene? = null
-    private val keyListeners = mutableListOf<InputManager.KeyEventListener>()
-    var exit = false
-
-    enum class LocalActions(
-        override val keyCode: InputSpec,
-        override val onPress: RunGameState.(InputManager.KeyEvent) -> Unit = {},
-        override val onRelease: RunGameState.(InputManager.KeyEvent) -> Unit = {}
-    ) : KeyAction<RunGameState> {
-        DEBUGTOGGLE('d'.toInputSpec(InputManager.KEY_MOD_CTRL), onRelease = {
-            when (debugScene) {
-                null -> {}
-                else -> {
-                    if ( app.ctx.scenes.contains(debugScene) ) {
-                        app.ctx.scenes -= debugScene!!
-                    } else {
-                        app.ctx.scenes += debugScene!!
-                    }
-                }
-            }
-        }),
-        EXIT(InputManager.KEY_ESC.toInputSpec(), onRelease = {
-            exit = true
-        })
-    }
-
-    init {
-        onEnter {
-            exit = false
-            val game = Game(app.context)
-
-            gameScene = GameLevelScene(game, app.ctx,
-                appContext = app.context,
-                name = "level").apply {
-                +GameControls(game, app.ctx.inputMgr)
-            }
-
-            infoScene = GameUI(game, assets = app.ctx.assetMgr, app.context)
-            app.ctx.scenes += gameScene!!
-            app.ctx.scenes += infoScene!!
-            debugScene = UiScene {
-                gameScene?.setupUi(this)!!
-            }
-
-            keyListeners.addAll( app.ctx.inputMgr.registerActions(this, LocalActions.values().asIterable()) )
-
-            game.onStateChanged += {
-                when (this.name) {
-                    GameState.GAME_OVER_ANIMATION -> app.ctx.runDelayed((app.ctx.fps * 7).toInt()) {
-                        exit = true
-                    }
-                    else -> { }
-                }
-            }
-
-            // controller
-//            app.ctx.scenes += touchControls(game.runner)
-        }
-
-        onExit {
-            with(app.ctx) {
-                keyListeners.forEach { inputMgr.removeKeyListener(it) }
-                gameScene?.run { scenes -= this; runDelayed(1) { dispose(this@with) } }
-                gameScene = null
-                infoScene?.run { scenes -= this; runDelayed(1) { dispose(this@with) } }
-                infoScene = null
-                debugScene?.run { app.ctx.scenes -= this; runDelayed(1) { dispose(this@with) } }
-                debugScene = null
-                //app.ctx.scenes -= app.touchControls
-                app.ctx.scenes.clear()
-            }
-        }
-
-        onUpdate {
-            if ( exit ) AppState.MAINMENU
-            else null
-        }
-    }
 }
 
 class ScoresState(private val app: App) : StackedState<AppState, App>(AppState.SCORES) {
@@ -301,9 +155,11 @@ class AppContext(val gameSettings: GameSettings) {
         gameSettings.sometimePlayInGodMode = true
     } }
     val runnerLifes = MutableStateValue(gameSettings.runnerLifes).also { it.onChange { v -> gameSettings.runnerLifes = v } }
+
 }
 
 class App(val ctx: KoolContext) {
+
     private val job = Job()
     private val scope = CoroutineScope(job)
 
@@ -465,11 +321,12 @@ class App(val ctx: KoolContext) {
         val rep = LevelsRep(ctx.assetMgr, scope)
         for (s in LevelSet.values()) {
             rep.load(s)
-            println("${s.dis} has ${rep.levels.size} levels:")
-            rep.levels.forEachIndexed { levelId, strings ->
-                println("#${levelId+1}: ${strings.first().length}x${strings.size}")
+            debugOnly {
+                println("${s.dis} has ${rep.levels.size} levels:")
+                rep.levels.forEachIndexed { levelId, strings ->
+                    println("#${levelId + 1}: ${strings.first().length}x${strings.size}")
+                }
             }
-            println()
         }
     }
 
@@ -551,7 +408,7 @@ internal fun touchControls(controllable: Controllable): Scene {
                                 return@forEach
                             ray.origin.z = 0f
 
-                            println("$bounds ${ray.origin} ${bounds.contains(ray.origin)}")
+                            logd  { "$bounds ${ray.origin} ${bounds.contains(ray.origin)}" }
                             if (bounds.contains(ray.origin)) {
                                 handleTex.loadedTexture?.let { ht ->
                                     tmp.set(ray.origin)

@@ -1,18 +1,16 @@
 import de.fabmax.kool.AssetManager
-import de.fabmax.kool.math.Vec2f
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.math.Vec4i
 import de.fabmax.kool.modules.ui2.mutableStateOf
-import de.fabmax.kool.pipeline.*
-import de.fabmax.kool.scene.geometry.RectProps
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Deferred
+import de.fabmax.kool.pipeline.BufferedTextureLoader
+import de.fabmax.kool.pipeline.Texture3d
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.*
+import kotlinx.serialization.DeserializationStrategy
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.*
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
+import kotlinx.serialization.serializer
+import me.az.utils.logd
 
 enum class TileSet(
     val path: String,
@@ -100,7 +98,7 @@ class ImageAtlas(val name: String, whenLoaded: () -> Unit = {}) {
             }
             nameIndex[entry.key] = ord
         }
-        println("NAMES=$nameIndex")
+        logd { "NAMES=$nameIndex" }
     }
     private suspend fun AssetManager.loadAtlas(tileset: TileSet, geometry: AtlasGeometry): Texture3d {
         val tilesTexPath = "sprites/${tileset.path}/$name.png"

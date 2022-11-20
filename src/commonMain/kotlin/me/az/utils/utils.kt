@@ -7,11 +7,24 @@ import de.fabmax.kool.math.Vec3f
 import de.fabmax.kool.scene.Group
 import de.fabmax.kool.scene.lineMesh
 import de.fabmax.kool.util.Color
-import org.mifek.wfc.datastructures.IntArray2D
+import kotlin.jvm.JvmField
 import kotlin.math.floor
 import kotlin.properties.ReadWriteProperty
 import kotlin.random.Random
 import kotlin.reflect.KProperty
+
+// actually platform.env["debug"]
+expect class Env { // system
+    companion object {
+        fun getProperty(key: String): String?
+    }
+}
+
+@JvmField
+val canDebug: Boolean = Env.getProperty("debug").toBoolean()
+
+inline fun debugOnly( block: () -> Unit ) { if ( canDebug ) block() }
+inline fun logd( block: () -> String ) { if ( canDebug ) println(block()) }
 
 internal val Int.b get() = toByte()
 internal val Float.floor: Float get() = floor(this)

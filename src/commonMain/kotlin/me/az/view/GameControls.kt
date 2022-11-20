@@ -47,7 +47,6 @@ enum class GameKeyAction(
         prevLevel()
     }),
     NEXT('.'.toInputSpec(InputManager.KEY_MOD_CTRL), onRelease = {
-        println("pressed")
         nextLevel()
     }),
 }

@@ -1,7 +1,7 @@
 import de.fabmax.kool.AssetManager
-import de.fabmax.kool.KoolContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.*
+import me.az.utils.logd
 
 class AnimationFrames(
     private val asset: String,
@@ -20,7 +20,7 @@ class AnimationFrames(
             }
         )
 
-        println("loaded anims: ${sequence.map { "${it.key} len: ${it.value.size}" }.joinToString("\n")}")
+        logd { "loaded anims: ${sequence.map { "${it.key} len: ${it.value.size}" }.joinToString("\n")}" }
     }
 
     private suspend fun AssetManager.loadAndPrepareAnims(assetPath: String): Map<String, List<Int>> {
