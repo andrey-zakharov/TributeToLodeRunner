@@ -10,12 +10,16 @@ import de.fabmax.kool.modules.audio.AudioOutput
 import de.fabmax.kool.modules.audio.MixNode
 import de.fabmax.kool.modules.audio.WavFile
 import de.fabmax.kool.modules.audio.WavNode
+import de.fabmax.kool.modules.audio.synth.LowPassFilter
 import de.fabmax.kool.modules.audio.synth.Oscillator
 import de.fabmax.kool.modules.audio.synth.SampleNode
 import de.fabmax.kool.modules.audio.synth.Wave
 import me.az.ilode.Actor
 import me.az.ilode.ActorEvent
 import me.az.ilode.Sound
+import me.az.utils.debugOnly
+import me.az.utils.lerp
+import me.az.utils.logd
 import kotlin.math.E
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -44,12 +48,10 @@ class ActorView(
         mainVolume.gain = 0.2f
     }
 
-    private fun lerp(a: Float, b: Float, f: Float): Float {
-        return a + f * (b - a)
-    }
-    fun updateFallFreq() {
-        fallSound.note =
-            lerp(6f, -20f, (actor.absolutePosY.toFloat() / (actor.level.height * tileSize.y.toFloat()))).roundToInt()
+    private fun updateFallFreq() {
+        fallSound.height =
+            actor.absolutePosY.toFloat() / (actor.level.height * tileSize.y.toFloat())
+
     }
     init {
 //        addDebugAxis()
@@ -107,13 +109,15 @@ class ActorView(
     override fun dispose(ctx: KoolContext) {
         super.dispose(ctx)
         audioOutput.close()
+        logd { "audio closed" }
     }
 }
 
 private const val noteDurMs = 60f / 1000
 private const val phaseShiftDur = noteDurMs / 2
 private const val longGapMs = 30f / 1000
-private const val shortGapMs = 20f / 1000 + noteDurMs
+private const val shortGapMs = 15f / 1000 + noteDurMs
+private const val kickTimeMs = 15f / 1000
 
 class FallSound : SampleNode() {
 
@@ -129,16 +133,19 @@ class FallSound : SampleNode() {
     // n1 + long gap + n2 + long gap + n3 + shot gap + n4 + long gap + n5...
     // think that gaps are from CPU cycles needed to move runner from pos to pos.
     // anyway emulate 1 bit sound from 1980 by oscillators of square waves, because of. why not?
-    var note = 0
+    var height = 0f // till 1f
         set(value) {
             field = value
-            freq = note(note, octave)
+            freq = value.lerp(startFreq, endFreq)
         }
     var octave = 5
-    var freq = note(note, octave)
+
+    val startFreq = note(6, 5)
+    val endFreq = note(-10, 5)
+    var freq = startFreq
 
     fun dis() {
-        println("note = $note octave = $octave freq=${note(note, octave)}")
+        println("height = $height octave = $octave freq=${freq}")
     }
 
     companion object {
@@ -162,24 +169,29 @@ class FallSound : SampleNode() {
     }
 
 //    private val osc = Oscillator(Wave.SQUARE).apply { gain = 1f }
-    private val osc = Oscillator(Wave.SINE).apply { gain = 2.5f }
+
+    private val osc = Oscillator(Wave.SINE, startFreq).apply { gain = 5f }
+    private val ph = Oscillator(Wave.SINE).apply { gain = 1f }
     override fun generate(dt: Float): Float {
         return when {
+//            t < kickTimeMs -> {
+//                osc.next(dt, freq) * (1f - (t / kickTimeMs)).toFloat().lerp(0f, 1f)
+//            }
             t <= noteDurMs -> {
-                if (t > phaseShiftDur && osc.phaseShift != 0.5f) {
-                    osc.phaseShift = 0.5f
-                }
-                osc.next(dt, freq)
+                //if (t > phaseShiftDur && osc.phaseShift != 0.5f) {
+                    //osc.phaseShift =
+                //}
+                osc.next(dt, freq) //* ph.next(dt, freq / noteDurMs)
             }
             t < shortGapMs -> {
-                osc.next(dt, freq) * E.pow(- (shortGapMs - t) * 1000f).toFloat()
+                0f //osc.next(dt, freq) * (1f - t / shortGapMs).toFloat().lerp(1f, 0f)
             }
             else -> {
                 t = 0.0
                 osc.phaseShift = 0f
                 osc.next(dt, freq)
             }
-        }.clamp(-1f, 1f)
+        }.clamp(-0.8f, 0.5f)
         // 45 ms one burst, 2 bursts per note,
         // 14 ms gap between bursts, variance 7ms each 2?
         // 14 ms 14 ms 7ms, 14 ms 14 ms 7ms

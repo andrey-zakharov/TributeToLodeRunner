@@ -96,3 +96,7 @@ internal val Int.nearestTwo: Int get() {
 }
 
 internal operator fun Vec2i.plus(o: Vec2i) = Vec2i(this.x + o.x, this.y + o.y)
+
+internal fun Float.lerp(a: Float, b: Float): Float {
+    return a + this * (b - a)
+}
