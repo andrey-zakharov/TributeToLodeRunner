@@ -7,6 +7,7 @@ import kotlin.math.abs
 const val START_HEALTH = 5
 const val MAX_HEALTH = 100
 
+// classic
 const val SCORE_COUNTER = 15 // how much scores bumbs in finish anim
 const val SCORE_COMPLETE = 1500
 const val SCORE_COMPLETE_INC = SCORE_COMPLETE / SCORE_COUNTER
@@ -14,6 +15,14 @@ const val SCORE_GOLD     = 250
 const val SCORE_FALL     = 75
 const val SCORE_DIES     = 75
 
+/**
+ * SCORING
+        The scoring with CHAMPIONSHIP IDDE RUNNER is as follows:
+        Completing a level ......... . .. . .................... 2000 points
+        Picking up a gold chest . .. .. .. . . . ......... . .......... 500 points
+        Trapping an enemy . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 100 points
+        Enemy dying in a hole . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 100 points
+ */
 val Controllable.anyKeyPressed get() = digLeft || digRight || inputVec.x != 0 || inputVec.y != 0
 
 class Runner(game: Game) : Actor(game), Controllable {
@@ -46,7 +55,7 @@ class Runner(game: Game) : Actor(game), Controllable {
         }
     }
 
-    override val onFallStop = { game.playSound(Sound.DOWN, x, y) }
+    override val onFallStop = { playSound(Sound.DOWN) }
 
     fun dead() {
         if (!game.state.immortal.value) alive = false // for game fsm
@@ -58,7 +67,8 @@ class Runner(game: Game) : Actor(game), Controllable {
                 with(actor) {
                     offset.x = 0
                     offset.y = 0
-                    game.playSound(Sound.DIG, x, y)
+//                    game.playSound(Sound.DIG, x, y)
+                    playSound(Sound.DIG)
 
                     val (digTileX, bitmap) = if (digLeft) {
                         Pair(x - 1, "digHoleLeft")

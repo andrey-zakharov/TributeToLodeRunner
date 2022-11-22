@@ -1,24 +1,15 @@
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.modules.audio.AudioClip
+import de.fabmax.kool.modules.audio.WavFile
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import me.az.ilode.Sound
 
-interface AudioContext {
-    val pan: Int // for node pos x, y
-//    val x: Float
-//    val y: Float
-    val clip: AudioClip
-    fun play()
-    fun stop()
-}
-// interface SoundSource {
-// clips: list
-// SoundPlayer. addSource
-// source.playingClips...
 class SoundPlayer(private val assets: AssetManager) {
     private val sounds = mutableMapOf<String, AudioClip>()
+    val bank = mutableMapOf<Sound, WavFile>()
 
     suspend fun loadSounds() {
         val soundsDir = "sounds/ap2"
@@ -32,6 +23,9 @@ class SoundPlayer(private val assets: AssetManager) {
                 clip.masterVolume = 0.2f
             }
         }.toMap())
+
+        bank[Sound.DIG] = WavFile(assets.loadAsset(soundsDir + "/" + Sound.DIG.fileName + ".wav")!!)
+
     }
 
     fun playSound(s: String, looped: Boolean = false, playSingle: Boolean = true) {
@@ -45,4 +39,5 @@ class SoundPlayer(private val assets: AssetManager) {
     fun stopSound(s: String, delay: Float = 0f) = sounds[s]?.stop()
 
     operator fun get(s: String) = sounds[s]
+    operator fun set(s: String, clip: AudioClip) = sounds.set(s, clip)
 }

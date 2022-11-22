@@ -332,7 +332,7 @@ class GameLevel(
                     act[x][y] = TileLogicType.BLOCK
                     this[x, y] = ViewCell(false, primaryTileSet[Tile.BRICK.frame]!!)
                     guard[x][y] = false //?
-                    runner.game.stopSound(Sound.DIG)
+                    runner.stopSound(Sound.DIG)
 //                    runner.stop() //?
                     iter.remove()
                     continue

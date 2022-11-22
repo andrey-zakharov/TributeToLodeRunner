@@ -16,6 +16,7 @@ import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.MutableVec3d
 import de.fabmax.kool.math.Vec2i
+import de.fabmax.kool.modules.audio.AudioClip
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.pipeline.FullscreenShaderUtil.generateFullscreenQuad
@@ -165,7 +166,8 @@ open class GameScene(val game: Game,
             runnerAtlas,
             runnerAnims,
             guardAtlas,
-            guardAnims
+            guardAnims,
+            sounds.bank
         )
 
         levelView?.run {

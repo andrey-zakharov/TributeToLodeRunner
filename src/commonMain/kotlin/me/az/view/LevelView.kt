@@ -2,6 +2,7 @@ import de.fabmax.kool.math.MutableVec2f
 import de.fabmax.kool.math.Vec2f
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.math.Vec4i
+import de.fabmax.kool.modules.audio.WavFile
 import de.fabmax.kool.modules.ui2.MutableStateValue
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.Attribute
@@ -22,11 +23,12 @@ class LevelView(
     runnerAtlas: ImageAtlas,
     runnerAnims: AnimationFrames,
     guardAtlas: ImageAtlas,
-    guardAnims: AnimationFrames
+    guardAnims: AnimationFrames,
+    soundsBank: Map<Sound, WavFile>
 
 ) : Group() {
     private val tileMapShader = TileMapShader(TileMapShaderConf())
-    val runnerView by lazy { ActorView( game.runner, runnerAtlas, runnerAnims, conf.tileSize) }
+    val runnerView by lazy { ActorView( game.runner, runnerAtlas, runnerAnims, conf.tileSize, soundsBank = soundsBank) }
     val widthInPx = conf.tileSize.x * level.width
     val heightInPx = conf.tileSize.y * level.height
 
@@ -39,7 +41,7 @@ class LevelView(
         }
 
         game.guards.forEach {
-            +ActorView(it, guardAtlas, guardAnims, conf.tileSize, "guard")
+            +ActorView(it, guardAtlas, guardAnims, conf.tileSize, "guard", soundsBank)
         }
     }
 
@@ -67,6 +69,7 @@ class LevelView(
 
                 if ( level.dirty ) {
                     with(tileMapShader) {
+                        field?.dispose()
                         field = Texture2d(simpleValueTextureProps, level.updateTileMap())
                         fieldSize = Vec2f(level.width.toFloat(), level.height.toFloat())
                         tilesAtlas.tex.value?.run { tiles = this }

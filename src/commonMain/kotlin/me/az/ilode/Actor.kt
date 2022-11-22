@@ -47,6 +47,11 @@ interface Controllable {
     var digRight: Boolean
 }
 
+sealed class ActorEvent {
+    class StartSound(val soundName: String, val reset: Boolean = false, val loop: Boolean = false) : ActorEvent()
+    class StopSound(val soundName: String, val force: Boolean = false) : ActorEvent()
+}
+
 // diverge by bool features
 sealed class Actor(val game: Game) : Controllable {
 
@@ -93,6 +98,14 @@ sealed class Actor(val game: Game) : Controllable {
         }
     var frameIndex: Int = 0 // position in sequence
     var sequenceSize = 0 // filled in view
+    // sound events
+    val onEvent = mutableListOf<(ActorEvent) -> Unit>()
+    fun emit(event: ActorEvent) = onEvent.forEach { it.invoke(event) }
+    fun playSound(sound: Sound, reset: Boolean = false, loop: Boolean = false) =
+        emit(ActorEvent.StartSound(sound.fileName, reset, loop))
+    fun stopSound(sound: Sound, force: Boolean = true) =
+        emit(ActorEvent.StopSound(sound.fileName, force))
+
 
     init {
         game.onLevelStart += {
@@ -365,10 +378,10 @@ sealed class Actor(val game: Game) : Controllable {
                     if (this is Runner)
                         // actor - is sound source.
                         // enable (play) / disable.
-                        game.playSound(Sound.FALL, x, y)
+                        playSound(Sound.FALL)
                 }}
                 onExit { with(actor) {
-                    if (this is Runner) game.stopSound(Sound.FALL)
+                    if (this is Runner) stopSound(Sound.FALL)
                 }}
 
                 // this if final stop after fall state.

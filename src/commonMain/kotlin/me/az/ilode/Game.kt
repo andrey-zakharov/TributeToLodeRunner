@@ -40,7 +40,7 @@ enum class GameState {
 }
 
 
-enum class Sound(val fileNameO: String? = null, val fileNameCall: (() -> String)? = null) {
+enum class Sound(private val fileNameO: String? = null, private val fileNameCall: (() -> String)? = null) {
     BORN, DEAD, DIG, DOWN, FALL, GOLD("getGold"),
     FINISH("goldFinish"),
     PASS,
@@ -151,7 +151,8 @@ class Game(val state: AppContext) : CoroutineScope {
             }
             onExit {
                 skipAnims = false
-                stopSound(Sound.FALL)
+                // stop all sounds actually
+                runner.stopSound(Sound.FALL)
             }
         }
 
