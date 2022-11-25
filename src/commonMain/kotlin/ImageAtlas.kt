@@ -5,12 +5,10 @@ import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.BufferedTextureLoader
 import de.fabmax.kool.pipeline.Texture3d
 import kotlinx.coroutines.Job
-import kotlinx.serialization.DeserializationStrategy
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.*
 import kotlinx.serialization.json.*
-import kotlinx.serialization.serializer
 import me.az.utils.logd
+import kotlin.math.floor
 
 enum class TileSet(
     val path: String,
@@ -27,14 +25,6 @@ enum class TileSet(
     ;
     val dis get() = name.removePrefix("SPRITES_")
 }
-@kotlinx.serialization.Serializable
-data class AtlasGeometry(val cols: Int, val rows: Int) {
-    companion object {
-        fun from(e: JsonElement) = from(serializer<AtlasGeometry>(), e)
-        fun from(serializer: DeserializationStrategy<AtlasGeometry>, e: JsonElement) = Json.decodeFromString(serializer, e.toString())
-    }
-}
-
 
 data class GapsSpec(
     val top: Int = 0,
@@ -66,8 +56,6 @@ data class Frame(
 }
 
 class ImageAtlas(val name: String, whenLoaded: () -> Unit = {}) {
-
-    protected val job = Job()
     val tex = mutableStateOf<Texture3d?>(null)
     var geometry: AtlasGeometry? = null
     val tileWidth get() = tex.value?.loadedTexture?.width  ?: 0
@@ -109,13 +97,28 @@ class ImageAtlas(val name: String, whenLoaded: () -> Unit = {}) {
 
 data class Region(val x: Double, val y: Double, val w: Double, val h: Double)
 
-data class ImageAtlasDataSpec(
-    val tilesX: Int, val tilesY: Int, val tileWidth: Int, val tileHeight: Int,
+@Serializable
+data class AtlasGeometry(val cols: Int, val rows: Int) {
+    val total get() = cols * rows
+    companion object {
+        fun from(e: JsonElement) = from(serializer<AtlasGeometry>(), e)
+        fun from(serializer: DeserializationStrategy<AtlasGeometry>, e: JsonElement) = Json.decodeFromString(serializer, e.toString())
+    }
+}
+@Serializable
+data class AtlasGeometrySpec(
+    val cols: Int, val rows: Int, val tileWidth: Int = 20, val tileHeight: Int = 22,
+    @Transient
     val framesProvider: (i: Int) -> Region = {i ->
-        Region( x = (i % tilesX).toDouble(),
-            y = (i / tilesY).toDouble(),
+        Region( x = (i % cols).toDouble(),
+            y = (i / cols).toDouble(),
             w = tileWidth.toDouble(),
             h = tileHeight.toDouble()
         )
     }
-)
+) {
+    companion object {
+        fun from(e: JsonElement) = from(serializer<AtlasGeometrySpec>(), e)
+        fun from(serializer: DeserializationStrategy<AtlasGeometrySpec>, e: JsonElement) = Json.decodeFromString(serializer, e.toString())
+    }
+}

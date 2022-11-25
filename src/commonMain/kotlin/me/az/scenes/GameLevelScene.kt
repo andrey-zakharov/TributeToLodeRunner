@@ -18,8 +18,8 @@ import me.az.ilode.GameState
 import me.az.utils.debugOnly
 import me.az.utils.format
 import me.az.utils.logd
+import me.az.view.sprite2d
 import simpleTextureProps
-import sprite
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.sign
 
@@ -38,7 +38,7 @@ class GameLevelScene (
     val gameOverSprite by lazy {
         // on exit - break anim. TBD
 
-        sprite(gameOverTex, "gameover", mirrorTexCoordsY = false).also {
+        sprite2d(gameOverTex, "gameover", mirrorTexCoordsY = false).also {
             val startSpeed = 10f
             val speedAnim = InverseSquareAnimator(InterpolatedFloat(startSpeed, 1f)).apply {
                 speed = 0.75f

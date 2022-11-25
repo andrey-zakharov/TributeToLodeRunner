@@ -5,19 +5,22 @@ import com.russhwolf.settings.int
 import de.fabmax.kool.InputManager
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.*
+import de.fabmax.kool.modules.ksl.KslUnlitShader
 import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.*
-import de.fabmax.kool.scene.Camera
-import de.fabmax.kool.scene.OrthographicCamera
-import de.fabmax.kool.scene.Scene
+import de.fabmax.kool.scene.*
+import de.fabmax.kool.toString
 import de.fabmax.kool.util.Color
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
+import de.fabmax.kool.util.Time
+import kotlinx.coroutines.*
 import me.az.ilode.*
-import me.az.scenes.*
+import me.az.scenes.HiScoreScene
+import me.az.scenes.height
+import me.az.scenes.width
 import me.az.utils.*
+import me.az.view.SpriteConfig
+import me.az.view.SpriteSystem
+import me.az.view.sprite2d
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
@@ -41,6 +44,7 @@ enum class GameSpeed(val fps: Int) {
     SPEED_NORMAL    (28),
     SPEED_FAST      (35),
     SPEED_VERY_FAST (40), // 14, 18, 23, 29, 35
+    INSTANT (1000),
     ;
     val msByPass get() = 1000 / fps
     val dis get() = name.removePrefix("SPEED_").lowercase().replace('_', ' ')
@@ -86,40 +90,154 @@ class ExitState(private val app: App) : StackedState<AppState, App>(AppState.EXI
     }
 }
 
+
 class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DEBUG) {
 
     val debug = mutableStateOf("")
+    val eachFrame = 100
+    val n = 10
 
+    val randomPos = { randomF(-5f, 5f) }
     init {
         onEnter {
-            app.ctx.scenes += UiScene() {
-                +Panel(sizes = Sizes.medium) {
-                    modifier
-                        .alignY(AlignmentY.Top)
-                        .alignX (AlignmentX.Start)
+//            app.ctx.scenes += scene1()
+//            app.ctx.scenes += scene2()
+            val job = Job()
+            val scope = CoroutineScope(job)
 
-                    Row {
-                        Text(debug.use()) {
-//                            modifier.font.setScale(.3f, app.ctx)
+            app.ctx.scenes += scene {
+                camera.position.z = 10f
 
+                val context = Array(n) { i -> mutableStateOf(randomI(0, 5)) }
+
+                val cfg = SpriteConfig {
+                    this += "text"
+                    this += "runner"
+                    this += "guard"
+                    this += "tiles"
+                }
+
+                val ss = SpriteSystem(cfg)
+
+                app.ctx.assetMgr.launch {
+                    cfg.atlases.map { async { it.load(TileSet.SPRITES_APPLE2, this@launch) } }.awaitAll()
+                    ss.dirty = true
+                }
+
+                for ( i in 0 until n) {
+                    ss.sprite(randomI(0, cfg.atlases.size - 1), Vec2f(randomPos(), randomPos()), context[i] )
+                }
+                +ss
+
+                scope.launch {
+                    while(true) {
+                        delay(1000)
+                        val aid = randomI(0, cfg.atlases.size - 1)
+
+                        cfg.atlases[aid].geometry?.run {
+                            context[randomI(0, context.size - 1)].set(randomI(0, total - 1))
                         }
                     }
+                }
+            }
 
+        }
+        onUpdate {
+            if ( Time.frameCount % eachFrame == 0 ) {
+                println(ctx.engineStats.numDrawCommands)
+            }
+        }
+
+        fun scene2() = scene("debug") {
+            val randomCh = { randomF(0f, 1f) }
+            +colorMesh {
+                instances = MeshInstanceList(
+                    listOf(Attribute.INSTANCE_MODEL_MAT, Attribute.INSTANCE_COLOR), 0
+                )
+
+
+                instances?.addInstances(n) { buf ->
+                    for ( i in 0 until n ) {
+                        buf.put(Mat4f().translate(randomPos(), randomPos(), 0f).matrix)
+                        buf.put(randomCh())
+                        buf.put(randomCh())
+                        buf.put(randomCh())
+                        buf.put(randomCh())
+                    }
+                }
+
+                shader = KslUnlitShader {
+                    isInstanced = true
+                    pipeline {
+                        cullMethod = CullMethod.NO_CULLING
+                        depthTest = DepthCompareOp.DISABLED
+                    }
+
+                    color {
+                        instanceColor()
+//                            constColor(Color.RED.gamma(0.8f), ColorBlockConfig.MixMode.Subtract)
+                    }
+                }
+                generate {
+                    rect {
+                        size.set(0.05f, 0.05f)
+                        origin.set(-width/2f, -height/2f, 0f)
+                    }
+                }
+            }
+
+            onUpdate += { ev ->
+                val c = 50
+                for ( i in 0 until c) {
+
+                    children.filterIsInstance<Mesh>().firstOrNull()?.run {
+                        val idx = randomI( 0 until n)
+                        instances?.let {
+                            val offset = it.instanceSizeF * idx
+
+                            val matmod = Mat4f().translate(randomPos(), randomPos(), 0f).matrix
+                            matmod.forEachIndexed { index, fl ->
+                                it.dataF[offset + index] = fl
+                            }
+                            it.dataF[offset + matmod.size] = randomCh()
+                            it.dataF[offset + matmod.size + 1] = randomCh()
+                            it.dataF[offset + matmod.size + 2] = randomCh()
+                            it.dataF[offset + matmod.size + 3] = 1f
+
+                            it.hasChanged = true
+                        }
+                    }
                 }
             }
         }
 
-        onUpdate {
-            debug.set( ctx.inputMgr.pointerState.pointers
-                .filter { it.isValid && !it.isConsumed() && it.isAnyButtonDown }
-                .joinToString("\n") {
-                "id: %d\t valid: %s\t %5.5f x %5.5f mask=%d"
-                    .format( it.id, it.isValid, it.x, it.y, it.buttonMask,
+        fun scene1() = UiScene() {
+            +Panel(sizes = Sizes.medium) {
+                modifier
+                    .alignY(AlignmentY.Top)
+                    .alignX (AlignmentX.Center)
 
-                        )
-            } )
+                Row {
+                    Text(debug.use()) {
+//                            modifier.font.setScale(.3f, app.ctx)
 
+                    }
+                }
+
+            }
+            onUpdate {
+                debug.set( ctx.inputMgr.pointerState.pointers
+                    //.filter { it.isValid && !it.isConsumed() && it.isAnyButtonDown }
+                    .joinToString("\n") {
+                        "id: ${it.id}\t valid: ${it.isValid}\t consumed=${it.isConsumed()} ${it.x.toString(2)} x ${it.y.toString(2)} mask=${it.buttonMask.toString(2)}"
+                    } )
+            }
+//                onUpdate += { ev->
+//                    debug.set(ev.ctx.engineStats.numDrawCommands.toString())
+//                }
         }
+
+
     }
 }
 
@@ -167,7 +285,7 @@ class App(val ctx: KoolContext) {
     val gameSettings = GameSettings(settings)
     val context = AppContext(gameSettings)
 
-    val fsm = buildStateMachine(AppState.MAINMENU) {
+    val fsm = buildStateMachine(AppState.DEBUG) {
         this += MainMenuState(this@App)
         this += RunGameState(this@App)
         this += ExitState(this@App)
@@ -188,7 +306,6 @@ class App(val ctx: KoolContext) {
         }
 
         fsm.reset(false)
-
         scope.launch { test4() }
         ctx.run()
 
@@ -262,7 +379,7 @@ class App(val ctx: KoolContext) {
         }
 
         fun Scene.bg() =
-            sprite(
+            sprite2d(
                 texture = Texture2d(simpleTextureProps) {
                     it.loadTextureData(backgroundImageFile, simpleTextureProps.format)
                 },
@@ -330,6 +447,10 @@ class App(val ctx: KoolContext) {
         }
     }
 
+    fun test5() {
+
+    }
+
     private fun expect(cond: Boolean, msg: () -> String = { "assert error" }) {
         if ( !cond ) throw AssertionError(msg())
     }
@@ -383,7 +504,7 @@ internal fun touchControls(controllable: Controllable): Scene {
     val ray = Ray()
     return UiScene("virtual joystick", false) {
 
-        +sprite(vjcTex).apply {
+        +sprite2d(vjcTex).apply {
 //            onProcessInput += {
             onUpdate += { ev->
 
@@ -433,7 +554,7 @@ internal fun touchControls(controllable: Controllable): Scene {
                 }
             }
 
-            +sprite(handleTex).also { inner ->
+            +sprite2d(handleTex).also { inner ->
 
                 inner.onUpdate += {
                     if ( vjcTex.loadedTexture != null && handleTex.loadedTexture != null ) {

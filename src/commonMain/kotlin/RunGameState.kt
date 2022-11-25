@@ -23,7 +23,7 @@ class RunGameState(private val app: App) : StackedState<AppState, App>(AppState.
         override val onPress: RunGameState.(InputManager.KeyEvent) -> Unit = {},
         override val onRelease: RunGameState.(InputManager.KeyEvent) -> Unit = {}
     ) : KeyAction<RunGameState> {
-        DEBUGTOGGLE('d'.toInputSpec(InputManager.KEY_MOD_CTRL), onRelease = {
+        DEBUGTOGGLE(InputManager.KEY_F1.toInputSpec(InputManager.KEY_MOD_CTRL), onRelease = {
             when (debugScene) {
                 null -> {}
                 else -> {
@@ -76,16 +76,21 @@ class RunGameState(private val app: App) : StackedState<AppState, App>(AppState.
         }
 
         onExit {
+
             with(app.ctx) {
                 keyListeners.forEach { inputMgr.removeKeyListener(it) }
-                gameScene?.run { scenes -= this; runDelayed(1) { dispose(this@with) } }
+                gameScene?.run {
+                    game.finish()
+                    scenes -= this;
+                    runDelayed(1) { dispose(this@with) }
+                }
                 gameScene = null
                 infoScene?.run { scenes -= this; runDelayed(1) { dispose(this@with) } }
                 infoScene = null
                 debugScene?.run { app.ctx.scenes -= this; runDelayed(1) { dispose(this@with) } }
                 debugScene = null
                 //app.ctx.scenes -= app.touchControls
-                app.ctx.scenes.clear()
+                // app.ctx.scenes.clear()
             }
         }
 

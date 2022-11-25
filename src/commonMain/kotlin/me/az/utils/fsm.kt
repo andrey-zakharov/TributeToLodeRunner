@@ -153,7 +153,7 @@ open class StackedState<STATEKEY, CONTEXT>(val name: STATEKEY) {
     }
 
     fun beforeUpdate(event: CONTEXT) = edgeList.firstOrNull {
-        /*it.targetState != this.name && */it.canHandleEvent(event)
+        it.canHandleEvent(event)
     }
 
     fun enterState(previous: STATEKEY) = stateEnterAction.forEach { it(this) }

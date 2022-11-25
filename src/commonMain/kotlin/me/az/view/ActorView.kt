@@ -2,7 +2,6 @@ package me.az.view
 
 import AnimationFrames
 import ImageAtlas
-import Sprite3d
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.math.clamp
@@ -10,19 +9,14 @@ import de.fabmax.kool.modules.audio.AudioOutput
 import de.fabmax.kool.modules.audio.MixNode
 import de.fabmax.kool.modules.audio.WavFile
 import de.fabmax.kool.modules.audio.WavNode
-import de.fabmax.kool.modules.audio.synth.LowPassFilter
 import de.fabmax.kool.modules.audio.synth.Oscillator
 import de.fabmax.kool.modules.audio.synth.SampleNode
 import de.fabmax.kool.modules.audio.synth.Wave
 import me.az.ilode.Actor
 import me.az.ilode.ActorEvent
 import me.az.ilode.Sound
-import me.az.utils.debugOnly
 import me.az.utils.lerp
 import me.az.utils.logd
-import kotlin.math.E
-import kotlin.math.pow
-import kotlin.math.roundToInt
 
 class ActorView(
     private val actor: Actor,
@@ -95,6 +89,7 @@ class ActorView(
                     }
                 }
                 is ActorEvent.StopSound -> {
+                    println("stopping ${it.soundName}")
                     if ( !clips.containsKey(it.soundName) ) {
                         println("no sound ${it.soundName}")
                     } else {
@@ -113,11 +108,13 @@ class ActorView(
     }
 }
 
-private const val noteDurMs = 60f / 1000
+private const val noteDurMs = 60f / 1000 // or 164 waves... hm
+// idea is that this sound impulse should be different too for different freqs
 private const val phaseShiftDur = noteDurMs / 2
+private const val phaseShift = noteDurMs / 2
 private const val longGapMs = 30f / 1000
-private const val shortGapMs = 15f / 1000 + noteDurMs
-private const val kickTimeMs = 15f / 1000
+private const val shortGapMs = 15f / 1000 *  + noteDurMs
+
 
 class FallSound : SampleNode() {
 
@@ -133,19 +130,37 @@ class FallSound : SampleNode() {
     // n1 + long gap + n2 + long gap + n3 + shot gap + n4 + long gap + n5...
     // think that gaps are from CPU cycles needed to move runner from pos to pos.
     // anyway emulate 1 bit sound from 1980 by oscillators of square waves, because of. why not?
+
+    // make pitch alter for wav (any) node
     var height = 0f // till 1f
         set(value) {
             field = value
             freq = value.lerp(startFreq, endFreq)
         }
     var octave = 5
+    var percFreqMultiplier = 1f / 250f
+
 
     val startFreq = note(6, 5)
     val endFreq = note(-10, 5)
     var freq = startFreq
+        set(value) {
+            field = value
+            noteDur = value / freq * noteDurMs
+        }
+    private var noteDur = startFreq / freq * noteDurMs
+    private var shortGap = startFreq / freq * shortGapMs + noteDur
 
     fun dis() {
-        println("height = $height octave = $octave freq=${freq}")
+        println("height = $height octave = $octave freq=${freq} noteDur=$noteDur")
+    }
+
+//    private val osc = Oscillator(Wave.SQUARE).apply { gain = 1f }
+
+    private val osc = Oscillator(Wave.SINE).apply { gain = 2f }
+    private val ph = Oscillator(Wave.SINE).apply { gain = 1f }
+    override fun generate(dt: Float): Float {
+        return (osc.next(dt, freq) * ph.next(dt, freq * percFreqMultiplier)).clamp(-0.8f, 0.5f)
     }
 
     companion object {
@@ -163,40 +178,7 @@ class FallSound : SampleNode() {
 //                }
 //                println()
 //            }
-
-
         }
     }
 
-//    private val osc = Oscillator(Wave.SQUARE).apply { gain = 1f }
-
-    private val osc = Oscillator(Wave.SINE, startFreq).apply { gain = 5f }
-    private val ph = Oscillator(Wave.SINE).apply { gain = 1f }
-    override fun generate(dt: Float): Float {
-        return when {
-//            t < kickTimeMs -> {
-//                osc.next(dt, freq) * (1f - (t / kickTimeMs)).toFloat().lerp(0f, 1f)
-//            }
-            t <= noteDurMs -> {
-                //if (t > phaseShiftDur && osc.phaseShift != 0.5f) {
-                    //osc.phaseShift =
-                //}
-                osc.next(dt, freq) //* ph.next(dt, freq / noteDurMs)
-            }
-            t < shortGapMs -> {
-                0f //osc.next(dt, freq) * (1f - t / shortGapMs).toFloat().lerp(1f, 0f)
-            }
-            else -> {
-                t = 0.0
-                osc.phaseShift = 0f
-                osc.next(dt, freq)
-            }
-        }.clamp(-0.8f, 0.5f)
-        // 45 ms one burst, 2 bursts per note,
-        // 14 ms gap between bursts, variance 7ms each 2?
-        // 14 ms 14 ms 7ms, 14 ms 14 ms 7ms
-        // running emulator shows 30ms 15ms gaps
-        // 1 ms gap in the middle of burst (inverting in the middle?)
-
-    }
 }

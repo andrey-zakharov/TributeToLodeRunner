@@ -118,6 +118,8 @@ class Game(val state: AppContext) : CoroutineScope {
         fsm.reset(true)
     }
 
+    fun finish() = fsm.finish()
+
     private val fsm by lazy { buildStateMachine(GameState.GAME_NEW_LEVEL) {
         state(GameState.GAME_START) {
             edge(GameState.GAME_RUNNING) {

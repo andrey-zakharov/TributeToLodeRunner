@@ -11,12 +11,10 @@ import RunnerController
 import SoundPlayer
 import TileSet
 import ViewSpec
-import backgroundImageFile
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
-import de.fabmax.kool.math.MutableVec3d
+import de.fabmax.kool.math.Vec2f
 import de.fabmax.kool.math.Vec2i
-import de.fabmax.kool.modules.audio.AudioClip
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.pipeline.FullscreenShaderUtil.generateFullscreenQuad
@@ -24,7 +22,6 @@ import de.fabmax.kool.scene.*
 import de.fabmax.kool.scene.animation.InterpolatedFloat
 import de.fabmax.kool.scene.animation.LinearAnimator
 import de.fabmax.kool.util.Color
-import dump
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -34,11 +31,9 @@ import me.az.ilode.anyKeyPressed
 import me.az.shaders.CRTShader
 import me.az.shaders.MaskShader
 import me.az.view.CameraController
-import simpleTextureProps
-import sprite
+import me.az.view.SpriteConfig
+import me.az.view.SpriteSystem
 import kotlin.math.ceil
-import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.sqrt
 
 open class GameScene(val game: Game,
@@ -47,6 +42,7 @@ open class GameScene(val game: Game,
                      val conf: ViewSpec = ViewSpec(tileSize = Vec2i(game.state.spriteMode.value.tileWidth, game.state.spriteMode.value.tileHeight)),
                      name: String?,
 ) : AsyncScene(name) {
+
     val currentShutter get() = shatterRadiusAnim.value.value
     var levelView: LevelView? = null
 
@@ -146,12 +142,31 @@ open class GameScene(val game: Game,
         sounds.loadSounds()
     }
 
+    val spriteSystem by lazy { SpriteSystem(SpriteConfig {
+        this += "text"
+    }).apply {
+        spriteSize.x = 25
+        spriteSize.y = 25
+        regionSize.x = 25
+        regionSize.y = 25
+    } }
+
     override fun setup(ctx: KoolContext) {
         game.soundPlayer = sounds
-        +bg
-        +RunnerController(ctx.inputMgr, game.runner)
+//        addNode(bg, 0)
+//        +RunnerController(ctx.inputMgr, game.runner)
+
+        for ( y in -5 until 5 ) {
+            for (i in -2 .. 2) {
+                spriteSystem.sprite(
+                    0, Vec2f(20f * i, y * 20f), i
+                )
+            }
+        }
+        +spriteSystem.mesh
 
         game.reset() // start game
+
     }
 
     protected fun addLevelView(ctx: KoolContext, level: GameLevel) {
