@@ -369,7 +369,7 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
             scanDown(x, Action.ACT_DOWN, guardAi, runner)
         }
 
-        if ( level.base[x][y] == TileLogicType.LADDR ) {
+        if ( level.base[x][y] == TileLogicType.LADDER ) {
             scanUp(x, Action.ACT_UP, guardAi, runner)
         }
 
@@ -393,7 +393,7 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
                 }
             }
 
-            if ( level.base[x][y] == TileLogicType.LADDR ) {
+            if ( level.base[x][y] == TileLogicType.LADDER ) {
                 scanUp(x, curPath, guardAi, runner)
             }
 
@@ -413,7 +413,7 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
         var y = block.y
 
         while ( y < maxTileY && level.base[x][y + 1] != TileLogicType.BLOCK && level.base[x][y + 1] != TileLogicType.SOLID ) {
-            if ( level.base[x][y] != TileLogicType.EMPTY && level.base[x][y] != TileLogicType.HLADR ) {
+            if ( level.base[x][y] != TileLogicType.EMPTY && level.base[x][y] != TileLogicType.HLADDER ) {
                 if ( x > 0 ) {
                     val downTile = Vec2i( x - 1, y + 1 )
                     if ( level.isFloor(downTile, true, false) || level.base[x - 1][y] == TileLogicType.BAR ) {
@@ -452,7 +452,7 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
 
     private fun scanUp(x: Int, curPath: Action, guardAi: GuardAiContext, runner: Actor) {
         var y = block.y
-        while ( y > 0 && level.base[x][y] == TileLogicType.LADDR ) {
+        while ( y > 0 && level.base[x][y] == TileLogicType.LADDER ) {
             y--
             if ( x > 0 ) {
                 val downTile = Vec2i(x - 1, y + 1)

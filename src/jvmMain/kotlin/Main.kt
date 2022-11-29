@@ -1,12 +1,11 @@
 import de.fabmax.kool.createContext
 import de.fabmax.kool.platform.Lwjgl3Context
+import me.az.utils.canDebug
+import me.az.utils.debugOnly
 import me.az.utils.logd
 
-@JvmField
-val canDebug: Boolean = System.getProperty("debug").toBoolean()
-inline fun debugOnly( block: () -> Unit ) { if ( canDebug ) block() }
-
-suspend fun main() {
+suspend fun main(args: Array<String>) {
+    println("debug=$canDebug")
     logd { "Starting with Java = ${System.getProperty("java.version")}" }
 
     val assetsDir = "assets"
@@ -23,8 +22,21 @@ suspend fun main() {
             localAssetPath = assetsDir
             renderBackend = Lwjgl3Context.Backend.OPEN_GL
             this.title = title
+            isFullscreen = true
 //        customFonts += "text" to "fonts/daugsmith/daugsmith.ttf"
+            debugOnly {
+                isFullscreen = false
+                // apple has 280×192
+                // ibm has 320×200 or 640×200
+
+                val c = 4
+                width = 280*c
+                height = 192*c
+
+            }
         }
     /*}*/
-    App(ctx)
+    val scene = if ( args.size > 0 ) AppState.valueOf(args[0].uppercase())
+    else AppState.MAINMENU
+    App(ctx, scene)
 }

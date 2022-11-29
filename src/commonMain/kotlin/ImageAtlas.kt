@@ -65,8 +65,7 @@ class ImageAtlas(val name: String, whenLoaded: () -> Unit = {}) {
     fun getTileSize() = Vec2i(tileWidth, tileHeight)
     suspend fun load(tileset: TileSet, assets: AssetManager) {
         assets.loadGeom(tileset)
-        val newTex = assets.loadAtlas(tileset, geometry!!)
-        tex.set(newTex)
+        tex.set(assets.loadAtlas(tileset, geometry!!))
     }
 
     private suspend fun AssetManager.loadGeom(tileset: TileSet) {

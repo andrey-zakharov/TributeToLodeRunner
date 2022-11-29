@@ -119,7 +119,7 @@ class GameLevelScene (
                 GameState.GAME_NEW_LEVEL -> {
                     game.level = currentLevel
                     game.level?.run {
-                        holesAnims = holeAnims
+//                        holesAnims = holeAnims
                         addLevelView(ctx, this)
                     }
                 }

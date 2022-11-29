@@ -17,7 +17,7 @@ const val SCORE_DIES     = 75
 
 /**
  * SCORING
-        The scoring with CHAMPIONSHIP IDDE RUNNER is as follows:
+        The scoring with CHAMPIONSHIP LODE RUNNER is as follows:
         Completing a level ......... . .. . .................... 2000 points
         Picking up a gold chest . .. .. .. . . . ......... . .......... 500 points
         Trapping an enemy . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 100 points

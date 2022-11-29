@@ -3,7 +3,12 @@ import de.fabmax.kool.modules.audio.synth.Melody
 import de.fabmax.kool.modules.audio.synth.Oscillator
 import de.fabmax.kool.modules.audio.synth.SampleNode
 import de.fabmax.kool.modules.audio.synth.Wave
+import de.fabmax.kool.modules.ksl.KslUnlitShader
+import de.fabmax.kool.modules.ksl.blocks.ColorBlockConfig
 import de.fabmax.kool.scene.Scene
+import de.fabmax.kool.scene.colorMesh
+import de.fabmax.kool.scene.scene
+import de.fabmax.kool.util.Color
 import me.az.ilode.Game
 import me.az.ilode.START_HEALTH
 import me.az.scenes.MainMenuScene
@@ -13,8 +18,6 @@ class MainMenuState(private val app: App) : StackedState<AppState, App>(AppState
     var exitGame = false
     var mainMenu: MainMenuScene? = null
     var mainUiMenu: Scene? = null
-    val menuContext get() = mainMenu?.menuContext ?: throw IllegalStateException()
-
 
     init {
         onEnter {
@@ -23,12 +26,9 @@ class MainMenuState(private val app: App) : StackedState<AppState, App>(AppState
             // preload
             mainMenu = MainMenuScene(app.context, game, app.ctx.assetMgr).also {
                 app.ctx.scenes += it
-//            mainUiMenu = it.setupUi()
             }
-            mainUiMenu?.run { app.ctx.scenes += this }
+//            mainUiMenu?.run { app.ctx.scenes += this }
 //            app.ctx.scenes += touchControls(game.runner)
-
-            game.reset()
         }
 
         onExit {
@@ -43,7 +43,7 @@ class MainMenuState(private val app: App) : StackedState<AppState, App>(AppState
                 app.ctx.runDelayed(1) { dispose(app.ctx) }
             }
             mainMenu = null
-            app.ctx.scenes.clear()
+            //app.ctx.scenes.clear()
         }
 
         onUpdate {

@@ -1,30 +1,25 @@
 package me.az.view
 
 import ImageAtlas
-import de.fabmax.kool.math.Mat4d
-import de.fabmax.kool.math.MutableVec2i
-import de.fabmax.kool.math.Vec2f
-import de.fabmax.kool.math.Vec2i
+import de.fabmax.kool.math.*
 import de.fabmax.kool.modules.ksl.BasicVertexConfig
 import de.fabmax.kool.modules.ksl.KslShader
-import de.fabmax.kool.modules.ksl.blocks.ColorBlockConfig
 import de.fabmax.kool.modules.ksl.blocks.TexCoordAttributeBlock
 import de.fabmax.kool.modules.ksl.blocks.mvpMatrix
 import de.fabmax.kool.modules.ksl.blocks.texCoordAttributeBlock
 import de.fabmax.kool.modules.ksl.lang.*
-import de.fabmax.kool.modules.ksl.model.KslScope
 import de.fabmax.kool.modules.ui2.MutableStateValue
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.*
-import de.fabmax.kool.pipeline.shading.unlitShader
 import de.fabmax.kool.scene.*
-import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.Float32Buffer
+import me.az.utils.debugOnly
 import me.az.utils.format
-import me.az.view.SpriteParams.Companion.INSTANCE_ATTRIBS
-import me.az.view.SpriteParams.Companion.POSITIONS
-import me.az.view.SpriteParams.Companion.TILE_INDEX
-import simpleTextureProps
+import me.az.utils.logd
+import me.az.view.SpriteInstance.Companion.INSTANCE_ATTRIBS
+import me.az.view.SpriteInstance.Companion.POSITIONS
+import me.az.view.SpriteInstance.Companion.SCALE
+import me.az.view.SpriteInstance.Companion.TILE_INDEX
 
 // represent both simple texture2d or frame in atlas
 fun sprite2d(texture: Texture2d,
@@ -184,73 +179,155 @@ fun Group.dump(level: Int = 0): String {
         }
 }
 
-data class SpriteParams(
-    val atlasId: Int = 0,
-    val pos: Vec2f, // local translation
+class Vec2fOnBuf(private val buf: Float32Buffer, val pos: Int, init: Vec2f) : MutableVec2f(init.x, init.y) {
+    override var x: Float
+        get() = buf[pos]
+        set(value) { buf[pos] = value }
+    override var y: Float
+        get() = buf[pos+1]
+        set(value) { buf[pos+1] = value;}
+}
+
+data class SpriteInstance(
+    val atlasId: MutableStateValue<Int> = mutableStateOf(0),
+    val pos: MutableVec2f, // local translation
+    val scale: MutableStateValue<Float> = mutableStateOf(1f), // local translation
     val tileIndex: MutableStateValue<Int> = mutableStateOf(0),
-    val grayed: Boolean = false,
+    val grayed: MutableStateValue<Boolean> = mutableStateOf(false),
+    val bgAlpha: Float = 0f,
 ) {
     // workaround
-    val _atlasFloat = atlasId.toFloat()
+    val _atlasFloat = atlasId.value.toFloat()
 
     companion object {
         internal const val TILE_INDEX = "instance_tileIndex"
         internal const val POSITIONS = "instance_positions"
+        internal const val SCALE = "instance_scale"
 
         internal val INSTANCE_ATTRIBS = listOf(
             Attribute(POSITIONS, GlslType.VEC_2F),
-            Attribute(TILE_INDEX, GlslType.VEC_2F) // atlas index, tile index
+            Attribute(SCALE, GlslType.FLOAT),
+            Attribute(TILE_INDEX, GlslType.VEC_2F), // atlas index, tile index
+            Attribute("BGCOLOR", GlslType.FLOAT),
         )
     }
-    fun addSpriteInstance(buf: Float32Buffer) {
-        // pos
-        buf.put(pos.x)
-        buf.put(pos.y)
-        // tileindex
-        buf.put(_atlasFloat)
-        buf.put(tileIndex.value.toFloat())
+
+    fun unbind() { bufPos = null; _parent = null }
+    fun addSpriteInstance(instances: MeshInstanceList) {
+        bufPos = instances.dataF.position
+        _parent = instances
+        with(instances.dataF) {
+            // pos 0
+            put(pos.x)
+            put(pos.y)
+            // scale  2
+            put(scale.value)
+            // tileindex 3
+            put(_atlasFloat)
+            put(tileIndex.value.toFloat())
+            // bg alpha
+            put(bgAlpha)
+        }
     }
+    // mutable vec is not mutable state
+    fun onPosUpdated() {
+        _parent?.run {
+            dataF.set(bufPos!! + 0, pos.x)
+            dataF.set(bufPos!! + 1, pos.y)
+            hasChanged = true
+        }
+    }
+    init {
+        // pos.// on change
+        scale.onChange { v -> _parent?.run { dataF.set(2 + bufPos!!, v); hasChanged = true; } }
+        atlasId.onChange { v -> _parent?.run { dataF.set(3 + bufPos!!, v.toFloat()); hasChanged = true } }
+        tileIndex.onChange { v -> _parent?.run { dataF.set(4 + bufPos!!, v.toFloat()); hasChanged = true } }
+    }
+    private var _parent: MeshInstanceList? = null
+    private var bufPos: Int? = null
 }
 
 class SpriteConfig(init: SpriteConfig.() -> Unit = {}) {
-    val atlases = mutableListOf<ImageAtlas>()
+    private val _atlases = mutableListOf<ImageAtlas>()
+    val atlases: List<ImageAtlas> = _atlases
+    val atlasIdByName = mutableMapOf<String, Int>() // name-> id in list above
 
-    operator fun plusAssign(x: String) { atlases.add(ImageAtlas(x)) }
+    operator fun plusAssign(x: String) = plusAssign(ImageAtlas(x))
+    operator fun plusAssign(tilesAtlas: ImageAtlas) {
+        _atlases.add(tilesAtlas)
+        atlasIdByName[_atlases.last().name] = _atlases.size - 1
+    }
+
     init {
         this.apply(init)
     }
 }
 
 class SpriteSystem(
-    cfg: SpriteConfig,
+    val cfg: SpriteConfig,
     name: String? = null,
 ): Group(name) {
+
+    val instances = MeshInstanceList(INSTANCE_ATTRIBS, 0)
+    val sprites = mutableListOf<SpriteInstance>()
 
     val onResize = mutableListOf<SpriteSystem.(x: Int, y: Int) -> Unit>()
     // also global, as attribute?
     var mirrorTexCoordsY: Boolean = false
     var dirty = false
+    fun refresh() { // full rebuild
+        cfg.atlases.forEachIndexed { index, imageAtlas ->
+            spriteShader.textures.set(index, imageAtlas.tex.value)
+        }
 
-    val sprites = mutableListOf<SpriteParams>()
-    val spriteSize: MutableVec2i = MutableVec2i(0, 0) // in pixels size of sprite view
-    val regionSize: MutableVec2i = MutableVec2i(0, 0) // how much get from texture by pixels
-//    operator fun ImageAtlas.plusAssign(x: SpriteParams) {
-//        sprites.add ( SpriteParams(
-//            //this.
-//        ))
-//    }
-    fun sprite(atlasId: Int, pos: Vec2f, tileIndex: Int): Int = sprite(atlasId, pos, mutableStateOf(tileIndex))
-    fun sprite(atlasId: Int, pos: Vec2f, tileIndex: MutableStateValue<Int>): Int {
-        if ( !sprites.add( SpriteParams(atlasId, pos, tileIndex ) ) ) {
+        instances.run {
+            clear()
+            addInstances(sprites.size) { buf ->
+                for ( i in sprites.indices ) {
+                    sprites[i].addSpriteInstance(instances)
+                }
+            }
+        }
+
+        //setIdentity().scale(100.0, 100.0, 1.0)
+//                    transform.scale(spriteSize.x.toDouble(), spriteSize.y.toDouble(), 1.0)
+        dirty = false
+    }
+
+//    val spriteSize: MutableVec2i = MutableVec2i(0, 0) // in pixels size of sprite view
+//    val regionSize: MutableVec2i = MutableVec2i(0, 0) // how much get from texture by pixels
+    fun sprite(atlasId: Int, pos: Vec2f, tileIndex: Int, scale: Float = 1f) =
+        sprite(atlasId, pos, mutableStateOf(tileIndex), scale)
+    fun sprite(atlasId: Int, x: Float, y: Float, tileIndex: Int, scale: Float = 1f) =
+        sprite(atlasId, Vec2f(x, y), tileIndex, scale)
+    fun sprite(atlasId: Int, pos: Vec2f, tileIndex: MutableStateValue<Int>, scale: Float = 1f) =
+        sprite(mutableStateOf(atlasId), MutableVec2f(pos), tileIndex, mutableStateOf(scale))
+    fun sprite(atlasId: Int, pos: Vec2f,
+               tileIndex: MutableStateValue<Int>,
+               scale: MutableStateValue<Float> = mutableStateOf(1f)) =
+        sprite(mutableStateOf(atlasId), MutableVec2f(pos), tileIndex, scale)
+
+    fun sprite(atlasId: MutableStateValue<Int>,
+               pos: MutableVec2f,
+               tileIndex: MutableStateValue<Int>,
+               scale: MutableStateValue<Float>
+    ): SpriteInstance {
+        val inst = SpriteInstance(atlasId, pos, scale, tileIndex )
+
+        if ( !sprites.add( inst ) ) {
             throw RuntimeException("add")
         }
 
+        val spriteIndex =  sprites.size - 1
+//        println("created $spriteIndex $inst")
+
         tileIndex.onChange {
-            dirty = true
+            dirty = true // redraw all?
+            // could we just put only changed?
         }
 
         dirty = true
-        return sprites.size - 1
+        return sprites[spriteIndex]
     }
 
     val spriteShader = SpriteBatchShader(SpriteShaderConfig().apply {
@@ -273,38 +350,23 @@ class SpriteSystem(
                 spriteShader
 //                    unlitShader {useColorMap(testTex)}
 
-            instances = MeshInstanceList(INSTANCE_ATTRIBS, sprites.size)
+            instances = this@SpriteSystem.instances
 
 //            onUpdate += ::updateSizes
             onUpdate += {
 
-                if ( dirty ) {
-                    cfg.atlases.forEachIndexed { index, imageAtlas ->
-                        spriteShader.textures.set(index, imageAtlas.tex.value)
-                    }
-//                    spriteShader.test = testTex
-//                    println(spriteShader.texture?.loadingState == Texture.LoadingState.LOADED)
-println("cleaning")
-                    instances?.run {
-                        clear()
-                        addInstances(sprites.size) { buf ->
-                            for ( i in sprites.indices ) {
-                                sprites[i].addSpriteInstance(buf)
-                            }
-                        }
-                    }
-
-                    //setIdentity().scale(100.0, 100.0, 1.0)
-//                    transform.scale(spriteSize.x.toDouble(), spriteSize.y.toDouble(), 1.0)
-                    dirty = false
+                if ( dirty ) { // TBD rework to not all update
+                    refresh()
                 }
-
-//                spriteShader.grayScaled = if ( grayScaled ) 1 else 0
+ //                spriteShader.grayScaled = if ( grayScaled ) 1 else 0
             }
         }
 
     init {
         +mesh
+        cfg.atlases.forEach { it.tex.onChange {
+            dirty = true
+        } }
     }
 
     class SpriteShaderConfig {
@@ -345,7 +407,7 @@ println("cleaning")
             }
 
             init {
-                dumpCode = true
+                dumpCode = false
                 val texCoordBlock: TexCoordAttributeBlock
                 val color = interStageFloat4()
 
@@ -360,11 +422,12 @@ println("cleaning")
                         if (cfg.vertexCfg.isInstanced) {
                             tileIndex.input set instanceAttribFloat2(TILE_INDEX)
                             val pos = instanceAttribFloat2(POSITIONS)
+                            val scale = instanceAttribFloat1(SCALE)
 
                             mvp *= mat4Var(mat4Value(
-                                float4Value(1f.const, 0f.const, 0f.const, 0f.const),
-                                float4Value(0f.const, 1f.const, 0f.const, 0f.const),
-                                float4Value(0f.const, 0f.const, 1f.const, 0f.const),
+                                float4Value(scale, 0f.const, 0f.const, 0f.const),
+                                float4Value(0f.const, scale, 0f.const, 0f.const),
+                                float4Value(0f.const, 0f.const, scale, 0f.const),
                                 float4Value(pos.x, pos.y, 0f.const, 1f.const)
                             ))
                         }
@@ -393,30 +456,6 @@ println("cleaning")
             }
         }
     }
-
-
-//    private var needResize = spriteSize == Vec2i.ZERO || regionSize == Vec2i.ZERO
-//    private fun updateSizes(ev: RenderPass.UpdateEvent) {
-//        // workaround impossibility to unsubscribe while onUpdate'ing
-//        if ( !needResize ) return
-//        if ( spriteSize == Vec2i.ZERO || regionSize == Vec2i.ZERO ) {
-//            if ( texture?.loadingState == Texture.LoadingState.LOADED ) {
-//                if ( regionSize == Vec2i.ZERO ) {
-//                    regionSize.x = texture!!.loadedTexture!!.width
-//                    regionSize.y = texture!!.loadedTexture!!.height
-//                    dirty = true
-//                }
-//                if ( spriteSize == Vec2i.ZERO ) {
-//                    spriteSize.x = texture!!.loadedTexture!!.width
-//                    spriteSize.y = texture!!.loadedTexture!!.height
-//                    dirty = true
-//                }
-//            }
-//        } else {
-//            needResize = false
-//            // mesh.onUpdate -= ::updateSizes
-//        }
-//    }
 
 }
 

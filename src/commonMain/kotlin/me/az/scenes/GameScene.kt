@@ -13,8 +13,8 @@ import TileSet
 import ViewSpec
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
-import de.fabmax.kool.math.Vec2f
 import de.fabmax.kool.math.Vec2i
+import de.fabmax.kool.modules.ui2.MutableStateValue
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.pipeline.FullscreenShaderUtil.generateFullscreenQuad
@@ -35,6 +35,8 @@ import me.az.view.SpriteConfig
 import me.az.view.SpriteSystem
 import kotlin.math.ceil
 import kotlin.math.sqrt
+
+typealias Sequences = Map<String, Pair<Int, List<Int>>>
 
 open class GameScene(val game: Game,
                      val assets: AssetManager,
@@ -93,32 +95,46 @@ open class GameScene(val game: Game,
     }
 
     protected val currentSpriteSet = mutableStateOf(ImageAtlasSpec(appContext.spriteMode.value))
-    protected var tilesAtlas = ImageAtlas("tiles")
-    protected var runnerAtlas = ImageAtlas("runner")
-    protected var guardAtlas = ImageAtlas("guard")
-    protected var fontAtlas = ImageAtlas("text")
+    private val atlasOrder = listOf("tiles", "runner", "guard", "text")
+    protected val atlases = atlasOrder.map { ImageAtlas(it) }
+    protected val tilesAtlas = atlases[0]
+    protected val fontAtlas = atlases[3]
 
-    protected var runnerAnims = AnimationFrames("runner")
-    protected var guardAnims = AnimationFrames("guard")
-    protected var holeAnims = AnimationFrames("hole")
+    val spriteSystem by lazy { SpriteSystem(SpriteConfig {
+        this@GameScene.atlases.forEach { this += it }
+    }).apply {
+//        mirrorTexCoordsY = true
+    }}
+
+    protected var runnerAnims = AnimationFrames(atlasOrder.indexOf("runner"), "runner")
+    protected var guardAnims = AnimationFrames(atlasOrder.indexOf("guard"), "guard")
+    protected var tilesAnims = AnimationFrames(atlasOrder.indexOf("tiles"), "tiles")
+
+    // val sequencesAtlas = mutableMapOf<String, List<Int>>() // pair of atlasId, tile id
+    // val sequences = mutableMapOf<String, List<Int>>() // pair of atlasId, tile id
 
     protected val sounds = SoundPlayer(assets)
 
-    suspend fun reload(newts: TileSet) {
+    private fun refreshSequences() {
+//        println(tilesAnims.sequence)
+//        sequences.clear()
+//        // but order remains same. TBD reinvent some animation system ;)
+//        holeAnims.sequence.forEach { (name, list) -> sequences[name] = Pair(0, list) }
+//        runnerAnims.sequence.forEach { (name, list) -> sequences[name] = Pair(1, list) }
+//        guardAnims.sequence.forEach { (name, list) -> sequences[name] = Pair(2, list) }
+    }
+    private suspend fun reload(newts: TileSet) {
         val newSpec = ImageAtlasSpec(tileset = newts)
         // awaitAll
-        tilesAtlas.load(newts, assets)
-        runnerAtlas.load(newts, assets)
-        guardAtlas.load(newts, assets)
-        fontAtlas.load(newts, assets)
+        atlases.forEach { it.load(newts, assets) }
 
         runnerAnims.loadAnimations(newSpec, assets)
         guardAnims.loadAnimations(newSpec, assets)
-        holeAnims.loadAnimations(newSpec, assets)
+        tilesAnims.loadAnimations(newSpec, assets)
+        tilesAnims.appendFrom(assets, newSpec, "hole")
 
-//        runnerAnims = AnimationFrames("runner")
-//        guardAnims = AnimationFrames("guard")
-//        holeAnims = AnimationFrames("hole")
+        // sequences could changed from tileset to tileset
+        refreshSequences()
 
         currentSpriteSet.set(ImageAtlasSpec(appContext.spriteMode.value))
 
@@ -130,40 +146,60 @@ open class GameScene(val game: Game,
     }
     override suspend fun loadResources(assets: AssetManager, ctx: KoolContext) = with(assets) {
         val newSpec = ImageAtlasSpec(tileset = appContext.spriteMode.value)
-        tilesAtlas.load(appContext.spriteMode.value, this)
-        runnerAtlas.load(appContext.spriteMode.value, this)
-        guardAtlas.load(appContext.spriteMode.value, this)
-        fontAtlas.load(appContext.spriteMode.value, this)
+
+        atlases.forEach { it.load(appContext.spriteMode.value, this) }
 
         runnerAnims.loadAnimations(newSpec, this)
         guardAnims.loadAnimations(newSpec, this)
-        holeAnims.loadAnimations(newSpec, this)
+        tilesAnims.loadAnimations(newSpec, this)
+        tilesAnims.appendFrom(assets, newSpec, "hole")
 
         sounds.loadSounds()
+
+        spriteSystem.cfg.atlases.map {
+            it.load(appContext.spriteMode.value, this@with)
+        }
+        refreshSequences()
+
+        // default one frame anim of tiles from atlas
+        tilesAtlas.nameIndex.forEach { (k, v) ->
+            if ( !tilesAnims.sequence.containsKey(k) ) {
+                tilesAnims.sequence[k] = listOf(v)
+            }
+        }
+
+        Unit
     }
 
-    val spriteSystem by lazy { SpriteSystem(SpriteConfig {
-        this += "text"
-    }).apply {
-        spriteSize.x = 25
-        spriteSize.y = 25
-        regionSize.x = 25
-        regionSize.y = 25
-    } }
+    fun SpriteSystem.text(text: MutableStateValue<String>) {
+        //sprite(3)
+    }
 
     override fun setup(ctx: KoolContext) {
         game.soundPlayer = sounds
 //        addNode(bg, 0)
-//        +RunnerController(ctx.inputMgr, game.runner)
+        +RunnerController(ctx.inputMgr, game.runner)
 
-        for ( y in -5 until 5 ) {
-            for (i in -2 .. 2) {
-                spriteSystem.sprite(
-                    0, Vec2f(20f * i, y * 20f), i
+        spriteSystem.scale(
+            appContext.spriteMode.value.tileWidth.toFloat(),
+            appContext.spriteMode.value.tileHeight.toFloat(), 1f
+        )
+        appContext.spriteMode.onChange {
+            spriteSystem.transform.resetScale()
+                .scale(
+                    it.tileWidth.toDouble(),
+                    it.tileHeight.toDouble(), 1.0
                 )
-            }
         }
-        +spriteSystem.mesh
+//        for ( y in -5 until 5 ) {
+//            for (i in -2 .. 2) {
+//                spriteSystem.sprite(
+//                    0, i.toFloat(), y.toFloat(), i+2
+//                )
+//            }
+//        }
+//        +spriteSystem
+        spriteSystem.dirty = true
 
         game.reset() // start game
 
@@ -174,19 +210,20 @@ open class GameScene(val game: Game,
 
         // views
         levelView = LevelView(
+            spriteSystem,
             game,
             level,
             conf,
-            tilesAtlas,
-            runnerAtlas,
+            tilesAnims,
             runnerAnims,
-            guardAtlas,
             guardAnims,
             sounds.bank
         )
 
         levelView?.run {
-            off = OffscreenRenderPass2d(this, renderPassConfig {
+            // draw by sprite system, but still need updates
+            this@GameScene += this
+            off = OffscreenRenderPass2d(spriteSystem, renderPassConfig {
                 this.name = "bg"
 
                 setSize(visibleWidth, visibleHeight)

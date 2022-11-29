@@ -3,6 +3,8 @@ package me.az.view
 import AnimationFrames
 import ImageAtlas
 import de.fabmax.kool.KoolContext
+import de.fabmax.kool.math.Vec2d
+import de.fabmax.kool.math.Vec2f
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.math.clamp
 import de.fabmax.kool.modules.audio.AudioOutput
@@ -12,20 +14,23 @@ import de.fabmax.kool.modules.audio.WavNode
 import de.fabmax.kool.modules.audio.synth.Oscillator
 import de.fabmax.kool.modules.audio.synth.SampleNode
 import de.fabmax.kool.modules.audio.synth.Wave
+import de.fabmax.kool.scene.Node
+import de.fabmax.kool.util.logW
 import me.az.ilode.Actor
 import me.az.ilode.ActorEvent
 import me.az.ilode.Sound
+import me.az.scenes.Sequences
 import me.az.utils.lerp
 import me.az.utils.logd
 
 class ActorView(
     private val actor: Actor,
-    private val atlas: ImageAtlas,
-    private val animations: AnimationFrames,
+    private val spriteSystem: SpriteSystem,
+    private val anims: AnimationFrames,
     val tileSize: Vec2i,
     name: String? = null,
     soundsBank: Map<Sound, WavFile>
-) : Sprite3d(tileSize, atlas.tex.value, atlas.getTileSize(), name) {
+) : Node(name)/* : Sprite3d(tileSize, atlas.tex.value, atlas.getTileSize(), name)*/ {
 
     private val fallSound by lazy { FallSound() }
     private val clips = mapOf(
@@ -47,25 +52,43 @@ class ActorView(
             actor.absolutePosY.toFloat() / (actor.level.height * tileSize.y.toFloat())
 
     }
+    private fun Actor.levelPos() = Vec2d(
+        (x - level.width / 2.0 + 0.5) * 1f + (actor.ox.toDouble() / tileSize.x),
+        (level.height - y + 0.5) * 1f - (actor.oy.toDouble() / tileSize.y))
+    .toVec2f()
+
+    val instance = spriteSystem.sprite(anims.atlasId, actor.levelPos(), 0)
+
     init {
 //        addDebugAxis()
         onUpdate += {
-
-            this@ActorView.texture = atlas.tex.value
-            animations.sequence[actor.action.id]?.run {
-                if ( actor.sequenceSize == 0 ) actor.sequenceSize = size
-                tileIndex = get(actor.frameIndex.mod(size))
+            anims.sequence[actor.action.id]?.run {
+                // back hack
+                if ( actor.sequenceSize <= 0 ) actor.sequenceSize = size
+                // CPU waste
+                instance.atlasId.set( anims.atlasId )
+                instance.tileIndex.set(this[actor.frameIndex.mod(actor.sequenceSize)])
             }
 
-            setIdentity()
-            translate(
-                actor.x - actor.level.width / 2.0 + 0.5, actor.level.height - actor.y - 0.5,
-                0.0
-            )
-//            scale(1f, 1f, 1f )
-            translate(actor.ox.toDouble() / tileSize.x, -actor.oy.toDouble() / tileSize.y, 0.0)
+            instance.pos.set(actor.levelPos())
+            instance.onPosUpdated()
             updateFallFreq()
+            //setIdentity()
+            //translate(
+            //    actor.x - actor.level.width / 2.0 + 0.5, actor.level.height - actor.y - 0.5,
+            //    0.0
+            //)
+
+//            scale(1f, 1f, 1f )
+            //translate(actor.ox.toDouble() / tileSize.x, -actor.oy.toDouble() / tileSize.y, 0.0)
+
         }
+//        actor.game.onPlayGame += { g, ev ->
+//            sequences[actor.action.id]?.run {
+//                val (atlasId, seq) = this
+//                println("${actor.action} ${seq[actor.frameIndex.mod(seq.size)]}")
+//            }
+//        }
 
         actor.onEvent += {
 
@@ -89,9 +112,9 @@ class ActorView(
                     }
                 }
                 is ActorEvent.StopSound -> {
-                    println("stopping ${it.soundName}")
+                    logd { "stopping sound '${it.soundName}'" }
                     if ( !clips.containsKey(it.soundName) ) {
-                        println("no sound ${it.soundName}")
+                        logW { "no sound ${it.soundName}" }
                     } else {
                         val idx = clips.values.indexOf(clips[it.soundName])
                         mainVolume.inputGains[idx] = 0f
@@ -103,6 +126,8 @@ class ActorView(
 
     override fun dispose(ctx: KoolContext) {
         super.dispose(ctx)
+        spriteSystem.sprites.remove(instance)
+        spriteSystem.dirty = true
         audioOutput.close()
         logd { "audio closed" }
     }

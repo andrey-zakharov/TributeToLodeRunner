@@ -5,21 +5,18 @@ import com.russhwolf.settings.int
 import de.fabmax.kool.InputManager
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.*
-import de.fabmax.kool.modules.ksl.KslUnlitShader
 import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.*
-import de.fabmax.kool.toString
 import de.fabmax.kool.util.Color
-import de.fabmax.kool.util.Time
+import de.fabmax.kool.util.Log
 import kotlinx.coroutines.*
+import me.az.app.states.DebugState
 import me.az.ilode.*
 import me.az.scenes.HiScoreScene
 import me.az.scenes.height
 import me.az.scenes.width
 import me.az.utils.*
-import me.az.view.SpriteConfig
-import me.az.view.SpriteSystem
 import me.az.view.sprite2d
 import kotlin.math.max
 import kotlin.math.min
@@ -91,156 +88,6 @@ class ExitState(private val app: App) : StackedState<AppState, App>(AppState.EXI
 }
 
 
-class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DEBUG) {
-
-    val debug = mutableStateOf("")
-    val eachFrame = 100
-    val n = 10
-
-    val randomPos = { randomF(-5f, 5f) }
-    init {
-        onEnter {
-//            app.ctx.scenes += scene1()
-//            app.ctx.scenes += scene2()
-            val job = Job()
-            val scope = CoroutineScope(job)
-
-            app.ctx.scenes += scene {
-                camera.position.z = 10f
-
-                val context = Array(n) { i -> mutableStateOf(randomI(0, 5)) }
-
-                val cfg = SpriteConfig {
-                    this += "text"
-                    this += "runner"
-                    this += "guard"
-                    this += "tiles"
-                }
-
-                val ss = SpriteSystem(cfg)
-
-                app.ctx.assetMgr.launch {
-                    cfg.atlases.map { async { it.load(TileSet.SPRITES_APPLE2, this@launch) } }.awaitAll()
-                    ss.dirty = true
-                }
-
-                for ( i in 0 until n) {
-                    ss.sprite(randomI(0, cfg.atlases.size - 1), Vec2f(randomPos(), randomPos()), context[i] )
-                }
-                +ss
-
-                scope.launch {
-                    while(true) {
-                        delay(1000)
-                        val aid = randomI(0, cfg.atlases.size - 1)
-
-                        cfg.atlases[aid].geometry?.run {
-                            context[randomI(0, context.size - 1)].set(randomI(0, total - 1))
-                        }
-                    }
-                }
-            }
-
-        }
-        onUpdate {
-            if ( Time.frameCount % eachFrame == 0 ) {
-                println(ctx.engineStats.numDrawCommands)
-            }
-        }
-
-        fun scene2() = scene("debug") {
-            val randomCh = { randomF(0f, 1f) }
-            +colorMesh {
-                instances = MeshInstanceList(
-                    listOf(Attribute.INSTANCE_MODEL_MAT, Attribute.INSTANCE_COLOR), 0
-                )
-
-
-                instances?.addInstances(n) { buf ->
-                    for ( i in 0 until n ) {
-                        buf.put(Mat4f().translate(randomPos(), randomPos(), 0f).matrix)
-                        buf.put(randomCh())
-                        buf.put(randomCh())
-                        buf.put(randomCh())
-                        buf.put(randomCh())
-                    }
-                }
-
-                shader = KslUnlitShader {
-                    isInstanced = true
-                    pipeline {
-                        cullMethod = CullMethod.NO_CULLING
-                        depthTest = DepthCompareOp.DISABLED
-                    }
-
-                    color {
-                        instanceColor()
-//                            constColor(Color.RED.gamma(0.8f), ColorBlockConfig.MixMode.Subtract)
-                    }
-                }
-                generate {
-                    rect {
-                        size.set(0.05f, 0.05f)
-                        origin.set(-width/2f, -height/2f, 0f)
-                    }
-                }
-            }
-
-            onUpdate += { ev ->
-                val c = 50
-                for ( i in 0 until c) {
-
-                    children.filterIsInstance<Mesh>().firstOrNull()?.run {
-                        val idx = randomI( 0 until n)
-                        instances?.let {
-                            val offset = it.instanceSizeF * idx
-
-                            val matmod = Mat4f().translate(randomPos(), randomPos(), 0f).matrix
-                            matmod.forEachIndexed { index, fl ->
-                                it.dataF[offset + index] = fl
-                            }
-                            it.dataF[offset + matmod.size] = randomCh()
-                            it.dataF[offset + matmod.size + 1] = randomCh()
-                            it.dataF[offset + matmod.size + 2] = randomCh()
-                            it.dataF[offset + matmod.size + 3] = 1f
-
-                            it.hasChanged = true
-                        }
-                    }
-                }
-            }
-        }
-
-        fun scene1() = UiScene() {
-            +Panel(sizes = Sizes.medium) {
-                modifier
-                    .alignY(AlignmentY.Top)
-                    .alignX (AlignmentX.Center)
-
-                Row {
-                    Text(debug.use()) {
-//                            modifier.font.setScale(.3f, app.ctx)
-
-                    }
-                }
-
-            }
-            onUpdate {
-                debug.set( ctx.inputMgr.pointerState.pointers
-                    //.filter { it.isValid && !it.isConsumed() && it.isAnyButtonDown }
-                    .joinToString("\n") {
-                        "id: ${it.id}\t valid: ${it.isValid}\t consumed=${it.isConsumed()} ${it.x.toString(2)} x ${it.y.toString(2)} mask=${it.buttonMask.toString(2)}"
-                    } )
-            }
-//                onUpdate += { ev->
-//                    debug.set(ev.ctx.engineStats.numDrawCommands.toString())
-//                }
-        }
-
-
-    }
-}
-
 class GameSettings(val settings: Settings) {
     var curScore: Int by settings.int(defaultValue = 0)
     var currentLevel: Int by settings.int(defaultValue = 0)
@@ -276,7 +123,7 @@ class AppContext(val gameSettings: GameSettings) {
 
 }
 
-class App(val ctx: KoolContext) {
+class App(val ctx: KoolContext, initialState: AppState = AppState.MAINMENU) {
 
     private val job = Job()
     private val scope = CoroutineScope(job)
@@ -285,7 +132,7 @@ class App(val ctx: KoolContext) {
     val gameSettings = GameSettings(settings)
     val context = AppContext(gameSettings)
 
-    val fsm = buildStateMachine(AppState.DEBUG) {
+    val fsm = buildStateMachine(initialState) {
         this += MainMenuState(this@App)
         this += RunGameState(this@App)
         this += ExitState(this@App)
@@ -293,9 +140,13 @@ class App(val ctx: KoolContext) {
     }
 
     init {
+        Log.level = Log.Level.ERROR
+        debugOnly { Log.level = Log.Level.DEBUG }
 
-        test3()
-        test2()
+        debugOnly {
+            test3()
+            test2()
+        }
 
         ctx.inputMgr.registerActions(this, AppActions.values().asIterable())
 //        changeState(RunGameState)
@@ -306,12 +157,12 @@ class App(val ctx: KoolContext) {
         }
 
         fsm.reset(false)
-        scope.launch { test4() }
+        debugOnly { scope.launch { test4() } }
         ctx.run()
 
         job.cancel()
 
-        test1()
+        debugOnly { test1() }
 
     }
 
@@ -320,7 +171,7 @@ class App(val ctx: KoolContext) {
         private val originalWidth: Int, private val originalHeight: Int
     ) : OrthographicCamera("plain") {
         init {
-            println("created camera $originalWidth x $originalHeight")
+            logd { "created camera $originalWidth x $originalHeight" }
         }
         override fun updateCamera(renderPass: RenderPass, ctx: KoolContext) {
 
@@ -397,10 +248,10 @@ class App(val ctx: KoolContext) {
     }
 
     fun test1() {
-        expect( ViewCell(false, 0).pack == 0x00.b )
-//        expect( ViewCell(true, 0).pack == 0x80.b ) { ViewCell(true, 0).pack.toString(2) }
-        expect( ViewCell(false, 16).pack == 0x10.b )
-        expect( ViewCell(false, 127).pack == 0x7f.b )
+//        expect( LevelCellUpdate(false, 0).pack == 0x00.b )
+////        expect( ViewCell(true, 0).pack == 0x80.b ) { ViewCell(true, 0).pack.toString(2) }
+//        expect( LevelCellUpdate(false, 16).pack == 0x10.b )
+//        expect( LevelCellUpdate(false, 127).pack == 0x7f.b )
 //        expect( ViewCell(true, 127).pack == 0xff.b )
     }
 
@@ -439,10 +290,11 @@ class App(val ctx: KoolContext) {
         for (s in LevelSet.values()) {
             rep.load(s)
             debugOnly {
-                println("${s.dis} has ${rep.levels.size} levels:")
-                rep.levels.forEachIndexed { levelId, strings ->
-                    println("#${levelId + 1}: ${strings.first().length}x${strings.size}")
-                }
+                val fl = rep.levels.first()
+                logd {"${s.dis} has ${rep.levels.size} levels: ${fl.first().length}x${fl.size}" }
+                //rep.levels.forEachIndexed { levelId, strings ->
+                //    println("#${levelId + 1}: ${strings.first().length}x${strings.size}")
+                //}
             }
         }
     }

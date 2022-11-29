@@ -1,56 +1,112 @@
-import de.fabmax.kool.math.MutableVec2f
-import de.fabmax.kool.math.Vec2f
-import de.fabmax.kool.math.Vec2i
-import de.fabmax.kool.math.Vec4i
 import de.fabmax.kool.modules.audio.WavFile
-import de.fabmax.kool.modules.ui2.MutableStateValue
-import de.fabmax.kool.modules.ui2.mutableStateOf
-import de.fabmax.kool.pipeline.Attribute
-import de.fabmax.kool.pipeline.Texture2d
-import de.fabmax.kool.pipeline.Texture3d
 import de.fabmax.kool.scene.Group
-import de.fabmax.kool.scene.mesh
+import de.fabmax.kool.scene.Node
 import me.az.ilode.*
-import me.az.shaders.TileMapShader
-import me.az.shaders.TileMapShaderConf
+import me.az.scenes.Sequences
+import me.az.utils.logd
 import me.az.view.ActorView
+import me.az.view.SpriteInstance
+import me.az.view.SpriteSystem
 
 class LevelView(
+    spriteSystem: SpriteSystem,
     game: Game,
     level: GameLevel,
     conf: ViewSpec,
-    tilesAtlas: ImageAtlas,
-    runnerAtlas: ImageAtlas,
-    runnerAnims: AnimationFrames,
-    guardAtlas: ImageAtlas,
-    guardAnims: AnimationFrames,
+    private val tilesAnims: AnimationFrames,
+    private val runnerAnims: AnimationFrames,
+    private val guardAnims: AnimationFrames,
     soundsBank: Map<Sound, WavFile>
 
 ) : Group() {
-    private val tileMapShader = TileMapShader(TileMapShaderConf())
-    val runnerView by lazy { ActorView( game.runner, runnerAtlas, runnerAnims, conf.tileSize, soundsBank = soundsBank) }
+
+    val runnerView by lazy {
+        ActorView( game.runner, spriteSystem, runnerAnims,
+            conf.tileSize, soundsBank = soundsBank)
+    }
     val widthInPx = conf.tileSize.x * level.width
     val heightInPx = conf.tileSize.y * level.height
 
     private val onLevelStart = { gameLevel: GameLevel ->
 
-        var n = findNode("guard")
+        var n = findNode("guard") as? ActorView
         while(n != null) {
             removeNode(n)
-            n = findNode("guard")
+            spriteSystem.sprites.remove(n.instance)
+            n = findNode("guard") as? ActorView
         }
 
         game.guards.forEach {
-            +ActorView(it, guardAtlas, guardAnims, conf.tileSize, "guard", soundsBank)
+            +ActorView(it, spriteSystem, guardAnims,
+                conf.tileSize, "guard", soundsBank)
+        }
+    }
+
+    val handlers = Array(level.width) { x ->
+        Array(level.height) { y ->
+            spriteSystem.sprite(0,
+                // TBD MVP of group
+                x.toFloat() - level.width / 2f + 0.5f,
+                level.height - y.toFloat() + 0.5f, 0)
+        }
+    }
+    // do not process all level, only dynamic.
+    // key - x
+    // value - map with
+    //      key - y,
+    //      value - tileindex
+    val sequenceCounters = mutableMapOf<Int, MutableMap<Int, Int>>()
+    sealed class Action {
+        private val updates = mutableListOf<() -> Unit>()
+        fun onUpdate(body: () -> Unit) {
+            updates += body
+        }
+        fun onStart() {}
+        fun onExit() {}
+
+        class IncrementFrame(sequence: List<Int>) : Action() {
+            var counter = 0
+            init {
+                onUpdate {
+                    //seq
+                }
+            }
         }
     }
 
     init {
+        level.onTileUpdate { ev ->
+            val (x, y, v) = ev
 
-        scale(conf.tileSize.x.toFloat(), conf.tileSize.y.toFloat(), 1f)
-        translate(0.0, 1.0, 0.0)
+            with(handlers[x][y]) {
+                val list = tilesAnims.sequence.getOrElse(v.name.lowercase()) {
+                    println("$v sequence not found")
+                    listOf()
+                }
+                atlasId.set( tilesAnims.atlasId )
+                // add action
+                val frame = if ( list.size > 1 ) {
+                    sequenceCounters.getOrPut(x) { mutableMapOf() }.getOrPut(y) { 0 }
+                } else { 0 }
+                tileIndex.set(list[frame])
+                //println("$x $y $v = ${tileIndex.value}")
+            }
+            //handlers[x][y].tileIndex.set(  )
+        }
+        level.all {
+            with(handlers[it.x][it.y]) {
+                val list = tilesAnims.sequence[it.tile.name.lowercase()] ?: throw IllegalArgumentException("${it.tile} sequence not found")
 
-        +mesh(listOf(Attribute.POSITIONS, Attribute.TEXTURE_COORDS)) {
+                atlasId.set(tilesAnims.atlasId)
+                tileIndex.set(list.first())
+//                println("${it.tile.name.lowercase()} $tileIndex")
+            }
+        }
+
+        //scale(conf.tileSize.x.toFloat(), conf.tileSize.y.toFloat(), 1f)
+        //translate(0.0, 5.0, 0.0)
+
+        /*+mesh(listOf(Attribute.POSITIONS, Attribute.TEXTURE_COORDS)) {
 
             generate {
                 rect {
@@ -81,12 +137,12 @@ class LevelView(
                 }
             }
         }
-
+*/
         +runnerView
         game.onLevelStart += onLevelStart
         onLevelStart(game.level!!)
 
-        println("level px=${widthInPx}x${heightInPx}")
+        logd { "level px=${widthInPx}x${heightInPx}" }
     }
 
 }

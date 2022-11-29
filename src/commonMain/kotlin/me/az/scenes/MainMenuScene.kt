@@ -15,6 +15,7 @@ import me.az.Version
 import me.az.ilode.Game
 import me.az.ilode.GameLevel
 import me.az.ilode.GameState
+import me.az.utils.logd
 import me.az.utils.plus
 import me.az.view.TextView
 import me.az.view.textView
@@ -263,10 +264,7 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
     override fun setup(ctx: KoolContext) {
 
         super.setup(ctx)
-        game.level = GameLevel(0, map, primaryTileSet = tilesAtlas.nameIndex ).also {
-            it.holesAnims = holeAnims
-        }
-
+        game.level = GameLevel(0, map, primaryTileSet = tilesAtlas.nameIndex )
         game.onPlayGame += { g: Game, _ ->
             runnerPosString.set("${g.runner.x} x ${g.runner.y}")
 
@@ -279,7 +277,7 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
         }
 
         game.onStateChanged += {
-            println("main menu game change: $name")
+            logd { "main menu game change: $name" }
             when(name) {
                 GameState.GAME_NEW_LEVEL -> {
                     addLevelView(ctx, game.level!!)
