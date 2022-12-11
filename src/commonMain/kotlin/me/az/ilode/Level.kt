@@ -5,9 +5,7 @@ import de.fabmax.kool.math.MutableVec2i
 import de.fabmax.kool.math.Vec2i
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import me.az.utils.component1
-import me.az.utils.component2
-import me.az.utils.logd
+import me.az.utils.*
 import org.mifek.wfc.core.Cartesian2DWfcAlgorithm
 import org.mifek.wfc.datastructures.IntArray2D
 import org.mifek.wfc.models.OverlappingCartesian2DModel
@@ -29,6 +27,7 @@ enum class TileLogicType(
     private val collision: Int = ENTER_ALL //full = ENTER_DOWN + ENTER_UP + ENTER_LEFT + ENTER_RIGHT
 ) {
     EMPTY, // any state, except running above
+    DIGGINGHOLE, // checks guard,  breaks
     HOLE, // special state
     BLOCK(ENTER_NONE),
     SOLID(ENTER_NONE),
@@ -45,6 +44,7 @@ enum class TileLogicType(
     fun block(dir: Int) = (collision or dir) xor collision == 0
     fun isBarrier() = this == BLOCK || this == SOLID || this == TRAP || this == GROUND
 }
+
 
 /// named by frame names
 // prob states for cells,
@@ -75,42 +75,9 @@ enum class Tile(val char: Char, val base: TileLogicType, val act: TileLogicType,
     }.ordinal
 }
 
-const val primaryTileSet = 0
-
 data class LevelCellUpdate (
     val x: Int, val y: Int, val tile: TileLogicType
-) {
-    //constructor(atlasId: Byte, frameNum: Int) : this(atlasId, frameNum.toByte())
-    //constructor(t: Tile) : this(primaryTileSet, t.frame )
-//    val pack: Byte get() {
-//        var b: UInt = 0u
-//        //b = b.packHole(hole)
-//        b = b.packFrameNum(frameNum)
-//        return b.toByte()
-//    }
-//
-//    companion object {
-//        fun unpack(b: Byte) = with(b.toUInt()) {
-//            ViewCell(
-//                false,
-//                unpackFrameNum()
-//            )
-//        }
-//
-//        private fun UInt.getBit(position: Int): Boolean = (this shr position) and 1u > 0u
-//        private fun UInt.withBit(position: Int, bit: Boolean): UInt {
-//            return if ( bit ) {
-//                this or (1u shl position)
-//            } else {
-//                this and (1u shl position).inv()
-//            }
-//        }
-//        private fun UInt.packHole(v: Boolean) = withBit(7, v)
-//        private fun UInt.unpackHole() = getBit(7)
-//        private fun UInt.packFrameNum(f: Int) = (this and 0xff80u) or ( f.toUInt() and 0x007fu )
-//        private fun UInt.unpackFrameNum() = (this and 0xff7fu).toInt()
-//    }
-}
+)
 
 fun formatPatterns(patterns: Array<IntArray>, patternSize: Int): String {
     return patterns.mapIndexed { index, it ->
@@ -157,7 +124,7 @@ fun generateGameLevel(
     ),
 
     // view stuff
-    tilesAtlasIndex: Map<String, Int>,
+    tilesAtlasIndex: Map<String, List<Int>>,
     scope: CoroutineScope,
 ): GameLevel {
     val patternSize = 3 // n , m
@@ -272,24 +239,87 @@ fun generateGameLevel(
 fun loadGameLevel(
     levelId: Int,
     map: List<String>,
-    tilesAtlasIndex: Map<String, Int>,
+    tilesAtlasIndex: Map<String, List<Int>>,
 ) = GameLevel(levelId, map, tilesAtlasIndex)
 
-data class Anim( val pos: Vec2i, val name: String, var currentFrame: Int = 0, val onFinish: () -> Unit = {})
+class Anim( val pos: Vec2i, val name: String, var currentFrame: Int = 0, val onFinish: () -> Iterable<Act<GameLevel>>? = { null }) : Act<GameLevel>(
+    exitBlock = { onFinish() }
+) {
+    init {
+        onUpdate {
+            currentFrame++
+            val animArray = tilesSequences[name]!!// ActionStatus.ERROR
+            val (x, y) = pos
+
+            if ( currentFrame >= animArray.size ) {
+                ActionStatus.DONE
+            } else {
+                redrawCell(x, y)
+                ActionStatus.CONTINUE
+            }
+        }
+    }
+}
+
 
 class GameLevel(
     val levelId: Int,
     private val map: List<String>,
-    private val primaryTileSet: Map<String, Int>, // index
+    val tilesSequences: Map<String, List<Int>>, // index
     val maxGuards: Int = 5,
 ) {
+
+    class DiggingHole(val x: Int, val y: Int, val durationUpdates: Int, error: GameLevel.() -> Unit) : Act<GameLevel>(error = error) {
+        init {
+            var counter = 0
+            onStart {
+                act[x][y] = TileLogicType.DIGGINGHOLE
+                redrawCell(x, y, visualSprite = TileLogicType.DIGGINGHOLE)
+            }
+            onUpdate {
+                if (!isEmpty(x, y - 1)) {
+                    println("break")
+                    // break dig
+                    act[x][y] = TileLogicType.BLOCK
+                    redrawCell(x, y)
+                    ActionStatus.ERROR
+                } else if ( counter >= durationUpdates ) {
+                    ActionStatus.DONE
+                } else {
+                    counter++
+                    ActionStatus.CONTINUE
+                }
+            }
+
+            onEnd {
+                act[x][y] = TileLogicType.EMPTY
+                redrawCell(x, y)
+                listOf( fillHoleAct(x, y) )
+            }
+        }
+    }
+
+    class FillHole(val x: Int, val y: Int, durationUpdates: Int): Delayed<GameLevel>(durationUpdates) {
+        init {
+            onEnd {
+                act[x][y] = TileLogicType.BLOCK
+                redrawCell(x, y)
+                null
+            }
+            onStart {
+                redrawCell(x, y, visualSprite = TileLogicType.HOLE)
+            }
+        }
+    }
+
     private val cbs = mutableListOf<(LevelCellUpdate) -> Unit>()
     fun onTileUpdate(cb: (update: LevelCellUpdate) -> Unit) {
         cbs += cb
     }
+    fun unsubTileUpdate(cb: (update: LevelCellUpdate) -> Unit) { cbs -= cb }
     // for load
     val width = map.first().length
-    val height = map.size + 1 // ground
+    val height = map.size //+ 1 // ground
 
     enum class Status {
         LEVEL_STARTUP,
@@ -312,10 +342,10 @@ class GameLevel(
     val base = Array(width) { Array(height) { TileLogicType.EMPTY } }
     val guard = Array(width) { Array(height) { false } }
 
-    val anims = mutableListOf<Anim>() // pos -> anim name, current frame index in anim
-    var dirty = false
+    private val acting = ActingList(this)
+    //fun hasDigging(x: Int, y: Int) = acting.filterIsInstance<DiggingHole>().any { it.x == x && it.y == y }
 
-    var holesAnims: AnimationFrames? = null
+    var dirty = false
 
     init {
         logd {"creating level $levelId $width x $height from map:" }
@@ -323,72 +353,33 @@ class GameLevel(
         reset()
     }
 
+    private fun fillHoleAct(x: Int, y: Int) = FillHole(x, y, tilesSequences["fillHole"]!!.size )
+    fun digHole(x: Int, y: Int, breakHandler: GameLevel.() -> Unit): DiggingHole {
+        val act = DiggingHole( x, y, tilesSequences["digHoleLeftBase"]!!.size, breakHandler)
+        acting.add(act) // side
+        return act
+    }
+
     fun update(runner: Runner) {
-//        anims.takeIf { it.isNotEmpty() }?.run { println(this) }
-        val iter = anims.iterator()
-        val toAdd = mutableListOf<Anim>()
-
-        while( iter.hasNext() ) {
-            val entry = iter.next()
-            val (pos, animName, frame) = entry
-            entry.currentFrame++
-            val animArray = holesAnims?.sequence?.get(animName) ?: continue
-            val (x, y) = pos
-
-            if ( frame < animArray.size ) {
-                val tileIndex = animArray[frame]
-                if ( (animName == "digHoleLeftBase" || animName == "digHoleRightBase") && guard[x][y - 1] ) {
-                    // break dig
-                    act[x][y] = TileLogicType.BLOCK
-                    redrawCell(x, y)
-                    guard[x][y] = false //?
-                    runner.stopSound(Sound.DIG)
-//                    runner.stop() //?
-                    iter.remove()
-                    continue
-                } else {
-                    redrawCell(x, y)
-                }
-
-            } else {
-                entry.onFinish()
-                // on exit
-                if ( animName == "fillHole" ) {
-                    act[x][y] = TileLogicType.BLOCK
-                }
-
-                if ( animName == "digHoleLeftBase" || animName == "digHoleRightBase" ) {
-                    toAdd.add(Anim(pos, "fillHole"))
-                }
-
-                // purge old anims
-                if ( animName == "digHoleLeft" || animName == "digHoleRight" ) {
-                    act[pos.x][pos.y] = TileLogicType.EMPTY
-                }
-                redrawCell(x, y)
-                iter.remove()
-            }
-        }
-
-        anims.addAll(toAdd)
+        acting.update(0f)
     }
 
     // 0 - 6 bits
     // 7 bit - for hole as frame tile set
-
-
     private fun exportCellData(x: Int, y: Int, mode: ViewMode = ViewMode.PLAY) =
-        LevelCellUpdate(x, y, if ( y == height - 1 ) {
-            TileLogicType.GROUND
-        } else when(mode) {
+        when(mode) {
             // why gold is special? IDK, simplify
-            ViewMode.PLAY -> if ( base[x][y] == TileLogicType.GOLD ) base[x][y] else act[x][y]
+            ViewMode.PLAY -> when ( base[x][y] ) {
+                TileLogicType.GOLD -> base[x][y]
+                TileLogicType.TRAP -> TileLogicType.BLOCK
+                else -> act[x][y]
+            }
             ViewMode.EDIT -> base[x][y]
-    })
+    }
 //    operator fun get(x: Int, y: Int): ViewCell? = if ( isValid(x, y) ) ViewCell.unpack(buf[y * textureWidth + x]) else null
-    fun redrawCell(x: Int, y: Int, mode: ViewMode = ViewMode.PLAY)  {
+    fun redrawCell(x: Int, y: Int, mode: ViewMode = ViewMode.PLAY, visualSprite: TileLogicType? = null)  {
         if ( isValid(x, y) ) {
-            val ev = exportCellData(x, y, mode)
+            val ev = LevelCellUpdate(x, y, visualSprite ?: exportCellData(x, y, mode))
             cbs.forEach { it(ev) }
         }
         //dirty = true
@@ -401,7 +392,7 @@ class GameLevel(
     fun all(mode: ViewMode = ViewMode.PLAY, each: (LevelCellUpdate) -> Unit) {
         for( x in 0 until width ) {
             for ( y in 0 until height ) {
-                each(exportCellData(x, y, mode))
+                each(LevelCellUpdate(x, y, exportCellData(x, y, mode)))
             }
         }
     }
@@ -453,7 +444,7 @@ class GameLevel(
             }
         }
 
-        fillGround(primaryTileSet)
+        //fillGround(primaryTileSet)
 
         guard.forEach { row-> row.forEachIndexed { index, _ -> row[index] = false } }
         guardsPos.forEach {
@@ -462,26 +453,12 @@ class GameLevel(
         dirty = true
     }
 
-    fun fillGround(tileSet: Map<String, Int>) {
-
-        for (x in 0 until this.width ) {
-            this.act[x][this.height-1] = TileLogicType.BLOCK
-            this.base[x][this.height-1] = TileLogicType.BLOCK
-            tileSet["ground"]?.run {
-                this@GameLevel.redrawCell(x, this@GameLevel.height-1)//, TileLogicType.GROUND)
-            }
-        }
-    }
-
     private fun stopAllAnims() {
-        val i = anims.iterator()
+        val i = acting.iterator()
         while( i.hasNext() ) {
             val a = i.next()
             // tbd make FSM
-            if ( a.name == "fillHole" || a.name == "digHoleLeftBase" || a.name == "digHoleRightBase") {
-                act[a.pos.x][a.pos.y] = TileLogicType.BLOCK
-                this.redrawCell(a.pos)//, LevelCellUpdate(false, primaryTileSet[Tile.BRICK.frame]!!))
-            }
+            a.exit(this)
             i.remove()
         }
     }

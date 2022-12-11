@@ -63,7 +63,7 @@ class LevelsRep(
         }
     }
 
-    fun getLevel(id: Int, tileSet: ImageAtlas, generated: Boolean = true): GameLevel {
+    fun getLevel(id: Int, tileAnims: AnimationFrames, generated: Boolean = true): GameLevel {
 
         val lid = id.mod(levels.size)
         return loadedLevels.getOrPut(lid) {
@@ -75,14 +75,11 @@ class LevelsRep(
                     fromMap,
                     mapWidth = 24 + fromMap.first().length,
                     mapHeight = 12 + fromMap.size,
-
-                    tilesAtlasIndex = tileSet.nameIndex,
-//                    holesIndex = holeAtlas.nameIndex,
-//                    holesAnims = holeAnims,
+                    tilesAtlasIndex = tileAnims.sequence,
                     scope = scope
                 )
             } else
-                loadGameLevel(lid, levels[lid], tileSet.nameIndex)
+                loadGameLevel(lid, levels[lid], tileAnims.sequence)
         }
     }
 }

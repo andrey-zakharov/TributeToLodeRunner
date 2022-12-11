@@ -3,8 +3,8 @@ import de.fabmax.kool.modules.ui2.UiScene
 import de.fabmax.kool.scene.Scene
 import me.az.ilode.Game
 import me.az.ilode.GameState
-import me.az.ilode.InputSpec
-import me.az.ilode.toInputSpec
+import me.az.app.controls.InputSpec
+import me.az.app.controls.toInputSpec
 import me.az.scenes.GameLevelScene
 import me.az.scenes.GameUI
 import me.az.utils.StackedState
@@ -23,7 +23,7 @@ class RunGameState(private val app: App) : StackedState<AppState, App>(AppState.
         override val onPress: RunGameState.(InputManager.KeyEvent) -> Unit = {},
         override val onRelease: RunGameState.(InputManager.KeyEvent) -> Unit = {}
     ) : KeyAction<RunGameState> {
-        DEBUGTOGGLE(InputManager.KEY_F1.toInputSpec(InputManager.KEY_MOD_CTRL), onRelease = {
+        DEBUGTOGGLE('l'.toInputSpec(InputManager.KEY_MOD_CTRL), onRelease = {
             when (debugScene) {
                 null -> {}
                 else -> {
@@ -51,11 +51,10 @@ class RunGameState(private val app: App) : StackedState<AppState, App>(AppState.
                 name = "level"
             ).apply {
                 +GameControls(game, app.ctx.inputMgr)
+                +GameUI(uiSpriteSystem, game, appContext)
             }
 
-            infoScene = GameUI(game, assets = app.ctx.assetMgr, app.context)
             app.ctx.scenes += gameScene!!
-            app.ctx.scenes += infoScene!!
             debugScene = UiScene {
                 gameScene?.setupUi(this)!!
             }

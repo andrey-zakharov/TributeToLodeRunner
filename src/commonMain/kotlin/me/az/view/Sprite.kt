@@ -12,13 +12,12 @@ import de.fabmax.kool.modules.ui2.MutableStateValue
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.*
+import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.Float32Buffer
-import me.az.utils.debugOnly
 import me.az.utils.format
-import me.az.utils.logd
+import me.az.view.SpriteInstance.Companion.BGCOLOR
 import me.az.view.SpriteInstance.Companion.INSTANCE_ATTRIBS
-import me.az.view.SpriteInstance.Companion.POSITIONS
-import me.az.view.SpriteInstance.Companion.SCALE
+import me.az.view.SpriteInstance.Companion.MODMAT
 import me.az.view.SpriteInstance.Companion.TILE_INDEX
 
 // represent both simple texture2d or frame in atlas
@@ -156,9 +155,9 @@ open class Sprite(
     }
 }
 fun Mat4d.dis(): String {
-    return (0..3).joinToString(" |\t") { r ->
-        (0..3).joinToString(", ") { c ->
-            if ( c == 0 ) "0" else "%.3f".format(this[r, c])
+    return (0..3).joinToString("\n") { r ->
+        (0..3).joinToString(" ") { c ->
+            "%.3f".format(this[r, c])
         }
     }
 }
@@ -173,8 +172,7 @@ fun Group.dump(level: Int = 0): String {
         children.joinToString("\n") {
             when (it) {
                 is Group -> it.dump(level + 1)
-                is Node -> it.dump(level + 1)
-                else -> "$it"
+                else -> it.dump(level + 1)
             }
         }
 }
@@ -190,25 +188,25 @@ class Vec2fOnBuf(private val buf: Float32Buffer, val pos: Int, init: Vec2f) : Mu
 
 data class SpriteInstance(
     val atlasId: MutableStateValue<Int> = mutableStateOf(0),
-    val pos: MutableVec2f, // local translation
-    val scale: MutableStateValue<Float> = mutableStateOf(1f), // local translation
+    val initialModelMat: Mat4f,
     val tileIndex: MutableStateValue<Int> = mutableStateOf(0),
     val grayed: MutableStateValue<Boolean> = mutableStateOf(false),
-    val bgAlpha: Float = 0f,
+    val bgAlpha: MutableStateValue<Float> = mutableStateOf(0f),
 ) {
+    val modelMat = Mat4f().set(initialModelMat)
     // workaround
-    val _atlasFloat = atlasId.value.toFloat()
+    val _atlasFloat get() = atlasId.value.toFloat()
 
     companion object {
         internal const val TILE_INDEX = "instance_tileIndex"
-        internal const val POSITIONS = "instance_positions"
-        internal const val SCALE = "instance_scale"
+        internal const val MODMAT = "instance_mvp"
+        internal const val BGCOLOR = "instance_bg"
+        internal val shiftMat = GlslType.MAT_4F.byteSize / GlslType.FLOAT.byteSize
 
         internal val INSTANCE_ATTRIBS = listOf(
-            Attribute(POSITIONS, GlslType.VEC_2F),
-            Attribute(SCALE, GlslType.FLOAT),
+            Attribute(MODMAT, GlslType.MAT_4F),
             Attribute(TILE_INDEX, GlslType.VEC_2F), // atlas index, tile index
-            Attribute("BGCOLOR", GlslType.FLOAT),
+            Attribute(BGCOLOR, GlslType.FLOAT),
         )
     }
 
@@ -218,33 +216,37 @@ data class SpriteInstance(
         _parent = instances
         with(instances.dataF) {
             // pos 0
-            put(pos.x)
-            put(pos.y)
-            // scale  2
-            put(scale.value)
-            // tileindex 3
-            put(_atlasFloat)
-            put(tileIndex.value.toFloat())
+            put(modelMat.matrix) // 0
+            put(_atlasFloat) // 16
+            put(tileIndex.value.toFloat()) // 17
             // bg alpha
-            put(bgAlpha)
+            put(bgAlpha.value) // 18
         }
     }
+    //fun writeModelMat(modelMat : Mat4d) = writeModelMat(Mat4f().set(modelMat))
     // mutable vec is not mutable state
-    fun onPosUpdated() {
+/*    fun writeModelMat(modelMat : Mat4f) {
+        var hasChange = false
+        val start = 0
         _parent?.run {
-            dataF.set(bufPos!! + 0, pos.x)
-            dataF.set(bufPos!! + 1, pos.y)
-            hasChanged = true
+            modelMat.matrix.forEachIndexed { i, v ->
+                hasChange = hasChange || (dataF[bufPos!! + start + i] != v)
+                dataF.set(bufPos!! + start + i, v)
+            }
+            hasChanged = hasChange
         }
-    }
+    }*/
     init {
-        // pos.// on change
-        scale.onChange { v -> _parent?.run { dataF.set(2 + bufPos!!, v); hasChanged = true; } }
-        atlasId.onChange { v -> _parent?.run { dataF.set(3 + bufPos!!, v.toFloat()); hasChanged = true } }
-        tileIndex.onChange { v -> _parent?.run { dataF.set(4 + bufPos!!, v.toFloat()); hasChanged = true } }
+        /*atlasId.onChange { v -> _parent?.run {
+            dataF.set(shiftMat + bufPos!!, v.toFloat()); hasChanged = true
+        } }
+        tileIndex.onChange { v -> _parent?.run {
+            dataF.set(shiftMat + bufPos!! + 1, v.toFloat()); hasChanged = true
+        } }*/
     }
     private var _parent: MeshInstanceList? = null
     private var bufPos: Int? = null
+    override fun toString() = "SpriteInstance bufpos=${bufPos} mvp = $modelMat tile=${atlasId.value}-${tileIndex.value}, bg=${bgAlpha.value}"
 }
 
 class SpriteConfig(init: SpriteConfig.() -> Unit = {}) {
@@ -275,8 +277,12 @@ class SpriteSystem(
     // also global, as attribute?
     var mirrorTexCoordsY: Boolean = false
     var dirty = false
+
+    val tmp = Mat4f()
     fun refresh() { // full rebuild
+//        println("full refresh system sprite")
         cfg.atlases.forEachIndexed { index, imageAtlas ->
+            //if (imageAtlas.tex.value?.loadingState == Texture.LoadingState.LOADED )
             spriteShader.textures.set(index, imageAtlas.tex.value)
         }
 
@@ -294,25 +300,22 @@ class SpriteSystem(
         dirty = false
     }
 
-//    val spriteSize: MutableVec2i = MutableVec2i(0, 0) // in pixels size of sprite view
-//    val regionSize: MutableVec2i = MutableVec2i(0, 0) // how much get from texture by pixels
-    fun sprite(atlasId: Int, pos: Vec2f, tileIndex: Int, scale: Float = 1f) =
-        sprite(atlasId, pos, mutableStateOf(tileIndex), scale)
-    fun sprite(atlasId: Int, x: Float, y: Float, tileIndex: Int, scale: Float = 1f) =
-        sprite(atlasId, Vec2f(x, y), tileIndex, scale)
-    fun sprite(atlasId: Int, pos: Vec2f, tileIndex: MutableStateValue<Int>, scale: Float = 1f) =
-        sprite(mutableStateOf(atlasId), MutableVec2f(pos), tileIndex, mutableStateOf(scale))
-    fun sprite(atlasId: Int, pos: Vec2f,
+    // const
+    fun sprite(atlasId: Int, tileIndex: Int, modelMat: Mat4f) =
+        sprite(mutableStateOf(atlasId), mutableStateOf(tileIndex), modelMat)
+
+    fun sprite(atlasId: Int,
                tileIndex: MutableStateValue<Int>,
-               scale: MutableStateValue<Float> = mutableStateOf(1f)) =
-        sprite(mutableStateOf(atlasId), MutableVec2f(pos), tileIndex, scale)
+               modelMat: Mat4f
+    ) = sprite(mutableStateOf(atlasId), tileIndex, modelMat)
 
     fun sprite(atlasId: MutableStateValue<Int>,
-               pos: MutableVec2f,
                tileIndex: MutableStateValue<Int>,
-               scale: MutableStateValue<Float>
+               modelMat: Mat4f,
     ): SpriteInstance {
-        val inst = SpriteInstance(atlasId, pos, scale, tileIndex )
+
+        //tmp.setIdentity().translate(pos.x, pos.y, 0f).scale(scale.value)
+        val inst = SpriteInstance(atlasId, modelMat, tileIndex )
 
         if ( !sprites.add( inst ) ) {
             throw RuntimeException("add")
@@ -320,11 +323,6 @@ class SpriteSystem(
 
         val spriteIndex =  sprites.size - 1
 //        println("created $spriteIndex $inst")
-
-        tileIndex.onChange {
-            dirty = true // redraw all?
-            // could we just put only changed?
-        }
 
         dirty = true
         return sprites[spriteIndex]
@@ -340,33 +338,28 @@ class SpriteSystem(
             generate {
                 rect {
                     // if center posed mode
-                    origin.set(-width / 2f, -height / 2f, 0f)
+                    //origin.set(-width / 2f, -height / 2f, 0f)
                     if (mirrorTexCoordsY) {
                         mirrorTexCoordsY()
                     }
                 }
             }
-            shader =
-                spriteShader
-//                    unlitShader {useColorMap(testTex)}
-
+            shader = spriteShader
             instances = this@SpriteSystem.instances
 
-//            onUpdate += ::updateSizes
-            onUpdate += {
-
-                if ( dirty ) { // TBD rework to not all update
-                    refresh()
-                }
- //                spriteShader.grayScaled = if ( grayScaled ) 1 else 0
-            }
+            //addDebugAxis()
         }
 
     init {
         +mesh
         cfg.atlases.forEach { it.tex.onChange {
-            dirty = true
+            //dirty = true
         } }
+        onUpdate += {
+            if ( dirty ) { // TBD rework to not all update
+                refresh()
+            }
+        }
     }
 
     class SpriteShaderConfig {
@@ -390,7 +383,6 @@ class SpriteSystem(
         companion object {
 
             private const val UNIFORM_TEXTURE = "tex"
-            private const val UNIFORM_TEXTURE2 = "tex2"
             private const val UNIFORM_OFFSET = "texOffset"
             private const val UNIFORM_TILESIZE = "tileSize"
             private const val UNIFORM_GRAY = "gray"
@@ -399,11 +391,14 @@ class SpriteSystem(
         private class Model(cfg: SpriteShaderConfig) : KslProgram("sprite") {
 
             val tileIndex = interStageFloat2("tileindex")
+            val alpha = interStageFloat1("bgcolor")
 
-            fun KslScopeBuilder.fetchSprite(const: Int, uv: KslExprFloat2, atlasTexs: KslUniformArray<KslTypeColorSampler3d>): KslTexelFetch<KslTypeColorSampler3d> {
-                val atlasTexSize = textureSize3d(atlasTexs[const]).toFloat3()
+            fun KslScopeBuilder.fetchSprite(constAtlasId: Int,
+                                            uv: KslExprFloat2,
+                                            atlasTexs: KslUniformArray<KslTypeColorSampler3d>): KslTexelFetch<KslTypeColorSampler3d> {
+                val atlasTexSize = textureSize3d(atlasTexs[constAtlasId]).toFloat3()
                 val xyInTile = (uv * atlasTexSize.xy).toInt2()
-                return texelFetch(atlasTexs[const], int3Value(xyInTile.x, xyInTile.y, tileIndex.output.y.toInt1()))
+                return texelFetch(atlasTexs[constAtlasId], int3Value(xyInTile.x, xyInTile.y, tileIndex.output.y.toInt1()))
             }
 
             init {
@@ -421,15 +416,9 @@ class SpriteSystem(
 
                         if (cfg.vertexCfg.isInstanced) {
                             tileIndex.input set instanceAttribFloat2(TILE_INDEX)
-                            val pos = instanceAttribFloat2(POSITIONS)
-                            val scale = instanceAttribFloat1(SCALE)
-
-                            mvp *= mat4Var(mat4Value(
-                                float4Value(scale, 0f.const, 0f.const, 0f.const),
-                                float4Value(0f.const, scale, 0f.const, 0f.const),
-                                float4Value(0f.const, 0f.const, scale, 0f.const),
-                                float4Value(pos.x, pos.y, 0f.const, 1f.const)
-                            ))
+                            alpha.input set instanceAttribFloat1(BGCOLOR)
+                            val instanceModelMat = instanceAttribMat4(MODMAT)
+                            mvp *= instanceModelMat
                         }
                         outPosition set mvp * float4Value(vertexAttribFloat3(Attribute.POSITIONS.name), 1f)
                     }
@@ -442,7 +431,15 @@ class SpriteSystem(
                         // error: sampler arrays indexed with non-constant expressions are forbidden in GLSL ES 3.00 and later
                         for (c in 0 until cfg.atlasArraySize) {
                             `if` ( atlasId eq c.const ) {
-                                colorOutput(fetchSprite(c, uv, atlasTexs))
+                                val texel = fetchSprite(c, uv, atlasTexs)
+                                `if`(texel.a lt 1f.const) {
+                                    //`if`(alpha.output gt 0f.const) {
+                                    colorOutput(float3Value(0f.const, 0f.const, 0f.const), alpha.output)
+//                                    colorOutput(Color.GREEN.const)
+                                }.`else` {
+                                    colorOutput(texel)
+                                }
+
                             }
                         }
 
@@ -457,114 +454,4 @@ class SpriteSystem(
         }
     }
 
-}
-
-open class Sprite3d(
-    private val spriteSize: Vec2i?, // in pixels size of sprite view
-    var texture: Texture3d?,
-    private val regionSize: Vec2i?, // how much get from texture by pixels
-    name: String? = null,
-    private val mirrorTexCoordsY: Boolean = false
-) : Group("sprite 3d $name group") {
-    val spriteShader by lazy { SpriteAtlasShader() }
-    var tileIndex = 0
-
-    val _spriteSize = MutableVec2i(spriteSize?.x ?: 0, spriteSize?.y ?: 0)
-    val _regionSize = MutableVec2i(regionSize?.x ?: 0, regionSize?.y ?: 0)
-    val onResize = mutableListOf<Sprite3d.(x: Int, y: Int) -> Unit>()
-
-
-    init {
-        buildMesh()
-        onUpdate += {
-            if ( _spriteSize == Vec2i.ZERO || _regionSize == Vec2i.ZERO ) {
-                if ( texture?.loadingState == Texture.LoadingState.LOADED ) {
-                    if ( _spriteSize == Vec2i.ZERO ) {
-                        _spriteSize.x = texture!!.loadedTexture!!.width
-                        _spriteSize.y = texture!!.loadedTexture!!.height
-                        onResize.forEach { it(this, _spriteSize.x, _spriteSize.y) }
-                    }
-                    if ( _regionSize == Vec2i.ZERO ) {
-                        _regionSize.x = texture!!.loadedTexture!!.width
-                        _regionSize.y = texture!!.loadedTexture!!.height
-                    }
-
-                    transform.scale(_spriteSize.x.toDouble(), _spriteSize.y.toDouble(), 1.0)
-                }
-            }
-            //transform.pus
-
-        }
-    }
-
-    private fun buildMesh() {
-        removeAllChildren()
-        setIdentity()
-        +mesh(SpriteAtlasShader.SPRITE_MESH_ATTRIBS, name) {
-            generate {
-                rect {
-                    width = 1f//(spriteSize ?: fullTexSize).x.toFloat()
-                    height = 1f//(spriteSize ?: fullTexSize).y.toFloat()
-                    origin.set(-width / 2f, -height / 2f, 0f)
-
-                    if (mirrorTexCoordsY) {
-                        mirrorTexCoordsY()
-                    }
-                }
-                shader = spriteShader
-            }
-
-            onUpdate += {
-                spriteShader.texture = this@Sprite3d.texture
-                spriteShader.tileIndex = this@Sprite3d.tileIndex
-//                spriteShader.grayScaled = if ( grayScaled ) 1 else 0
-            }
-        }
-    }
-
-    class SpriteAtlasShader : KslShader(Model(), pipelineConfig) {
-        // or region from tex
-        var texture by texture3d(UNIFORM_TEXTURE)
-        var tileIndex by uniform1i(UNIFORM_OFFSET)
-
-        companion object {
-            private const val UNIFORM_TEXTURE = "tex"
-            private const val UNIFORM_OFFSET = "texOffset"
-            private const val UNIFORM_TILESIZE = "tileSize"
-            private const val UNIFORM_GRAY = "gray"
-
-            val SPRITE_MESH_ATTRIBS = listOf(Attribute.POSITIONS, Attribute.TEXTURE_COORDS, Attribute.COLORS)
-            private val pipelineConfig = PipelineConfig().apply {
-                blendMode = BlendMode.BLEND_PREMULTIPLIED_ALPHA
-                cullMethod = CullMethod.NO_CULLING
-                depthTest = DepthCompareOp.DISABLED
-            }
-        }
-
-        class Model : KslProgram("sprite") {
-            init {
-                val texCoords = interStageFloat2()
-                val color = interStageFloat4()
-
-                vertexStage {
-                    main {
-                        val mvp = mat4Var(mvpMatrix().matrix)
-                        texCoords.input set vertexAttribFloat2(Attribute.TEXTURE_COORDS.name)
-                        color.input set vertexAttribFloat4(Attribute.COLORS.name)
-                        outPosition set mvp * float4Value(vertexAttribFloat3(Attribute.POSITIONS.name), 1f)
-                    }
-                }
-                fragmentStage {
-                    main {
-                        val atlasTex = texture3d(UNIFORM_TEXTURE)
-                        val tileIndex = uniformInt1(UNIFORM_OFFSET)
-                        val atlasTexSize = textureSize3d(atlasTex).toFloat3()
-                        val xyInTile = (texCoords.output * atlasTexSize.xy).toInt2()
-                        val texel = texelFetch(atlasTex, int3Value(xyInTile.x, xyInTile.y, tileIndex))
-                        colorOutput(texel)
-                    }
-                }
-            }
-        }
-    }
 }

@@ -8,42 +8,83 @@ import ViewSpec
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.modules.ui2.mutableStateOf
+import de.fabmax.kool.scene.Group
 import me.az.ilode.Game
+import me.az.utils.logd
+import me.az.view.SpriteSystem
 import me.az.view.TextView
 
-class GameUI(val game: Game,
-             val assets: AssetManager,
-             val gameSettings: AppContext,
-             val conf: ViewSpec = ViewSpec()) : AsyncScene() {
-    private val tileSet = gameSettings.spriteMode
-    private var fontAtlas: ImageAtlas = ImageAtlas("text") // sub to update
-
-    private val spec = mutableStateOf(ImageAtlasSpec(tileset = gameSettings.spriteMode.value))
+class GameUI(
+    val spriteSystem: SpriteSystem,
+    val game: Game,
+    val gameSettings: AppContext
+    ) : Group()
+{
+    private val fontAtlasId = spriteSystem.cfg.atlasIdByName["text"]!!
+    private val fontAtlas = spriteSystem.cfg.atlases[fontAtlasId]
     private var dirty = true
 
-    override suspend fun loadResources(assets: AssetManager, ctx: KoolContext) {
-        fontAtlas.load(tileSet.value, assets)
-
-        dirty = true
+    private val formatAsLevel = { lid: Int ->
+        val level = ((lid + 1).toString().padStart(3, '0'))
+        "level$level"
     }
 
-    private fun Game.getStatusText(): String {
-        val scores = runner.score.toString().padStart(7, '0')
-        val lives = runner.health.toString().padStart(3, '0')
-        val level = ((level?.levelId ?: -1) + 1).toString().padStart(3, '0')
-        return "score$scores men$lives level$level"
+    private val formatAsScore = { v: Int ->
+        val scores = v.toString().padStart(7, '0')
+        "score$scores"
     }
 
+    private val formatAsLives = { v: Int ->
+        val lives = v.toString().padStart(3, '0')
+        "men$lives"
+    }
 
-    private val statusText = mutableStateOf(game.getStatusText())
+    private val scoreText = mutableStateOf(formatAsScore( gameSettings.score.value )).also { t ->
+        gameSettings.score.onChange {
+            t.set( formatAsScore( it ) )
+        }
+    }
+
+    private val livesText = mutableStateOf(formatAsLives(gameSettings.runnerLifes.value)).also { t->
+        gameSettings.runnerLifes.onChange {
+            t.set(formatAsLives(it))
+        }
+    }
+
+    private val levelText = mutableStateOf(formatAsLevel(game.level?.levelId ?: -1)).also { t->
+        gameSettings.currentLevel.onChange {
+            t.set(formatAsLevel(it))
+        }
+    }
+
+    private fun refresh() {
+        levelText.set( formatAsLevel( game.level?.levelId ?: -1) )
+        scoreText.set( formatAsScore( gameSettings.score.value ) )
+        livesText.set( formatAsLives( gameSettings.runnerLifes.value ) )
+    }
+
+    private val livesTextView by lazy {
+        TextView(spriteSystem, livesText, fontAtlas) {
+            translate(-28f / 2f + 13f, 0f, 0f)
+
+        }
+    }
+    private val scoreTextView by lazy {
+        TextView(spriteSystem, scoreText, fontAtlas) {
+            translate(-28f / 2f, 0f, 0f)
+        }
+    }
+    private val levelTextView by lazy {
+        TextView(spriteSystem, levelText, fontAtlas) {
+            translate(-28f / 2f + 20f, 0f, 0f)
+        }
+    }
 
     init {
-        // ui camera
-        camera = App.createCamera( conf.visibleWidth, conf.visibleHeight )
-        mainRenderPass.clearColor = null
         game.onStateChanged += { dirty = true }
         gameSettings.score.onChange {
             dirty = true
+            scoreTextView.setDirty()
         }
         gameSettings.currentLevel.onChange {
             dirty = true
@@ -51,19 +92,18 @@ class GameUI(val game: Game,
         gameSettings.runnerLifes.onChange {
             dirty = true
         }
-    }
-    override fun setup(ctx: KoolContext) {
-//        +StatusView(game, StringDrawer(fontAtlas, spec, TextView.fontMap, TextView.fontMap[' ']!!))
-        +TextView(statusText, fontAtlas, spec) {
-            scale(conf.tileSize.x.toFloat(), conf.tileSize.y.toFloat(), 1f)
-            translate(-(statusText.value.length / 2f), 0f, 0f)
-        }
+
+        +scoreTextView
+        +livesTextView
+        +levelTextView
 
         onUpdate += {
             if ( dirty ) {
-                statusText.set(game.getStatusText())
+                refresh()
+                spriteSystem.dirty = true
                 dirty = false
             }
         }
+
     }
 }

@@ -13,12 +13,14 @@ import kotlin.math.floor
 enum class TileSet(
     val path: String,
     val tileWidth: Int = 20,
-    val tileHeight: Int = 22
+    val tileHeight: Int = 22,
+    val screenWidth: Int = 640, // from original
+    val screenHeight: Int = 400,
 ) {
-    SPRITES_APPLE2("ap2"), // 560 x 384, 28 wide levels (20x22 tiles)
-    SPRITES_ATARI8BIT("a8b"),
-    SPRITES_COMMODORE64("c64"),
-    SPRITES_ZXSPECTRUM("zxs"),
+    SPRITES_APPLE2("ap2", screenWidth = 560, screenHeight = 384), // 560 x 384, 28 wide levels (20x22 tiles)
+    SPRITES_ATARI8BIT("a8b", screenWidth = 560, screenHeight = 384),
+    SPRITES_COMMODORE64("c64", screenWidth = 560, screenHeight = 384),
+    SPRITES_ZXSPECTRUM("zxs", screenWidth = 560, screenHeight = 384),
     SPRITES_IBM("ibm", 24, 22), // has 640x400 original and 26-tiles wide levels (24x20 tiles)
     SPRITES_NEC("nec", 24, 20), // has 640x400 original and 26-tiles wide levels
     SPRITES_NES("nes"),

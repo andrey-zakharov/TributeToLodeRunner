@@ -8,6 +8,8 @@ import TileSet
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.InputManager
 import de.fabmax.kool.KoolContext
+import de.fabmax.kool.math.MutableVec3d
+import de.fabmax.kool.math.MutableVec3f
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.modules.ui2.*
 import kotlinx.coroutines.launch
@@ -18,7 +20,6 @@ import me.az.ilode.GameState
 import me.az.utils.logd
 import me.az.utils.plus
 import me.az.view.TextView
-import me.az.view.textView
 import unregisterActions
 import kotlin.math.max
 import kotlin.math.min
@@ -55,7 +56,14 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
     private val currentLevelDigit3: MutableStateValue<String>
 
     private val commands = mutableListOf<MenuCommand>()
+
+    data class StaticLabel(
+        val text: String, val x: Float, val y: Float
+    )
     private val staticLabels = mutableListOf<StaticLabel>()
+    fun staticLabel(text: String, x: Float, y: Float) {
+        staticLabels += StaticLabel(text, x, y)
+    }
 
     var startnewGame = false
     var continueGame = false
@@ -122,13 +130,10 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
         val dy = 2
         var y = 1
 
-        // addition labels
-        val dx = - levelWidth / 2f
-        val labelsX = rightCol + 2 + dx
-
+        val labelsX = rightCol.toFloat() + 2f
 
         // level set
-        staticLabels += StaticLabel( "level set", labelsX, levelHeight - y.toFloat() + 1)
+        staticLabel( "level set", labelsX, y - 1f)
         commands += MenuCommand(pos = Vec2i(leftCol, y)) {
             with(menuContext.levelSet) {
                 maxLevelId = Int.MAX_VALUE
@@ -149,8 +154,12 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
 
         // level
         val origin = Vec2i(rightCol + 2, y)
-        staticLabels += StaticLabel( "level", labelsX, levelHeight - y.toFloat() + 1)
-        commands += LabeledMenuCommand(pos = origin + Vec2i(0, -1), label = currentLevelDigit3, labelDelta = Vec2i(0, -1)) {
+        staticLabel( "level", labelsX, y.toFloat() - 1)
+        commands += LabeledMenuCommand(
+            pos = origin + Vec2i(0, -1),
+            label = currentLevelDigit3,
+            labelDelta = Vec2i(0, 1)
+        ) {
             game.teleportRunnerDown()
             with(menuContext.level) {
                 set( min(maxLevelId, value.replaceDigit(3, value.digit(3) + 1) ) )
@@ -164,7 +173,8 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
         }
 
         // tens
-        commands += LabeledMenuCommand(pos = origin + Vec2i(1, -1), label = currentLevelDigit2, labelDelta = Vec2i(0, -1)) {
+        commands += LabeledMenuCommand(
+            pos = origin + Vec2i(1, -1), label = currentLevelDigit2, labelDelta = Vec2i(0, 1)) {
             game.teleportRunnerDown()
             with(menuContext.level) {
                 set( min(maxLevelId, value.replaceDigit(2, value.digit(2) + 1) ) )
@@ -178,7 +188,8 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
             }
         }
 
-        commands += LabeledMenuCommand(pos = origin + Vec2i(2, -1), label = currentLevelDigit1, labelDelta = Vec2i(0, -1)) {
+        commands += LabeledMenuCommand(
+            pos = origin + Vec2i(2, -1), label = currentLevelDigit1, labelDelta = Vec2i(0, 1)) {
             game.teleportRunnerDown()
             with(menuContext.level) {
                 set( min(maxLevelId, value.replaceDigit(1, value.digit(1) + 1) ) )
@@ -195,7 +206,7 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
 
         y += dy
         // game speed
-        staticLabels += StaticLabel("speed", labelsX, levelHeight - y.toFloat() + 1)
+        staticLabel("speed", labelsX, y.toFloat() - 1)
         commands += MenuCommand(pos = Vec2i(leftCol, y)) {
             with(appContext.speed) {
                 set( GameSpeed.values()[ (value.ordinal - 1).mod(GameSpeed.values().size) ] )
@@ -213,39 +224,30 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
         y += dy
 
         // tileset
-        staticLabels += StaticLabel("sprites", labelsX, levelHeight - y.toFloat() + 1)
+        staticLabel("sprites", labelsX, y - 1f)
         commands += MenuCommand(pos = Vec2i(leftCol, y)) {
-            with(appContext.spriteMode) {
-                set( TileSet.values()[ (value.ordinal - 1).mod(TileSet.values().size) ] )
-                game.teleportRunnerRight()
-            }
+            appContext.prevSpriteSet()
+            game.teleportRunnerRight()
         }
 
         commands += LabeledMenuCommand(pos = Vec2i(rightCol, y), label = currentSpriteName) {
-            with(appContext.spriteMode) {
-                set( TileSet.values()[ (value.ordinal + 1) % TileSet.values().size ] )
-                game.teleportRunnerLeft()
-            }
+            appContext.nextSpriteSet()
+            game.teleportRunnerLeft()
         }
 
         commands += LabeledMenuCommand(
             pos = Vec2i(7, levelHeight - 1), label = mutableStateOf("continue game")
         ) {
             continueGame = true
-//            game.teleportRunnerLeft()
         }
 
         commands += LabeledMenuCommand(
             pos = Vec2i(4, 0), label = mutableStateOf("new game"),
-            labelDelta = Vec2i(0, 2)
+            labelDelta = Vec2i(0, -2)
         ) {
             startnewGame = true
         }
     }
-
-    data class StaticLabel(
-        val text: String, val x: Float, val y: Float
-    )
 
     open class MenuCommand(
         val pos: Vec2i, // on level in tiles - actuator pos
@@ -261,10 +263,45 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
 
     private val runnerPosString = mutableStateOf("${game.runner.x} x ${game.runner.y}")
 
+    private fun setupStaticLabels() {
+        val tmp = MutableVec3d()
+        levelView?.run {
+            staticLabels.forEach {
+                addNode(
+                    spriteSystem.textView(it.text) {
+                        tmp.set(it.x.toDouble(), it.y.toDouble(), 0.0)
+                        this@run.toGlobalCoords(tmp)
+                        //spriteSystem.toLocalCoords(tmp)
+                        translate(tmp.x, tmp.y , 0.0)
+                        scale(0.5f, 0.5f, 1f)
+
+                    }
+                )
+            }
+        }
+    }
+
+    private fun setupCommands() {
+        val tmp = MutableVec3d()
+        commands.filterIsInstance<LabeledMenuCommand>().forEach {
+            //arranging to level coords
+            levelView?.addNode(
+                spriteSystem.textView(it.label) {
+                    tmp.set((it.pos.x + it.labelDelta.x).toDouble(),
+                        (it.pos.y + it.labelDelta.y).toDouble(), 0.0)
+//                                updateModelMat()
+                    levelView?.toGlobalCoords(tmp)
+//                                spriteSystem.toLocalCoords(tmp)
+                    translate( tmp.x, tmp.y, 0.0)
+                }
+            )
+        }
+    }
+
     override fun setup(ctx: KoolContext) {
 
         super.setup(ctx)
-        game.level = GameLevel(0, map, primaryTileSet = tilesAtlas.nameIndex )
+        game.level = GameLevel(0, map, tilesSequences = tilesAnims.sequence )
         game.onPlayGame += { g: Game, _ ->
             runnerPosString.set("${g.runner.x} x ${g.runner.y}")
 
@@ -282,36 +319,15 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
                 GameState.GAME_NEW_LEVEL -> {
                     addLevelView(ctx, game.level!!)
 
-//                    +TextView(runnerPosString, fontAtlas, currentSpriteSet, 10) {
-//                        translate(10f, 10f, 0f)
-//                        scale(currentSpriteSet.value.tileWidth / 2f, currentSpriteSet.value.tileHeight / 2f, 1f)
-//                    }
                     val version = "$Version by Andrey Zakharov"
-                    +textView(version, fontAtlas, currentSpriteSet, version.length) {
+                    +uiSpriteSystem.textView(version) {
 //                        translate(10f, currentSpriteSet.value.tileHeight.toFloat() / 2f , 0f)
-                        scale(conf.tileSize.x / 2f, conf.tileSize.y / 2f, 1f)
+                        scale(1f / 2f, 1f / 2f, 1f)
                         translate(-(version.length/ 2f), 0f, 0f)
                     }
 
-                    levelView?.run {
-                        staticLabels.forEach { addNode(
-                            textView(it.text, fontAtlas, currentSpriteSet) {
-                                translate(it.x, it.y, 0f)
-                                scale(0.5f, 0.5f, 1f)
-                            }
-                        ) }
-                    }
-
-                    commands.filterIsInstance<LabeledMenuCommand>().forEach {
-                        //arranging to level coords
-                        levelView?.addNode(
-                            TextView(it.label, fontAtlas, currentSpriteSet, 25) {
-                                translate( it.pos.x + it.labelDelta.x.toFloat() - game.level!!.width / 2f,
-                                    game.level!!.height - it.pos.y - 1 + it.labelDelta.y.toFloat(), 0f )
-                            }
-                        )
-                    }
-
+                    setupStaticLabels()
+                    setupCommands()
                 }
 
                 GameState.GAME_START -> startIntro(ctx)

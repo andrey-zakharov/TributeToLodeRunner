@@ -110,7 +110,7 @@ class CameraController(private val cameraToControl: OrthographicCamera, name: St
         }
 
     }
-    private val cameraUpdater = { _: Game, _: RenderPass.UpdateEvent? ->
+    private val cameraUpdater = { _: Game, _: Any? ->
         with(cameraToControl) {
             position.set(cameraAnimator.tick(ctx))
             lookAt.set(position.x, position.y, 0f)

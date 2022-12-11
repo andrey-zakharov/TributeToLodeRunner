@@ -1,41 +1,44 @@
 package me.az.view
 
 import ImageAtlas
-import ImageAtlasSpec
-import de.fabmax.kool.math.Vec2f
-import de.fabmax.kool.math.Vec2i
-import de.fabmax.kool.modules.ksl.KslUnlitShader
+import de.fabmax.kool.math.Mat4d
+import de.fabmax.kool.math.Mat4f
 import de.fabmax.kool.modules.ui2.MutableStateValue
-import de.fabmax.kool.modules.ui2.mutableStateOf
-import de.fabmax.kool.pipeline.Attribute
-import de.fabmax.kool.pipeline.TexFormat
-import de.fabmax.kool.pipeline.Texture2d
-import de.fabmax.kool.pipeline.TextureData2d
-import de.fabmax.kool.scene.*
-import de.fabmax.kool.util.Color
-import de.fabmax.kool.util.createUint8Buffer
-import me.az.shaders.TileMapShader
-import me.az.utils.nearestTwo
-import simpleValueTextureProps
-import kotlin.experimental.and
+import de.fabmax.kool.scene.Group
+import me.az.utils.logd
 
-
-fun textView(text: String, fontAtlas: ImageAtlas,
-             imageAtlasSpec: MutableStateValue<ImageAtlasSpec>,
-             capacity: Int = text.length, init: TextView.() -> Unit = {}) = TextView(
-    mutableStateOf(text), fontAtlas, imageAtlasSpec, capacity, init
-)
-
-class TextView(
+class TextView (
+    private val spriteSystem: SpriteSystem,
     private val text: MutableStateValue<String>,
     private val fontAtlas: ImageAtlas,
-    spec: MutableStateValue<ImageAtlasSpec>,
-    capacity: Int = 1000,
     init: TextView.() -> Unit = {}
 ): Group() {
+    private val chars = mutableListOf<SpriteInstance>()
+    private val tmpMat = Mat4d()
 
-    private var dirty = true
-    private val buf = createUint8Buffer(capacity)
+//    private val actions = mutableListOf<Action>()
+
+    init {
+        //on change fontAtlas.tex
+        text.onChange {
+            dirty = true
+        }
+        fontAtlas.tex.onChange {
+            dirty = true
+        }
+
+        onUpdate += {
+            if (dirty) {
+                refresh()
+            }
+        }
+        init()
+        // add pads
+
+        refresh()
+        //addDebugAxis()
+    }
+
 
     // totally custom
     companion object {
@@ -57,89 +60,52 @@ class TextView(
         }
     }
 
-    private val tileMapShader = TileMapShader()
-
-    private fun drawFromBuffer(string: String): TextureData2d {
-        buf.clear()
-        for ( c in string.lowercase() ) {
-            buf.put((fontMap[c] ?: fallbackChar).toByte() and 0x7f)
-        }
-//        val l = buf.position.nearestTwo
-//        while( buf.position < l ) buf.put(0)
-        buf.flip()
-        return TextureData2d(buf, buf.limit, 1, TexFormat.R)
-    }
-
-    private var lastWidth = 0
-
-    private val textWidth get() = text.value.length.toFloat() //* fontAtlas.spec.tileWidth.toFloat()
-    private val textHeight get() = 1f //fontAtlas.spec.tileHeight.toFloat()
-
-    private fun rebuildMeshes(spec: ImageAtlasSpec) {
-        if ( text.value.length == lastWidth ) return
-        this.removeAllChildren()
-        val pads = 2f
-
-        +group("scalethis") {
-            // bg
-            +colorMesh {
-                generate { rect {} }
-                shader = KslUnlitShader { color { constColor(Color(0f, 0f, 0f, 0.75f)) } }
-            }
-
-            +mesh(listOf(Attribute.POSITIONS, Attribute.TEXTURE_COORDS)) {
-                generate {
-                    rect {
-                        origin.set(pads / spec.tileWidth / textWidth, pads / spec.tileHeight / textHeight, 0f)
-                    }
-                }
-
-                shader = tileMapShader.apply {
-                    tileSize = Vec2i(spec.tileWidth, spec.tileHeight)
-                    tileSizeInTileMap = Vec2i(fontAtlas.tileWidth, fontAtlas.tileHeight)
-                }
-            }
-            scale(textWidth, textHeight, 1f)
-        }
-
-        lastWidth = text.value.length
-    }
-
-    private fun updateShader() = with(tileMapShader) {
-        field = Texture2d(simpleValueTextureProps, drawFromBuffer(text.value))
-        fieldSize = Vec2f(text.value.length.toFloat(), 1f)
-        tiles = fontAtlas.tex.value
-        tileSize = fontAtlas.getTileSize()
-        tileSizeInTileMap = Vec2i(fontAtlas.tileWidth, fontAtlas.tileHeight)
-    }
-
-    init {
-
-            //on change fontAtlas.tex
-        text.onChange {
-            dirty = true
-        }
-        fontAtlas.tex.onChange {
-            dirty = true
-        }
-
-        onUpdate += {
-            if ( dirty ) {
-
-                with (children[0] as Group) {
-                    transform.resetScale()
-                    scale(textWidth, textHeight, 1f)
-                }
-//                rebuildMeshes() // if dims are diff
-                updateShader() // only text
-
-                // hack to wait loading, no loadAndPrepare for tex3d in lib
-                dirty = tileMapShader.tileSizeInTileMap.x == 0
+    private fun rebuildSprites(): Iterable<SpriteInstance> {
+        logd { "building sprites from \"${text.value}\""}
+        return text.value.mapIndexed { index, c ->
+            //spriteSystem.toLocalCoords(tmpPos)
+            spriteSystem.sprite(
+                atlasId = spriteSystem.cfg.atlasIdByName[fontAtlas.name]!!,
+                modelMat = Mat4f().set(getCoords(index)), // copy
+                tileIndex = fontMap[c.lowercaseChar()] ?: fallbackChar,
+            ).also {
+                it.bgAlpha.set(0.5f)
             }
         }
-
-        rebuildMeshes(spec.value)
-        init()
     }
+
+    private fun getCoords(x: Int): Mat4d {
+        tmpMat.set(modelMat)
+        tmpMat.translate(x.toFloat(), 0f, 0f)
+        return tmpMat
+    }
+
+    private fun refresh() {
+        updateModelMat()
+        if ( chars.size != text.value.length ) {
+            chars.forEach { it.unbind() }
+            //rebuild array
+            spriteSystem.sprites.removeAll(chars.toSet())
+            spriteSystem.dirty = true
+            chars.clear()
+            chars.addAll(rebuildSprites())
+        } else {
+            // update pos
+            //logd { "updating pos for \"${text.value}\"" }
+            chars.forEachIndexed { index, spriteInstance ->
+//                spriteSystem.toLocalCoords(tmpPos)
+                //if (spriteInstance.modelMat.equals()) {
+                //spriteInstance.writeModelMat(getCoords(index))
+                spriteInstance.tileIndex.set(fontMap[text.value[index].lowercaseChar()] ?: fallbackChar)
+                // huge hack atm
+                spriteSystem.dirty = true
+            }
+        }
+        // refresh until texture loads hack
+        dirty = false
+
+    }
+
+    private var dirty = true
 
 }

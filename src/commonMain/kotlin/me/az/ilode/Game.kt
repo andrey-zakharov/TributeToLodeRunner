@@ -1,28 +1,15 @@
 package me.az.ilode
 
 import AppContext
-import GameSpeed
-import LevelSet
 import SoundPlayer
-import TileSet
-import com.russhwolf.settings.Settings
-import com.russhwolf.settings.boolean
-import com.russhwolf.settings.float
-import com.russhwolf.settings.int
-import de.fabmax.kool.KeyCode
-import de.fabmax.kool.LocalKeyCode
 import de.fabmax.kool.modules.ui2.MutableStateValue
-import de.fabmax.kool.modules.ui2.mutableStateOf
-import de.fabmax.kool.pipeline.RenderPass
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import me.az.utils.StackedState
 import me.az.utils.buildStateMachine
-import me.az.utils.enumDelegate
 import kotlin.coroutines.CoroutineContext
-import kotlin.properties.ReadWriteProperty
 
 //class IntProperty(key: String? = null, defaultValue: Int, minValue: Int?, maxValue: Int?): ReadWriteProperty<Any?, Int> {
 //
@@ -234,7 +221,7 @@ class Game(val state: AppContext) : CoroutineScope {
         this.onStateChanged += { this@Game.onStateChanged.forEach { it(this) }}
     } }
 
-    fun tick( ev: RenderPass.UpdateEvent? ) {
+    fun tick( ev: Any? ) {
         fsm.update(this)
     }
 
@@ -252,9 +239,9 @@ class Game(val state: AppContext) : CoroutineScope {
 
     val onStateChanged = mutableListOf<StackedState<GameState, Game>.() -> Unit>()
 
-    val onPlayGame = mutableListOf<(game: Game, ev: RenderPass.UpdateEvent?) -> Unit>()
+    val onPlayGame = mutableListOf<(game: Game, ev: Any?) -> Unit>()
 
-    private fun playGame(ev: RenderPass.UpdateEvent? = null): Boolean {
+    private fun playGame(ev: Any? = null): Boolean {
         return level?.run {
             runner.update()
             if ( !state.stopGuards.value ) guardsUpdate()
@@ -301,9 +288,3 @@ class Game(val state: AppContext) : CoroutineScope {
     fun getGuard(x: Int, y: Int) = guards.first { it.block.x == x && it.block.y == y }
 
 }
-
-typealias KeyMod = Int
-
-data class InputSpec(val code: KeyCode, val modificatorBitMask: Int)
-fun KeyCode.toInputSpec(vararg mod: KeyMod) = InputSpec(this, mod.sum())
-fun Char.toInputSpec(vararg mod: KeyMod) = LocalKeyCode(this).toInputSpec(*mod)

@@ -51,7 +51,7 @@ class Runner(game: Game) : Actor(game), Controllable {
             this += DigRight(this@Runner)
             this += DigLeft(this@Runner)
 
-//            debugOn()
+            // debugOn()
         }
     }
 
@@ -70,19 +70,15 @@ class Runner(game: Game) : Actor(game), Controllable {
 //                    game.playSound(Sound.DIG, x, y)
                     playSound(Sound.DIG)
 
-                    val (digTileX, bitmap) = if (digLeft) {
-                        Pair(x - 1, "digHoleLeft")
+                    val digTileX = if (digLeft) {
+                        x - 1
                     } else {
-                        Pair(x + 1, "digHoleRight")
+                        x + 1
                     }
-                    //hack
 
-                    level.anims.add(Anim(Vec2i(digTileX, y), bitmap))
-                    val holePos = Vec2i(digTileX, y + 1)
-                    level.anims.add(Anim(holePos, "${bitmap}Base") {
-                        level.act[digTileX][y + 1] = TileLogicType.EMPTY
-//                        level.anims.add(Anim(holePos, "fillHole"))
-                    })
+                    level.digHole(digTileX, y + 1) { // on finish
+                        stopSound(Sound.DIG)
+                    }
                 }
             }
 
@@ -108,8 +104,7 @@ class Runner(game: Game) : Actor(game), Controllable {
 
     //Page 276 misc.c (book)
     fun ok2Dig(nx: Int): Boolean {
-        return level.isBlock(nx, y + 1) && level.isEmpty(nx, y) &&
-                !level.anims.any { it.pos.x == nx && it.pos.y == y + 1 }
+        return level.isBlock(nx, y + 1) && level.isEmpty(nx, y)
     }
 
     fun addScore(points: Int) {

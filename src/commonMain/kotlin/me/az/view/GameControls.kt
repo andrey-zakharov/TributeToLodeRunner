@@ -5,8 +5,8 @@ import de.fabmax.kool.InputManager
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.scene.Node
 import me.az.ilode.Game
-import me.az.ilode.InputSpec
-import me.az.ilode.toInputSpec
+import me.az.app.controls.InputSpec
+import me.az.app.controls.toInputSpec
 import registerActions
 import unregisterActions
 

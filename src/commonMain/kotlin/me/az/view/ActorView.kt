@@ -3,10 +3,7 @@ package me.az.view
 import AnimationFrames
 import ImageAtlas
 import de.fabmax.kool.KoolContext
-import de.fabmax.kool.math.Vec2d
-import de.fabmax.kool.math.Vec2f
-import de.fabmax.kool.math.Vec2i
-import de.fabmax.kool.math.clamp
+import de.fabmax.kool.math.*
 import de.fabmax.kool.modules.audio.AudioOutput
 import de.fabmax.kool.modules.audio.MixNode
 import de.fabmax.kool.modules.audio.WavFile
@@ -22,6 +19,7 @@ import me.az.ilode.Sound
 import me.az.scenes.Sequences
 import me.az.utils.lerp
 import me.az.utils.logd
+import me.az.utils.mul
 
 class ActorView(
     private val actor: Actor,
@@ -52,43 +50,40 @@ class ActorView(
             actor.absolutePosY.toFloat() / (actor.level.height * tileSize.y.toFloat())
 
     }
-    private fun Actor.levelPos() = Vec2d(
-        (x - level.width / 2.0 + 0.5) * 1f + (actor.ox.toDouble() / tileSize.x),
-        (level.height - y + 0.5) * 1f - (actor.oy.toDouble() / tileSize.y))
-    .toVec2f()
 
-    val instance = spriteSystem.sprite(anims.atlasId, actor.levelPos(), 0)
+    private val tmpPos = Mat4f()
+
+    private fun Actor.levelPos(): Mat4f {
+        tmpPos.set(modelMat).translate(
+            actor.x + actor.ox / tileSize.x.toFloat(),
+            actor.y + actor.oy / tileSize.y.toFloat(),
+            0f
+        ).scale(1f, -1f, 1f)
+        //spriteSystem.toLocalCoords(tmpPos)
+        return tmpPos
+    }
+
+    // when view created, there is no parent, and modelMat is wrong (zeroed)
+    val instance by lazy { spriteSystem.sprite(anims.atlasId, 0, actor.levelPos()) }
 
     init {
+
 //        addDebugAxis()
         onUpdate += {
-            anims.sequence[actor.action.id]?.run {
+           anims.sequence[actor.action.id]?.run {
                 // back hack
-                if ( actor.sequenceSize <= 0 ) actor.sequenceSize = size
+                if ( actor.sequenceSize != size ) actor.sequenceSize = size
                 // CPU waste
                 instance.atlasId.set( anims.atlasId )
+//                println("${actor.action.id} ${actor.frameIndex} $this")
                 instance.tileIndex.set(this[actor.frameIndex.mod(actor.sequenceSize)])
             }
 
-            instance.pos.set(actor.levelPos())
-            instance.onPosUpdated()
+            updateModelMat()
+            //instance.writeModelMat(actor.levelPos())
+            instance.modelMat.set(actor.levelPos())
             updateFallFreq()
-            //setIdentity()
-            //translate(
-            //    actor.x - actor.level.width / 2.0 + 0.5, actor.level.height - actor.y - 0.5,
-            //    0.0
-            //)
-
-//            scale(1f, 1f, 1f )
-            //translate(actor.ox.toDouble() / tileSize.x, -actor.oy.toDouble() / tileSize.y, 0.0)
-
         }
-//        actor.game.onPlayGame += { g, ev ->
-//            sequences[actor.action.id]?.run {
-//                val (atlasId, seq) = this
-//                println("${actor.action} ${seq[actor.frameIndex.mod(seq.size)]}")
-//            }
-//        }
 
         actor.onEvent += {
 
@@ -122,14 +117,14 @@ class ActorView(
                 }
             }
         }
-    }
 
-    override fun dispose(ctx: KoolContext) {
-        super.dispose(ctx)
-        spriteSystem.sprites.remove(instance)
-        spriteSystem.dirty = true
-        audioOutput.close()
-        logd { "audio closed" }
+        onDispose += {
+            spriteSystem.sprites.remove(instance)
+            instance.unbind()
+            spriteSystem.dirty = true
+            audioOutput.close()
+            logd { "audio closed" }
+        }
     }
 }
 

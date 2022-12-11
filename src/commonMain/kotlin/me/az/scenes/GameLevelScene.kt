@@ -4,6 +4,7 @@ import AppContext
 import LevelsRep
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
+import de.fabmax.kool.math.MutableVec3f
 import de.fabmax.kool.math.spatial.BoundingBox
 import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.Texture2d
@@ -49,10 +50,15 @@ class GameLevelScene (
                 speed = startSpeed
             }
 
-//            it.translate(this@GameLevelScene.camera.globalCenter)
-            it.translate( 0f, conf.visibleSize.y / 2f, 0f)
+            val tmpPos = MutableVec3f()
+
             onUpdate += { ev->
                 it.transform.resetScale() // still remains negative -1
+                //            it.translate(this@GameLevelScene.camera.globalCenter)
+                tmpPos.set(ev.viewport.width / 2f, ev.viewport.height / 2f, 0f)
+                levelView?.toLocalCoords(tmpPos)
+                it.transform.setTranslate( tmpPos.toVec3d() )
+
                 // -1.0 zoom glitches?
                 val scale = scaleAnim.tick(ev.ctx) / conf.tileSize.y
                 it.scale(1.0 / conf.tileSize.x, scale.toDouble()
@@ -136,7 +142,7 @@ class GameLevelScene (
         }
 
     }
-    private val currentLevel get() = levels.getLevel(appContext.currentLevel.value, tilesAtlas, false)
+    private val currentLevel get() = levels.getLevel(appContext.currentLevel.value, tilesAnims, false)
 
     private val job = Job()
     override val coroutineContext: CoroutineContext

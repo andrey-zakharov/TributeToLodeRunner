@@ -11,6 +11,8 @@ import de.fabmax.kool.scene.*
 import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.Log
 import kotlinx.coroutines.*
+import me.az.app.controls.InputSpec
+import me.az.app.controls.toInputSpec
 import me.az.app.states.DebugState
 import me.az.ilode.*
 import me.az.scenes.HiScoreScene
@@ -49,7 +51,7 @@ enum class GameSpeed(val fps: Int) {
 
 class ViewSpec (
     val tileSize: Vec2i = Vec2i(20, 22),
-    val visibleSize: Vec2i = Vec2i(28, 16+2) // in tiles  + ground + status
+    val visibleSize: Vec2i = Vec2i(28, 16) // in tiles only level, but + ground + status?
 ) {
     val visibleWidth get() = visibleSize.x * tileSize.x
     val visibleHeight get() = visibleSize.y * tileSize.y
@@ -121,6 +123,13 @@ class AppContext(val gameSettings: GameSettings) {
     } }
     val runnerLifes = MutableStateValue(gameSettings.runnerLifes).also { it.onChange { v -> gameSettings.runnerLifes = v } }
 
+    fun nextSpriteSet() = with(spriteMode) {
+        set(TileSet.values()[(value.ordinal + 1) % TileSet.values().size])
+    }
+
+    fun prevSpriteSet() = with(spriteMode) {
+        set( TileSet.values()[ (value.ordinal - 1).mod(TileSet.values().size) ] )
+    }
 }
 
 class App(val ctx: KoolContext, initialState: AppState = AppState.MAINMENU) {
@@ -543,6 +552,6 @@ fun InputManager.unregisterActions(actions: Iterable<InputManager.KeyEventListen
 
 /*
     Game(settings).startLevel()
-    +GameView(game) -> +LevelView(level) -> +me.az.view.ActorView(runner)
+    +GameView(game) -> +me.az.view.LevelView(level) -> +me.az.view.ActorView(runner)
 
  */

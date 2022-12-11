@@ -2,11 +2,14 @@ package me.az.utils
 
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.contains
+import de.fabmax.kool.math.Mat4d
+import de.fabmax.kool.math.Mat4f
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.math.Vec3f
 import de.fabmax.kool.scene.Group
 import de.fabmax.kool.scene.lineMesh
 import de.fabmax.kool.util.Color
+import de.fabmax.kool.util.Time
 import kotlin.jvm.JvmField
 import kotlin.math.floor
 import kotlin.properties.ReadWriteProperty
@@ -24,7 +27,7 @@ expect class Env { // system
 val canDebug: Boolean = Env.getProperty("debug").toBoolean()
 
 inline fun debugOnly( block: () -> Unit ) { if ( canDebug ) block() }
-inline fun logd( block: () -> String ) { if ( canDebug ) println(block()) }
+inline fun logd( block: () -> String ) { if ( canDebug ) println("+${Time.frameCount} ${block()}") }
 
 internal val Int.b get() = toByte()
 internal val Float.floor: Float get() = floor(this)
@@ -78,10 +81,10 @@ internal fun Random.choice(choices: List<Int>): Int {
 internal operator fun Vec2i.component1() = x
 internal operator fun Vec2i.component2() = y
 
-internal fun Group.addDebugAxis() {
-    +lineMesh("x") { addLine(Vec3f.ZERO, Vec3f(1f, 0f, 0f), Color.RED) }
-    +lineMesh("y") { addLine(Vec3f.ZERO, Vec3f(0f, 1f, 0f), Color.GREEN) }
-    +lineMesh("z") { addLine(Vec3f.ZERO, Vec3f(0f, 0f, 1f), Color.BLUE) }
+internal fun Group.addDebugAxis(scale: Float = 1f) {
+    +lineMesh("x") { addLine(Vec3f.ZERO, Vec3f(scale, 0f, 0f), Color.RED) }
+    +lineMesh("y") { addLine(Vec3f.ZERO, Vec3f(0f, scale, 0f), Color.GREEN) }
+    +lineMesh("z") { addLine(Vec3f.ZERO, Vec3f(0f, 0f, scale), Color.BLUE) }
 }
 
 internal val Int.nearestTwo: Int get() {
@@ -100,3 +103,6 @@ internal operator fun Vec2i.plus(o: Vec2i) = Vec2i(this.x + o.x, this.y + o.y)
 internal fun Float.lerp(a: Float, b: Float): Float {
     return a + this * (b - a)
 }
+
+// rude stub
+fun Mat4f.mul(m: Mat4d) = mul(Mat4f().set(m))

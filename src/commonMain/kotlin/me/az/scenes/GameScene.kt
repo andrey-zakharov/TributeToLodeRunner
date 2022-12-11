@@ -6,13 +6,13 @@ import App.Companion.bg
 import AppContext
 import ImageAtlas
 import ImageAtlasSpec
-import LevelView
 import RunnerController
 import SoundPlayer
 import TileSet
 import ViewSpec
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
+import de.fabmax.kool.math.Mat4f
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.modules.ui2.MutableStateValue
 import de.fabmax.kool.modules.ui2.mutableStateOf
@@ -27,20 +27,20 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.az.ilode.Game
 import me.az.ilode.GameLevel
+import me.az.ilode.TileLogicType
 import me.az.ilode.anyKeyPressed
 import me.az.shaders.CRTShader
 import me.az.shaders.MaskShader
-import me.az.view.CameraController
-import me.az.view.SpriteConfig
-import me.az.view.SpriteSystem
+import me.az.view.*
 import kotlin.math.ceil
 import kotlin.math.sqrt
 
-typealias Sequences = Map<String, Pair<Int, List<Int>>>
+typealias Sequences = Map<String, List<Int>>
 
 open class GameScene(val game: Game,
                      val assets: AssetManager,
                      val appContext: AppContext,
+                     private val visibleSize: Vec2i = Vec2i(28, 16), // in tiles only level, but + ground + status?
                      val conf: ViewSpec = ViewSpec(tileSize = Vec2i(game.state.spriteMode.value.tileWidth, game.state.spriteMode.value.tileHeight)),
                      name: String?,
 ) : AsyncScene(name) {
@@ -49,9 +49,15 @@ open class GameScene(val game: Game,
     var levelView: LevelView? = null
 
     //cam
-    protected val visibleWidth = conf.visibleWidth
-    protected val visibleHeight = conf.visibleHeight
-    protected val maxShatterRadius = ceil(sqrt((visibleWidth* visibleWidth + visibleHeight * visibleHeight).toDouble()) / 2).toInt()
+    protected val screenWidth get() = appContext.spriteMode.value.screenWidth
+    protected val screenHeight get() = appContext.spriteMode.value.screenHeight
+
+    // for level view
+
+    protected val levelWidth get() = game.state.spriteMode.value.tileWidth * visibleSize.x
+    protected val levelHeight get() = game.state.spriteMode.value.tileHeight * visibleSize.y
+
+    protected val maxShatterRadius = ceil(sqrt((levelWidth* levelWidth + levelHeight * levelHeight).toDouble()) / 2).toInt()
 
     var cameraController: CameraController? = null
     private var mask: Group? = null
@@ -75,36 +81,59 @@ open class GameScene(val game: Game,
 
     private val job = Job()
     protected val scope = CoroutineScope(job)
+    private val orthoCam get() = camera as OrthographicCamera
 
     init {
         appContext.spriteMode.onChange {
             scope.launch {
                 reload(it)
-                game.level?.run { dirty = true }
+                //game.level?.run { dirty = true }
+                //levelView?.fullRefresh()
             }
         }
 
         // recreate on tileWidth change TBD
 
-        camera = App.createCamera( conf.visibleWidth, conf.visibleHeight ).apply {
+        camera = App.createCamera(
+            appContext.spriteMode.value.screenWidth, appContext.spriteMode.value.screenHeight
+        ).apply {
             projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
         }
-
-
         mainRenderPass.clearColor = Color.BLACK
     }
 
     protected val currentSpriteSet = mutableStateOf(ImageAtlasSpec(appContext.spriteMode.value))
     private val atlasOrder = listOf("tiles", "runner", "guard", "text")
     protected val atlases = atlasOrder.map { ImageAtlas(it) }
-    protected val tilesAtlas = atlases[0]
-    protected val fontAtlas = atlases[3]
+    protected val tilesAtlas = atlases[atlasOrder.indexOf("tiles")]
+    protected val fontAtlas = atlases[atlasOrder.indexOf("text")]
 
     val spriteSystem by lazy { SpriteSystem(SpriteConfig {
         this@GameScene.atlases.forEach { this += it }
     }).apply {
 //        mirrorTexCoordsY = true
     }}
+
+    // out of mask, for status text
+    val uiSpriteSystem by lazy {
+        SpriteSystem(SpriteConfig {
+            this += fontAtlas
+            this += tilesAtlas // for ground
+        }).also { ss ->
+            ss.onUpdate += { ev ->
+                groundTiles.forEachIndexed { index, tile ->
+                    //update pos
+                    // under level view - level view posed by world coords aligned to top edge of camera's view
+                    // but we need here local coords 'in tiles' because of uiSprite is scaled.
+                    tile.modelMat.setIdentity().translate(index.toFloat() - game.level!!.width/2f, 0.4f, 0f)
+                        //.translate( -levelWidth / 2f, 0f, 0f)
+                }
+            }
+             // layout depends on tileset
+
+
+        }
+    }
 
     protected var runnerAnims = AnimationFrames(atlasOrder.indexOf("runner"), "runner")
     protected var guardAnims = AnimationFrames(atlasOrder.indexOf("guard"), "guard")
@@ -116,12 +145,13 @@ open class GameScene(val game: Game,
     protected val sounds = SoundPlayer(assets)
 
     private fun refreshSequences() {
-//        println(tilesAnims.sequence)
-//        sequences.clear()
-//        // but order remains same. TBD reinvent some animation system ;)
-//        holeAnims.sequence.forEach { (name, list) -> sequences[name] = Pair(0, list) }
-//        runnerAnims.sequence.forEach { (name, list) -> sequences[name] = Pair(1, list) }
-//        guardAnims.sequence.forEach { (name, list) -> sequences[name] = Pair(2, list) }
+
+        // default one frame anim of tiles from atlas
+        tilesAtlas.nameIndex.forEach { (k, v) ->
+            if ( !tilesAnims.sequence.containsKey(k) ) {
+                tilesAnims.sequence[k] = listOf(v)
+            }
+        }
     }
     private suspend fun reload(newts: TileSet) {
         val newSpec = ImageAtlasSpec(tileset = newts)
@@ -137,72 +167,54 @@ open class GameScene(val game: Game,
         refreshSequences()
 
         currentSpriteSet.set(ImageAtlasSpec(appContext.spriteMode.value))
-
-        game.level?.run {
-            fillGround(tilesAtlas.nameIndex)
-            dirty = true
-        }
-
     }
+
     override suspend fun loadResources(assets: AssetManager, ctx: KoolContext) = with(assets) {
-        val newSpec = ImageAtlasSpec(tileset = appContext.spriteMode.value)
-
-        atlases.forEach { it.load(appContext.spriteMode.value, this) }
-
-        runnerAnims.loadAnimations(newSpec, this)
-        guardAnims.loadAnimations(newSpec, this)
-        tilesAnims.loadAnimations(newSpec, this)
-        tilesAnims.appendFrom(assets, newSpec, "hole")
-
+        reload(appContext.spriteMode.value)
         sounds.loadSounds()
-
-        spriteSystem.cfg.atlases.map {
-            it.load(appContext.spriteMode.value, this@with)
-        }
-        refreshSequences()
-
-        // default one frame anim of tiles from atlas
-        tilesAtlas.nameIndex.forEach { (k, v) ->
-            if ( !tilesAnims.sequence.containsKey(k) ) {
-                tilesAnims.sequence[k] = listOf(v)
-            }
-        }
-
         Unit
     }
 
-    fun SpriteSystem.text(text: MutableStateValue<String>) {
-        //sprite(3)
-    }
+    fun SpriteSystem.textView(text: MutableStateValue<String>, init: TextView.() -> Unit = {})
+        = TextView(this, text, cfg.atlases[cfg.atlasIdByName["text"]!!], init)
+    fun SpriteSystem.textView(text: String, init: TextView.() -> Unit = {})
+        = textView( mutableStateOf(text), init)
 
+    val systems = listOf(spriteSystem, uiSpriteSystem)
     override fun setup(ctx: KoolContext) {
         game.soundPlayer = sounds
-//        addNode(bg, 0)
+        addNode(bg, 0)
         +RunnerController(ctx.inputMgr, game.runner)
 
-        spriteSystem.scale(
-            appContext.spriteMode.value.tileWidth.toFloat(),
-            appContext.spriteMode.value.tileHeight.toFloat(), 1f
-        )
         appContext.spriteMode.onChange {
-            spriteSystem.transform.resetScale()
-                .scale(
-                    it.tileWidth.toDouble(),
-                    it.tileHeight.toDouble(), 1.0
-                )
+            updateScales(it)
         }
-//        for ( y in -5 until 5 ) {
-//            for (i in -2 .. 2) {
-//                spriteSystem.sprite(
-//                    0, i.toFloat(), y.toFloat(), i+2
-//                )
-//            }
-//        }
-//        +spriteSystem
+
+        +uiSpriteSystem
         spriteSystem.dirty = true
+        uiSpriteSystem.dirty = true
 
         game.reset() // start game
+        updateScales()
+    }
 
+    private val groundTiles: List<SpriteInstance> by lazy {
+        val a = uiSpriteSystem.cfg.atlasIdByName["tiles"]!!
+        val ground = tilesAnims.sequence["ground"]!!.first()
+        (0 until (game.level?.width ?: 28)).map { x ->
+            uiSpriteSystem.sprite( a, ground, Mat4f() )
+        }
+    }
+
+    private fun updateScales(tileSet: TileSet = appContext.spriteMode.value) {
+        systems.forEach {
+            it.transform.resetScale()
+            it.scale(
+                tileSet.tileWidth.toFloat(),
+                tileSet.tileHeight.toFloat(), 1f
+            )
+            it.updateModelMat()
+        }
     }
 
     protected fun addLevelView(ctx: KoolContext, level: GameLevel) {
@@ -220,13 +232,30 @@ open class GameScene(val game: Game,
             sounds.bank
         )
 
+/*        val textAtlas = spriteSystem.cfg.atlasIdByName["text"]!!
+        for (i in 0 until 10 ) {
+            spriteSystem.sprite(
+                atlasId = textAtlas,
+                pos = Vec2f(i.toFloat(), 0f),
+                tileIndex = i
+            )
+            spriteSystem.sprite(
+                atlasId = textAtlas,
+                pos = Vec2f(i.toFloat(), 1f),
+                tileIndex = i + 1
+            )
+            spriteSystem.sprite(
+                atlasId = textAtlas,
+                pos = Vec2f(-i.toFloat(), 1f),
+                tileIndex = i + 2
+            )
+        }*/
         levelView?.run {
             // draw by sprite system, but still need updates
             this@GameScene += this
             off = OffscreenRenderPass2d(spriteSystem, renderPassConfig {
                 this.name = "bg"
-
-                setSize(visibleWidth, visibleHeight)
+                setSize(levelWidth, levelHeight)
                 setDepthTexture(false)
                 addColorTexture {
                     colorFormat = TexFormat.RGBA
@@ -237,7 +266,10 @@ open class GameScene(val game: Game,
         }
 
         off?.let { pass ->
-            pass.camera = App.createCamera( visibleWidth, visibleHeight ).apply {
+            pass.camera = App.createCamera(
+//                appContext.spriteMode.value.screenWidth, appContext.spriteMode.value.screenHeight
+                pass.width, pass.height
+            ).apply {
                 projCorrectionMode = Camera.ProjCorrectionMode.OFFSCREEN
             }
             pass.clearColor = Color(0.00f, 0.00f, 0.00f, 0.00f)
@@ -291,23 +323,28 @@ open class GameScene(val game: Game,
 
         //mask
         mask = group {
+            translate(0f, orthoCam.height - levelHeight, 0f)
             +textureMesh {
                 generate {
                     rect {
-                        size.set(visibleWidth.toFloat(), visibleHeight.toFloat())
+                        size.set( off!!.width.toFloat(), off!!.height.toFloat())
                         origin.set(-width / 2f, 0f, 0f)
                         mirrorTexCoordsY()
                     }
                 }
                 shader = MaskShader { color { textureColor((crt?:off!!).colorTexture) } }
                 onUpdate += {
+
+                    //setIdentity()
+                    //(ctx.windowHeight - visibleHeight).toFloat()
+                    //translate(0f, appContext.spriteMode.value.screenHeight - visibleHeight.toFloat(), 0f)
+
                     (shader as MaskShader).visibleRadius = shatterRadiusAnim.tick(it.ctx)
                     // hack to sync anims
                     if (shatterRadiusAnim.progress >= 1f) {
                         shatterRadiusAnim.progress = 0f
                         game.animEnds = true
-                    }
-                    else if (!game.animEnds && game.runner.anyKeyPressed) {
+                    } else if (!game.animEnds && game.runner.anyKeyPressed) {
                         stopIntro(it.ctx)
                         game.skipAnims = true
                     }

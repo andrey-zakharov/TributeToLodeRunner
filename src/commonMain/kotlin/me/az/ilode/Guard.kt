@@ -364,9 +364,11 @@ class Guard(game: Game, private val random: Random = Random.Default) : Actor(gam
         }
 
         // scan from current position
-        val downTileBase = level.base[x][y + 1]
-        if ( y < maxTileY && downTileBase != TileLogicType.BLOCK && downTileBase != TileLogicType.SOLID ) {
-            scanDown(x, Action.ACT_DOWN, guardAi, runner)
+        if ( y < maxTileY ) {
+            val downTileBase = level.base[x][y + 1]
+            if ( downTileBase != TileLogicType.BLOCK && downTileBase != TileLogicType.SOLID ) {
+                scanDown(x, Action.ACT_DOWN, guardAi, runner)
+            }
         }
 
         if ( level.base[x][y] == TileLogicType.LADDER ) {
