@@ -4,13 +4,15 @@ import AnimationFrames
 import ViewSpec
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.Mat4f
+import de.fabmax.kool.math.randomI
 import de.fabmax.kool.modules.audio.WavFile
 import de.fabmax.kool.scene.Group
 import de.fabmax.kool.util.Time
 import de.fabmax.kool.util.logE
 import me.az.ilode.*
-import me.az.utils.*
-
+import me.az.utils.Act
+import me.az.utils.ActingList
+import me.az.utils.ActionStatus
 
 class AnimateSprite(
     val sprite: SpriteInstance,
@@ -33,10 +35,6 @@ class AnimateSprite(
         }
     }
 }
-//
-//fun playAnim(x: Int, y: Int, animName: String, withFinish: () -> Iterable<Act<GameLevel>>?) {
-//    acting.add(Anim(Vec2i(x, y), name = animName, onFinish = withFinish))
-//}
 
 class LevelView(
     private val spriteSystem: SpriteSystem,
@@ -94,15 +92,23 @@ class LevelView(
         r
     }
 
-    private fun SpriteInstance.replaceAnim(name: String, loop: Boolean = false) {
+    private fun SpriteInstance.replaceAnim(name: String, delay: Int = 0) {
         val list = tilesAnims.sequence.getOrElse(name) {
             logE { "$name sequence not found" }
             return
         }
         val replace = acting.filterIsInstance<AnimateSprite>().filter { it.sprite == this }
         replace.forEach { acting.remove(it) } // stop?
-        acting.add( AnimateSprite(this, list, loop) )
+
         atlasId.set( tilesAnims.atlasId )
+        tileIndex.set(list.first())
+        if (list.size > 1) {
+            if ( delay > 0 ) {
+                acting.add( acting.delayed(delay) { listOf(AnimateSprite(this@replaceAnim, list, loop = true)) } )
+            } else {
+                acting.add(AnimateSprite(this, list, loop = true))
+            }
+        }
     }
 
     private fun startDigAnims(x: Int, y: Int ) {
@@ -121,11 +127,12 @@ class LevelView(
 
     private fun onTileUpdate(ev: LevelCellUpdate) {
         val (x, y, v) = ev
-        logd { "LevelVIew:: onTileUpdate $x, $y, $v" }
+        //logd { "LevelVIew:: onTileUpdate $x, $y, $v" }
         with(handlers[x][y]) {
             when(v) {
                 TileLogicType.DIGGINGHOLE -> startDigAnims(x, y)
                 TileLogicType.HOLE -> startFillHole(x, y)
+                TileLogicType.GOLD -> replaceAnim(v.name.lowercase(), randomI(0, 60))
                 else -> replaceAnim(v.name.lowercase())
             }
         }
@@ -135,20 +142,7 @@ class LevelView(
 //        val tmpPos = MutableVec3f()
 //        updateModelMat()
         level.all {
-            with(handlers[it.x][it.y]) {
-                val list = tilesAnims.sequence[it.tile.name.lowercase()] ?: throw IllegalArgumentException("${it.tile} sequence not found")
-                atlasId.value = tilesAnims.atlasId
-                tileIndex.value = list.first()
-//                tmpPos.set(it.x.toFloat(), it.y.toFloat(), 0f)
-//                toGlobalCoords(tmpPos)
-//                spriteSystem.toLocalCoords(tmpPos)
-//                if ( tmpPos.x != pos.x || tmpPos.y != pos.y ) {
-//                    pos.x = tmpPos.x
-//                    pos.y = tmpPos.y
-//                    onPosUpdated()
-//                }
-//                println("${it.tile.name.lowercase()} $tileIndex")
-            }
+            onTileUpdate(it)
         }
     }
 

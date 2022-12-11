@@ -1,0 +1,10 @@
+{
+    "sequence":
+    {
+        "digHoleLeft":      [10, 17, 24, 31, 38, 23],
+        "digHoleRight":     [10, 17, 24, 31, 38, 23],
+        "digHoleLeftBase":  [ 7,  7, 14, 14, 21, 21, 28, 28, 35, 35, 23],
+        "digHoleRightBase": [ 7,  7, 14, 14, 21, 21, 28, 28, 35, 35, 23],
+        "fillHole":     { "durations": [157, 2, 2, 2, 2, 2, 1], "frames": [23, 36, 29, 22, 15, 8, 0] }
+    }
+}

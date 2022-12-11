@@ -1,13 +1,11 @@
-{	"geom": { "cols": 7, "rows": 5 },
+{	"geom": { "cols": 7, "rows": 6 },
 	"frames": {
-		"solid": 0,
-		"block": 1,
-		"hladder": 2,
-		"empty": 3,
-		"gold": 4,
-		"ladder": 5,
-		"bar": 6,
-		"trap": 7,
-		"ground": 8
+		"solid": 1,
+		"block": 0,
+		"hladder": 5,
+		"empty": 23,
+		"bar": 3,
+		"trap": 4,
+		"ground": 0
 	}
 }
