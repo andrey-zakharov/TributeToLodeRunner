@@ -21,7 +21,6 @@ import me.az.app.states.DebugState
 import me.az.ilode.Controllable
 import me.az.ilode.START_HEALTH
 import me.az.ilode.Tile
-import me.az.scenes.HiScoreScene
 import me.az.scenes.height
 import me.az.scenes.width
 import me.az.utils.*
@@ -69,7 +68,7 @@ enum class AppState {
     MAINMENU, RUNGAME, EXIT, SCORES, DEBUG
 }
 
-class ScoresState(private val app: App) : StackedState<AppState, App>(AppState.SCORES) {
+/*class ScoresState(private val app: App) : StackedState<AppState, App>(AppState.SCORES) {
     var scoresScreen: Scene? = null
     init {
         onEnter {
@@ -87,7 +86,7 @@ class ScoresState(private val app: App) : StackedState<AppState, App>(AppState.S
 
 
     }
-}
+}*/
 
 class ExitState(private val app: App) : StackedState<AppState, App>(AppState.EXIT) {
     init {
