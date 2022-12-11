@@ -105,6 +105,11 @@ class ActingList<CONTEXT>(
         return actions.remove(element)
     }
 
+    override fun clear() {
+        fresh.clear()
+        actions.clear()
+    }
+
     fun delayed(n: Int, cb: CONTEXT.() -> Iterable<Act<CONTEXT>>?) = Delayed(n, cb)
 }
 

@@ -176,7 +176,7 @@ open class GameScene(val game: Game,
     }
 
     fun SpriteSystem.textView(text: MutableStateValue<String>, init: TextView.() -> Unit = {})
-        = TextView(this, text, cfg.atlases[cfg.atlasIdByName["text"]!!], init)
+        = TextView(this, text, cfg.atlases[cfg.atlasIdByName["text"]!!], init = init)
     fun SpriteSystem.textView(text: String, init: TextView.() -> Unit = {})
         = textView( mutableStateOf(text), init)
 

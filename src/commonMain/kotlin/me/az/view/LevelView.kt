@@ -6,6 +6,7 @@ import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.Mat4f
 import de.fabmax.kool.math.randomI
 import de.fabmax.kool.modules.audio.WavFile
+import de.fabmax.kool.pipeline.RenderPass
 import de.fabmax.kool.scene.Group
 import de.fabmax.kool.util.Time
 import de.fabmax.kool.util.logE
@@ -139,8 +140,8 @@ class LevelView(
     }
 
     fun fullRefresh() {
-//        val tmpPos = MutableVec3f()
-//        updateModelMat()
+        acting.clear()
+
         level.all {
             onTileUpdate(it)
         }
@@ -155,31 +156,22 @@ class LevelView(
         updateModelMat()
         //    addDebugAxis()
 
-        game.onPlayGame += { g, _ ->
-            // straight and forward updating views.
-            // writing to buffer by callbacks does not work /from first attempt/.
-            spriteSystem.dirty = true
-            acting.update(Time.deltaT)
-
-            // WHO PLAYS ANIMS
-        }
+        game.onPlayGame += ::onPlayGame
         level.onTileUpdate(::onTileUpdate)
         fullRefresh()
 
         +runnerView
         game.onLevelStart += onLevelStart
         onLevelStart(game.level!!)
+    }
 
-/* ??       +colorMesh {
-            generate { rect {
-                size.set(100f, 100f)
-            } }
-            geometry[0].color.set(Color.DARK_BLUE)
-            geometry[1].color.set(Color.GREEN)
-            geometry[2].color.set(Color.LIGHT_YELLOW)
-            shader = unlitShader { useStaticColor(Color.GREEN) }
-        }*/
-        //logd { "init level px=${widthInPx}x${heightInPx}" }
+    private fun onPlayGame(g: Game, t: Any?) {
+        // straight and forward updating views.
+        // writing to buffer by callbacks does not work /from first attempt/.
+        acting.update(Time.deltaT)
+        spriteSystem.dirty = true
+
+        // WHO PLAYS ANIMS
     }
 
     override fun dispose(ctx: KoolContext) {
@@ -187,6 +179,7 @@ class LevelView(
         level.unsubTileUpdate(::onTileUpdate)
         spriteSystem.sprites.removeAll( handlers.flatten() )
         game.onLevelStart -= onLevelStart
+        game.onPlayGame -= ::onPlayGame
     }
 
 }

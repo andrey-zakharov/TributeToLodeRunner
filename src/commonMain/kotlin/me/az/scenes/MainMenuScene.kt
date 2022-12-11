@@ -125,6 +125,10 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
 
         val levelHeight = map.size
         val levelWidth = map.first().length
+        // in level's space
+        // 0 -> x
+        // |
+        // V y
         val leftCol = 2
         val rightCol = 6
         val dy = 2
@@ -264,17 +268,12 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
     private val runnerPosString = mutableStateOf("${game.runner.x} x ${game.runner.y}")
 
     private fun setupStaticLabels() {
-        val tmp = MutableVec3d()
-        levelView?.run {
+        levelView?.let { view ->
             staticLabels.forEach {
-                addNode(
+                view.addNode(
                     spriteSystem.textView(it.text) {
-                        tmp.set(it.x.toDouble(), it.y.toDouble(), 0.0)
-                        this@run.toGlobalCoords(tmp)
-                        //spriteSystem.toLocalCoords(tmp)
-                        translate(tmp.x, tmp.y , 0.0)
+                        translate(it.x.toDouble(), it.y.toDouble(), 0.0)
                         scale(0.5f, 0.5f, 1f)
-
                     }
                 )
             }
@@ -282,17 +281,11 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
     }
 
     private fun setupCommands() {
-        val tmp = MutableVec3d()
         commands.filterIsInstance<LabeledMenuCommand>().forEach {
             //arranging to level coords
             levelView?.addNode(
                 spriteSystem.textView(it.label) {
-                    tmp.set((it.pos.x + it.labelDelta.x).toDouble(),
-                        (it.pos.y + it.labelDelta.y).toDouble(), 0.0)
-//                                updateModelMat()
-                    levelView?.toGlobalCoords(tmp)
-//                                spriteSystem.toLocalCoords(tmp)
-                    translate( tmp.x, tmp.y, 0.0)
+                    translate( (it.pos.x + it.labelDelta.x).toDouble(), (it.pos.y + it.labelDelta.y).toDouble(), 0.0)
                 }
             )
         }
@@ -322,7 +315,7 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
                     val version = "$Version by Andrey Zakharov"
                     +uiSpriteSystem.textView(version) {
 //                        translate(10f, currentSpriteSet.value.tileHeight.toFloat() / 2f , 0f)
-                        scale(1f / 2f, 1f / 2f, 1f)
+                        scale(1f / 3f, 1f / 3f, 1f)
                         translate(-(version.length/ 2f), 0f, 0f)
                     }
 

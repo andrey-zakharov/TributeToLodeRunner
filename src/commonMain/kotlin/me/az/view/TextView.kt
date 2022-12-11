@@ -11,6 +11,7 @@ class TextView (
     private val spriteSystem: SpriteSystem,
     private val text: MutableStateValue<String>,
     private val fontAtlas: ImageAtlas,
+    private val defaultBgAlpha: Float = 0.75f,
     init: TextView.() -> Unit = {}
 ): Group() {
     private val chars = mutableListOf<SpriteInstance>()
@@ -30,15 +31,11 @@ class TextView (
         onUpdate += {
             if (dirty) {
                 refresh()
+                dirty = false
             }
         }
         init()
-        // add pads
-
-        refresh()
-        //addDebugAxis()
     }
-
 
     // totally custom
     companion object {
@@ -61,7 +58,8 @@ class TextView (
     }
 
     private fun rebuildSprites(): Iterable<SpriteInstance> {
-        logd { "building sprites from \"${text.value}\""}
+        updateModelMat()
+//        logd { "building sprites from \"${text.value}\" ${modelMat.dis()}"}
         return text.value.mapIndexed { index, c ->
             //spriteSystem.toLocalCoords(tmpPos)
             spriteSystem.sprite(
@@ -69,27 +67,28 @@ class TextView (
                 modelMat = Mat4f().set(getCoords(index)), // copy
                 tileIndex = fontMap[c.lowercaseChar()] ?: fallbackChar,
             ).also {
-                it.bgAlpha.set(0.5f)
+                it.bgAlpha.set(defaultBgAlpha)
             }
         }
     }
 
     private fun getCoords(x: Int): Mat4d {
         tmpMat.set(modelMat)
-        tmpMat.translate(x.toFloat(), 0f, 0f)
+            .translate(x.toFloat(), 0f, 0f)
+            .scale(1.0, -1.0, 1.0)
         return tmpMat
     }
 
     private fun refresh() {
         updateModelMat()
-        if ( chars.size != text.value.length ) {
+        //if ( chars.size != text.value.length ) {
             chars.forEach { it.unbind() }
             //rebuild array
             spriteSystem.sprites.removeAll(chars.toSet())
             spriteSystem.dirty = true
             chars.clear()
             chars.addAll(rebuildSprites())
-        } else {
+        /*} else {
             // update pos
             //logd { "updating pos for \"${text.value}\"" }
             chars.forEachIndexed { index, spriteInstance ->
@@ -100,10 +99,8 @@ class TextView (
                 // huge hack atm
                 spriteSystem.dirty = true
             }
-        }
+        }*/
         // refresh until texture loads hack
-        dirty = false
-
     }
 
     private var dirty = true
