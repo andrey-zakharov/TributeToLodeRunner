@@ -1,16 +1,8 @@
 package me.az.ilode
 
-import SoundPlayer
 import de.fabmax.kool.math.MutableVec2i
 import de.fabmax.kool.math.Vec2i
 import me.az.utils.*
-
-const val TILE_WIDTH    = 20
-const val TILE_HEIGHT   = 22
-const val W4 = TILE_WIDTH / 4 //10, 7, 5,
-const val H4 = TILE_HEIGHT / 4 //11, 8, 5,
-const val W2 = TILE_WIDTH / 2 //20, 15, 10,
-const val H2 = TILE_HEIGHT / 2 //20, 15, 10,
 
 // remnants
 enum class Action {
@@ -55,6 +47,13 @@ sealed class ActorEvent {
 // diverge by bool features
 sealed class Actor(val game: Game) : Controllable {
 
+    private val tileWidth get() = game.state.spriteMode.value.tileWidth
+    private val tileHeight get() = game.state.spriteMode.value.tileHeight
+    val W4 get() = tileWidth / 4 //10, 7, 5,
+    val H4 get() = tileHeight / 4 //11, 8, 5,
+    val W2 get() = tileWidth / 2 //20, 15, 10,
+    val H2 get() = tileHeight / 2 //20, 15, 10,
+
     open val fsm by lazy {
         val stopState = ActorState.StopState(this)
         buildStateMachine(stopState.name) {
@@ -80,8 +79,8 @@ sealed class Actor(val game: Game) : Controllable {
     var offset = MutableVec2i(Vec2i.ZERO)
     val level get() = game.level!!
     // shortcuts
-    val absolutePosX get() = block.x * TILE_WIDTH + offset.x
-    val absolutePosY get() = block.y * TILE_HEIGHT + offset.y
+    val absolutePosX get() = block.x * tileWidth + offset.x
+    val absolutePosY get() = block.y * tileHeight + offset.y
     val x get() = block.x
     val y get() = block.y
     val ox get() = offset.x
@@ -240,7 +239,7 @@ sealed class Actor(val game: Game) : Controllable {
                 // move to common checks? and callback tileChanged?
                 if ( oy > H2 ) { //move to y+1 position
                     block.y++
-                    offset.y -= TILE_HEIGHT
+                    offset.y -= tileHeight
                 }
 
                 null
@@ -406,6 +405,7 @@ sealed class Actor(val game: Game) : Controllable {
                     } else if ( anyKeyPressed ) { // all other
                         actor.nextMove = Action.ACT_NONE // stop
                     }
+                    frameIndex ++
                     null
                 }
 
@@ -475,7 +475,7 @@ sealed class Actor(val game: Game) : Controllable {
             }
 
             init {
-                onUpdate {
+                onUpdate(0) {
                     val delta = availableSpaceLeft
                     offset.x -= delta
                     centerY(delta / yMove.toFloat())
@@ -485,7 +485,7 @@ sealed class Actor(val game: Game) : Controllable {
                     }
                     if (ox < -W2) { //move to x-1 position
                         block.x--
-                        offset.x += TILE_WIDTH
+                        offset.x += tileWidth
                         if ( this is Guard && inHole ) inHole = false
                     }
                     null // ignored
@@ -505,7 +505,7 @@ sealed class Actor(val game: Game) : Controllable {
                     }
                     if ( ox > W2 ) { //move to x+1 position
                         block.x++
-                        offset.x -= TILE_WIDTH
+                        offset.x -= tileWidth
                         if ( this is Guard && inHole ) inHole = false
                     }
                     null
@@ -575,7 +575,7 @@ sealed class Actor(val game: Game) : Controllable {
                     }
                     if ( oy < -H2 ) { //move to y-1 position
                         block.y--
-                        offset.y += TILE_HEIGHT
+                        offset.y += tileHeight
                     }
 
                     null

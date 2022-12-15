@@ -251,6 +251,14 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
         ) {
             startnewGame = true
         }
+
+        val version = "$Version by Andrey Zakharov"
+        +uiSpriteSystem.textView(version) {
+//                        translate(10f, currentSpriteSet.value.tileHeight.toFloat() / 2f , 0f)
+            scale(1f / 3f, 1f / 3f, 1f)
+            translate(-(version.length/ 2f), 0f, 0f)
+            scale(1f, -1f, 1f)
+        }
     }
 
     open class MenuCommand(
@@ -311,14 +319,6 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
             when(name) {
                 GameState.GAME_NEW_LEVEL -> {
                     addLevelView(ctx, game.level!!)
-
-                    val version = "$Version by Andrey Zakharov"
-                    +uiSpriteSystem.textView(version) {
-//                        translate(10f, currentSpriteSet.value.tileHeight.toFloat() / 2f , 0f)
-                        scale(1f / 3f, 1f / 3f, 1f)
-                        translate(-(version.length/ 2f), 0f, 0f)
-                    }
-
                     setupStaticLabels()
                     setupCommands()
                 }

@@ -1,12 +1,10 @@
 package me.az.view
 
 import AnimationFrames
-import ViewSpec
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.Mat4f
 import de.fabmax.kool.math.randomI
 import de.fabmax.kool.modules.audio.WavFile
-import de.fabmax.kool.pipeline.RenderPass
 import de.fabmax.kool.scene.Group
 import de.fabmax.kool.util.Time
 import de.fabmax.kool.util.logE
@@ -14,13 +12,15 @@ import me.az.ilode.*
 import me.az.utils.Act
 import me.az.utils.ActingList
 import me.az.utils.ActionStatus
+import me.az.utils.logd
 
 class AnimateSprite(
     val sprite: SpriteInstance,
     private val sequence: List<Int>,
     private val loop: Boolean = false,
+    initialCounter: Int = 0 // for delays
 ) : Act<LevelView>() {
-    private var counter = 0
+    private var counter = initialCounter
     init {
 
         onUpdate {
@@ -42,7 +42,6 @@ class LevelView(
     private val game: Game,
     private val level: GameLevel,
 
-    val conf: ViewSpec,
     private val tilesAnims: AnimationFrames,
     private val runnerAnims: AnimationFrames,
     private val guardAnims: AnimationFrames,
@@ -51,8 +50,7 @@ class LevelView(
 ) : Group() {
 
     val runnerView by lazy {
-        ActorView( game.runner, spriteSystem, runnerAnims,
-            conf.tileSize, soundsBank = soundsBank)
+        ActorView( game.runner, spriteSystem, runnerAnims, soundsBank = soundsBank)
     }
 
     private val onLevelStart = { gameLevel: GameLevel ->
@@ -66,8 +64,7 @@ class LevelView(
         }
 
         game.guards.forEach {
-            +ActorView(it, spriteSystem, guardAnims,
-                conf.tileSize, "guard", soundsBank)
+            +ActorView(it, spriteSystem, guardAnims,"guard", soundsBank)
         }
     }
 
@@ -104,11 +101,7 @@ class LevelView(
         atlasId.set( tilesAnims.atlasId )
         tileIndex.set(list.first())
         if (list.size > 1) {
-            if ( delay > 0 ) {
-                acting.add( acting.delayed(delay) { listOf(AnimateSprite(this@replaceAnim, list, loop = true)) } )
-            } else {
-                acting.add(AnimateSprite(this, list, loop = true))
-            }
+            acting.add(AnimateSprite(this, list, loop = true, initialCounter = delay))
         }
     }
 
@@ -128,7 +121,7 @@ class LevelView(
 
     private fun onTileUpdate(ev: LevelCellUpdate) {
         val (x, y, v) = ev
-        //logd { "LevelVIew:: onTileUpdate $x, $y, $v" }
+//        logd { "LevelVIew:: onTileUpdate $x, $y, $v" }
         with(handlers[x][y]) {
             when(v) {
                 TileLogicType.DIGGINGHOLE -> startDigAnims(x, y)
@@ -137,6 +130,7 @@ class LevelView(
                 else -> replaceAnim(v.name.lowercase())
             }
         }
+        spriteSystem.dirty = true
     }
 
     fun fullRefresh() {
@@ -170,7 +164,6 @@ class LevelView(
         // writing to buffer by callbacks does not work /from first attempt/.
         acting.update(Time.deltaT)
         spriteSystem.dirty = true
-
         // WHO PLAYS ANIMS
     }
 

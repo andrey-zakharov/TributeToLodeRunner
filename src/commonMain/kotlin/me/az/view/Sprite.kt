@@ -12,6 +12,9 @@ import de.fabmax.kool.modules.ui2.MutableStateValue
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.*
+import de.fabmax.kool.scene.animation.Animator
+import de.fabmax.kool.scene.animation.InterpolatedFloat
+import de.fabmax.kool.scene.animation.InverseSquareAnimator
 import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.Float32Buffer
 import me.az.utils.format
@@ -433,8 +436,13 @@ class SpriteSystem(
                             `if` ( atlasId eq c.const ) {
                                 val texel = fetchSprite(c, uv, atlasTexs)
                                 `if`(texel.a lt 1f.const) {
-                                    //`if`(alpha.output gt 0f.const) {
-                                    colorOutput(float3Value(0f.const, 0f.const, 0f.const), alpha.output)
+                                    `if`(alpha.output eq 0f.const) {
+//                                        colorOutput(Color.MAGENTA.const)
+                                        discard()
+                                    }.`else` {
+                                        // bg
+                                        colorOutput(float3Value(0f.const, 0f.const, 0f.const), alpha.output)
+                                    }
 //                                    colorOutput(Color.GREEN.const)
                                 }.`else` {
                                     colorOutput(texel)

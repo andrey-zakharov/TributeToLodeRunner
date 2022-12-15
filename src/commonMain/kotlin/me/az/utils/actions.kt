@@ -70,9 +70,10 @@ class ActingList<CONTEXT>(
     fun update(dt: Float) {
         // start new
         while(fresh.isNotEmpty()) {
-            val a = fresh.pop()!!
-            a.enter(context)
-            actions.push(a)
+            fresh.pop()?.let { a ->
+                a.enter(context)
+                actions.push(a)
+            }
         }
 
         val i = actions.iterator()

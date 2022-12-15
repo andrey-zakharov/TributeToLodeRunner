@@ -139,6 +139,7 @@ open class StackedState<STATEKEY, CONTEXT>(val name: STATEKEY) {
 
     // return next state obj or self
     fun onUpdate(action: CONTEXT.() -> Any?) = stateActions.push(action)
+    fun onUpdate(index: Int, action: CONTEXT.() -> Any?) = stateActions.add(index, action)
     open fun suspendState() = exitState()
     open fun wakeupState(previous: STATEKEY) = enterState(previous)
 

@@ -12,6 +12,9 @@ import de.fabmax.kool.modules.audio.synth.Oscillator
 import de.fabmax.kool.modules.audio.synth.SampleNode
 import de.fabmax.kool.modules.audio.synth.Wave
 import de.fabmax.kool.scene.Node
+import de.fabmax.kool.scene.animation.Animator
+import de.fabmax.kool.scene.animation.InterpolatedFloat
+import de.fabmax.kool.scene.animation.InverseSquareAnimator
 import de.fabmax.kool.util.logW
 import me.az.ilode.Actor
 import me.az.ilode.ActorEvent
@@ -25,10 +28,12 @@ class ActorView(
     private val actor: Actor,
     private val spriteSystem: SpriteSystem,
     private val anims: AnimationFrames,
-    val tileSize: Vec2i,
     name: String? = null,
     soundsBank: Map<Sound, WavFile>
 ) : Node(name)/* : Sprite3d(tileSize, atlas.tex.value, atlas.getTileSize(), name)*/ {
+
+    private val scaleX get() = spriteSystem.transform[0, 0].toFloat()
+    private val scaleY get() = spriteSystem.transform[1, 1].toFloat()
 
     private val fallSound by lazy { FallSound() }
     private val clips = mapOf(
@@ -47,7 +52,7 @@ class ActorView(
 
     private fun updateFallFreq() {
         fallSound.height =
-            actor.absolutePosY.toFloat() / (actor.level.height * tileSize.y.toFloat())
+            actor.absolutePosY.toFloat() / (actor.level.height * scaleY)
 
     }
 
@@ -55,12 +60,30 @@ class ActorView(
 
     private fun Actor.levelPos(): Mat4f {
         tmpPos.set(modelMat).translate(
-            actor.x + actor.ox / tileSize.x.toFloat(),
-            actor.y + actor.oy / tileSize.y.toFloat(),
+            actor.x + actor.ox / scaleX,
+            actor.y + actor.oy / scaleY,
             0f
         ).scale(1f, -1f, 1f)
+            .translate(0.5f, 0.5f, 1f)
+            .scale(scaleAnimator.value.value)
+            .translate(-0.5f, -0.5f, -0.5f)
         //spriteSystem.toLocalCoords(tmpPos)
         return tmpPos
+    }
+
+    // for blinking
+    private val scaleAnimator = InverseSquareAnimator(InterpolatedFloat(0f, 1f)).apply {
+        duration = 0.2f
+        repeating = Animator.REPEAT_TOGGLE_DIR
+    }
+    fun startBlink() {
+        scaleAnimator.speed = 1f
+        scaleAnimator.progress = 0f
+    }
+    fun stopBlink() {
+        scaleAnimator.speed = 0f
+        scaleAnimator.progress = 1f
+        scaleAnimator.value.value = 1f
     }
 
     // when view created, there is no parent, and modelMat is wrong (zeroed)
@@ -68,9 +91,14 @@ class ActorView(
 
     init {
 
+        stopBlink()
 //        addDebugAxis()
         onUpdate += {
-           anims.sequence[actor.action.id]?.run {
+            if ( scaleAnimator.speed != 0f ) {
+                scaleAnimator.tick(it.ctx)
+                spriteSystem.dirty = true
+            }
+            anims.sequence[actor.action.id]?.run {
                 // back hack
                 if ( actor.sequenceSize != size ) actor.sequenceSize = size
                 // CPU waste
@@ -107,7 +135,7 @@ class ActorView(
                     }
                 }
                 is ActorEvent.StopSound -> {
-                    logd { "stopping sound '${it.soundName}'" }
+//                    logd { "stopping sound '${it.soundName}'" }
                     if ( !clips.containsKey(it.soundName) ) {
                         logW { "no sound ${it.soundName}" }
                     } else {

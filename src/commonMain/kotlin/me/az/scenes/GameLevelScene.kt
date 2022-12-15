@@ -60,8 +60,8 @@ class GameLevelScene (
                 it.transform.setTranslate( tmpPos.toVec3d() )
 
                 // -1.0 zoom glitches?
-                val scale = scaleAnim.tick(ev.ctx) / conf.tileSize.y
-                it.scale(1.0 / conf.tileSize.x, scale.toDouble()
+                val scale = scaleAnim.tick(ev.ctx) / appContext.spriteMode.value.tileHeight
+                it.scale(1.0 /  appContext.spriteMode.value.tileWidth, scale.toDouble()
                         //hack
                          * it.transform[1, 1].sign, 1.0)
 

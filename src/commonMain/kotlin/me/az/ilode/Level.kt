@@ -4,7 +4,9 @@ import AnimationFrames
 import de.fabmax.kool.math.MutableVec2i
 import de.fabmax.kool.math.Vec2i
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.az.utils.*
 import org.mifek.wfc.core.Cartesian2DWfcAlgorithm
 import org.mifek.wfc.datastructures.IntArray2D
@@ -219,6 +221,7 @@ fun generateGameLevel(
                     ) return@forEachIndexed
                     val tile = Tile.values()[cellIdx]
 
+
                     act[x][y] = tile.act
                     base[x][y] = tile.base
                     redrawCell(x, y)
@@ -230,6 +233,7 @@ fun generateGameLevel(
 //                    ]!!)
                 }
             }
+
         }
     }
 
@@ -382,7 +386,6 @@ class GameLevel(
             val ev = LevelCellUpdate(x, y, visualSprite ?: exportCellData(x, y, mode))
             cbs.forEach { it(ev) }
         }
-        //dirty = true
     }
 
     enum class ViewMode {
@@ -482,6 +485,7 @@ class GameLevel(
     }
     fun takeGold(x: Int, y: Int) {
         base[x][y] = TileLogicType.EMPTY
+        act[x][y] = TileLogicType.EMPTY
         redrawCell(x, y)
     }
 

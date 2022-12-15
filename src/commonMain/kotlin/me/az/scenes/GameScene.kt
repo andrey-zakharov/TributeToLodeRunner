@@ -9,15 +9,16 @@ import ImageAtlasSpec
 import RunnerController
 import SoundPlayer
 import TileSet
-import ViewSpec
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
-import de.fabmax.kool.math.Mat4f
-import de.fabmax.kool.math.Vec2i
+import de.fabmax.kool.math.*
+import de.fabmax.kool.math.spatial.BoundingBox
 import de.fabmax.kool.modules.ui2.MutableStateValue
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.pipeline.FullscreenShaderUtil.generateFullscreenQuad
+import de.fabmax.kool.pipeline.shading.UnlitShader
+import de.fabmax.kool.pipeline.shading.unlitShader
 import de.fabmax.kool.scene.*
 import de.fabmax.kool.scene.animation.InterpolatedFloat
 import de.fabmax.kool.scene.animation.LinearAnimator
@@ -27,7 +28,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.az.ilode.Game
 import me.az.ilode.GameLevel
-import me.az.ilode.TileLogicType
+import me.az.ilode.GameState
 import me.az.ilode.anyKeyPressed
 import me.az.shaders.CRTShader
 import me.az.shaders.MaskShader
@@ -41,7 +42,6 @@ open class GameScene(val game: Game,
                      val assets: AssetManager,
                      val appContext: AppContext,
                      private val visibleSize: Vec2i = Vec2i(28, 16), // in tiles only level, but + ground + status?
-                     val conf: ViewSpec = ViewSpec(tileSize = Vec2i(game.state.spriteMode.value.tileWidth, game.state.spriteMode.value.tileHeight)),
                      name: String?,
 ) : AsyncScene(name) {
 
@@ -81,14 +81,13 @@ open class GameScene(val game: Game,
 
     private val job = Job()
     protected val scope = CoroutineScope(job)
-    private val orthoCam get() = camera as OrthographicCamera
+    private val outerCamera get() = camera as OrthographicCamera
 
     init {
         appContext.spriteMode.onChange {
             scope.launch {
                 reload(it)
-                //game.level?.run { dirty = true }
-                //levelView?.fullRefresh()
+                levelView?.fullRefresh()
             }
         }
 
@@ -100,9 +99,20 @@ open class GameScene(val game: Game,
             projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
         }
         mainRenderPass.clearColor = Color.BLACK
+
+        game.onStateChanged += {
+            when(this.name) {
+                GameState.GAME_START -> {
+                    levelView!!.runnerView.startBlink()
+                }
+                GameState.GAME_RUNNING -> {
+                    levelView!!.runnerView.stopBlink()
+                }
+                else -> {}
+            }
+        }
     }
 
-    protected val currentSpriteSet = mutableStateOf(ImageAtlasSpec(appContext.spriteMode.value))
     private val atlasOrder = listOf("tiles", "runner", "guard", "text")
     protected val atlases = atlasOrder.map { ImageAtlas(it) }
     protected val tilesAtlas = atlases[atlasOrder.indexOf("tiles")]
@@ -125,7 +135,17 @@ open class GameScene(val game: Game,
                     //update pos
                     // under level view - level view posed by world coords aligned to top edge of camera's view
                     // but we need here local coords 'in tiles' because of uiSprite is scaled.
-                    tile.modelMat.setIdentity().translate(index.toFloat() - game.level!!.width/2f, 0.4f, 0f)
+                    with(tile.modelMat) {
+                        set(
+                            Mat4d()
+                                .translate(index.toFloat() - game.level!!.width /2f, 1f, 0f)
+                                .mul(mask!!.modelMat)
+                                .translate(-off!!.camera.position.x, -off!!.camera.position.y, 0f)
+
+//                                .scale(1.0, -1.0, 1.0)
+                        )
+                        println(tile.modelMat.dump())
+                    }
                         //.translate( -levelWidth / 2f, 0f, 0f)
                 }
             }
@@ -165,8 +185,6 @@ open class GameScene(val game: Game,
 
         // sequences could changed from tileset to tileset
         refreshSequences()
-
-        currentSpriteSet.set(ImageAtlasSpec(appContext.spriteMode.value))
     }
 
     override suspend fun loadResources(assets: AssetManager, ctx: KoolContext) = with(assets) {
@@ -188,14 +206,15 @@ open class GameScene(val game: Game,
 
         appContext.spriteMode.onChange {
             updateScales(it)
+            outerCamera.top = off!!.height + appContext.spriteMode.value.tileHeight * 2f
         }
 
         +uiSpriteSystem
         spriteSystem.dirty = true
         uiSpriteSystem.dirty = true
 
-        game.reset() // start game
         updateScales()
+        game.reset() // start game
     }
 
     private val groundTiles: List<SpriteInstance> by lazy {
@@ -225,57 +244,61 @@ open class GameScene(val game: Game,
             spriteSystem,
             game,
             level,
-            conf,
             tilesAnims,
             runnerAnims,
             guardAnims,
             sounds.bank
         )
 
-/*        val textAtlas = spriteSystem.cfg.atlasIdByName["text"]!!
-        for (i in 0 until 10 ) {
-            spriteSystem.sprite(
-                atlasId = textAtlas,
-                pos = Vec2f(i.toFloat(), 0f),
-                tileIndex = i
-            )
-            spriteSystem.sprite(
-                atlasId = textAtlas,
-                pos = Vec2f(i.toFloat(), 1f),
-                tileIndex = i + 1
-            )
-            spriteSystem.sprite(
-                atlasId = textAtlas,
-                pos = Vec2f(-i.toFloat(), 1f),
-                tileIndex = i + 2
-            )
-        }*/
         levelView?.run {
             // draw by sprite system, but still need updates
             this@GameScene += this
-            off = OffscreenRenderPass2d(spriteSystem, renderPassConfig {
-                this.name = "bg"
-                setSize(levelWidth, levelHeight)
-                setDepthTexture(false)
-                addColorTexture {
-                    colorFormat = TexFormat.RGBA
-                    minFilter = FilterMethod.LINEAR
-                    magFilter = FilterMethod.LINEAR
-                }
-            })
         }
 
-        off?.let { pass ->
-            pass.camera = App.createCamera(
-//                appContext.spriteMode.value.screenWidth, appContext.spriteMode.value.screenHeight
-                pass.width, pass.height
-            ).apply {
-                projCorrectionMode = Camera.ProjCorrectionMode.OFFSCREEN
+        off = OffscreenRenderPass2d(spriteSystem, renderPassConfig {
+            this.name = "bg"
+            setSize(levelWidth, levelHeight)
+            setDepthTexture(false)
+            addColorTexture {
+                colorFormat = TexFormat.RGBA
+                minFilter = FilterMethod.LINEAR
+                magFilter = FilterMethod.LINEAR
             }
+            println("offscreen pass size: $width x $height")
+        }).also { pass ->
             pass.clearColor = Color(0.00f, 0.00f, 0.00f, 0.00f)
+/*                val RENDER_SIZE_FACTOR = 1f
+                onRenderScene += {ctx ->
+                    val mapW = (mainRenderPass.viewport.width * RENDER_SIZE_FACTOR).toInt()
+                    val mapH = (mainRenderPass.viewport.height * RENDER_SIZE_FACTOR).toInt()
+
+                    if (mapW > 0 && mapH > 0 && (mapW != pass.width || mapH != pass.height)) {
+//                        pass.resize(mapW, mapH, ctx)
+                    }
+                }*/
+            val innerCamera = OrthographicCamera(
+//                appContext.spriteMode.value.screenWidth, appContext.spriteMode.value.screenHeight
+
+            ).apply {
+                val passWidth = pass.width
+                val passHeight = pass.height
+                projCorrectionMode = Camera.ProjCorrectionMode.OFFSCREEN
+                isClipToViewport = false
+                isKeepAspectRatio = true
+                val hw = passWidth / 2f
+                top = passHeight * 1f
+                bottom = 0f
+                left = -hw
+                right = hw
+                clipFar = 10f
+                clipNear = 0.1f
+            }
+
+
+            pass.camera = innerCamera
             addOffscreenPass(pass)
 
-            cameraController = CameraController(pass.camera as OrthographicCamera, ctx = ctx)
+            cameraController = CameraController(innerCamera, ctx = ctx, viewGroup = this@GameScene.spriteSystem)
 
 //            crt = OffscreenRenderPass2d(Group(), renderPassConfig {
 //                setDynamicSize()
@@ -311,7 +334,34 @@ open class GameScene(val game: Game,
 
         cameraController?.run {
             this@GameScene += this
-            levelView?.also { startTrack(game, it, it.runnerView) }
+
+            levelView!!.updateModelMat()
+            spriteSystem.updateModelMat()
+
+            val borderZone = with(cameraToControl) {
+                val scaledMin = MutableVec3f(-0f, -0f, 0f)
+                val scaledMax = MutableVec3f(game.level!!.width.toFloat(), game.level!!.height.toFloat(), 0f)
+                levelView!!.toGlobalCoords(scaledMin)
+                spriteSystem.toGlobalCoords(scaledMin)
+                levelView!!.toGlobalCoords(scaledMax)
+                spriteSystem.toGlobalCoords(scaledMax)
+                println(scaledMin)
+                println(scaledMax)
+
+                val halfWidth = this.width / 2f
+                val halfHeight = this.height / 2f
+
+                BoundingBox().apply {
+                    add(listOf(
+                        Vec3f( max(0f, scaledMin.x + halfWidth), max(0f, scaledMax.y - halfHeight), 0f ),
+                        Vec3f( min(0f, scaledMax.x - halfWidth),  min(0f, scaledMin.y + halfHeight), 0f),
+                    ))
+                }
+            }
+
+            println(borderZone)
+
+            levelView?.also { startTrack(game, borderZone, it.runnerView.instance.modelMat) }
         }
 
         // minimap TBD
@@ -323,7 +373,8 @@ open class GameScene(val game: Game,
 
         //mask
         mask = group {
-            translate(0f, orthoCam.height - levelHeight, 0f)
+            // align top
+            // translate(0f, outerCamera.height - levelHeight, 0f)
             +textureMesh {
                 generate {
                     rect {
@@ -332,14 +383,17 @@ open class GameScene(val game: Game,
                         mirrorTexCoordsY()
                     }
                 }
+
                 shader = MaskShader { color { textureColor((crt?:off!!).colorTexture) } }
+//                     unlitShader { useColorMap(off!!.colorTexture) }
+//                     unlitShader { useStaticColor(Color.RED) }
                 onUpdate += {
 
-                    //setIdentity()
+                    setIdentity()
                     //(ctx.windowHeight - visibleHeight).toFloat()
-                    //translate(0f, appContext.spriteMode.value.screenHeight - visibleHeight.toFloat(), 0f)
+                    translate(0f, appContext.spriteMode.value.tileHeight * 2f, 0f)
 
-                    (shader as MaskShader).visibleRadius = shatterRadiusAnim.tick(it.ctx)
+                    (shader as? MaskShader)?.visibleRadius = shatterRadiusAnim.tick(it.ctx)
                     // hack to sync anims
                     if (shatterRadiusAnim.progress >= 1f) {
                         shatterRadiusAnim.progress = 0f
@@ -353,6 +407,7 @@ open class GameScene(val game: Game,
         }
         +mask!!
 
+        outerCamera.top = off!!.height + appContext.spriteMode.value.tileHeight * 2f
         onUpdate += ticker // start play
     }
 

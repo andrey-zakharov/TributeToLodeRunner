@@ -1,6 +1,7 @@
 package me.az.view
 
 import de.fabmax.kool.KoolContext
+import de.fabmax.kool.math.Mat4f
 import de.fabmax.kool.math.MutableVec3f
 import de.fabmax.kool.math.Vec3f
 import de.fabmax.kool.math.spatial.BoundingBox
@@ -13,6 +14,7 @@ import de.fabmax.kool.util.Viewport
 import me.az.ilode.Game
 import me.az.scenes.height
 import me.az.scenes.width
+import me.az.utils.StackedState
 
 private operator fun Vec3f.minus(position: Vec3f) = Vec3f(
     this.x - position.x,
@@ -32,7 +34,7 @@ class InterpolatedVec3f(val from: MutableVec3f, val `to`: MutableVec3f) : Interp
     }
 }
 
-class CameraController(private val cameraToControl: OrthographicCamera, name: String? = "camcontrol", val ctx: KoolContext) : Node(name) {
+class CameraController(val cameraToControl: OrthographicCamera, name: String? = "camcontrol", val ctx: KoolContext, val viewGroup: Group) : Node(name) {
 
     private val cameraPos = InterpolatedVec3f(MutableVec3f(cameraToControl.position), MutableVec3f(cameraToControl.position))
     private val cameraAnimator = InverseSquareAnimator(cameraPos).apply {
@@ -48,38 +50,28 @@ class CameraController(private val cameraToControl: OrthographicCamera, name: St
 
 //    fun calculateCamera(levelView!!, levelView!!.runnerView)
 
-    fun startTrack(game: Game, boundNode: Group, followNode: Node) {
+    fun startTrack(game: Game, boundNode: BoundingBox, followNode: Mat4f) {
         calculator = cameraCalculator(game, boundNode, followNode)
         calculator?.run { onUpdate += this }
 
-        game.onPlayGame += cameraUpdater
+        game.onPlayGame += cameraUpdaterGameTick
     }
 
     fun stopTrack(game: Game) {
         calculator?.run { onUpdate -= this }
-        game.onPlayGame -= cameraUpdater
+        game.onPlayGame -= cameraUpdaterGameTick
     }
 
-    private fun calculateCamera(boundNode: Group, followNode: Node): (viewport: Viewport) -> MutableVec3f {
-
-        val borderZone = with(cameraToControl) {
-            val scaledMin = MutableVec3f(boundNode.bounds.min)
-            val scaledMax = MutableVec3f(boundNode.bounds.max)
-            boundNode.transform.transform(scaledMin)
-            boundNode.transform.transform(scaledMax)
-
-            BoundingBox().apply {
-                add(Vec3f( scaledMin.x + this@with.width / 2f, 0f, 0f))
-                add(Vec3f( scaledMax.x - this@with.width / 2f, scaledMax.y - this@with.height, 0f))
-            }
-        }
+    private fun calculateCamera(borderZone: BoundingBox, followNode: Mat4f): (viewport: Viewport) -> MutableVec3f {
 
         return { viewport ->
-            val resultPos = MutableVec3f(followNode.globalCenter)
-            val deadZone = BoundingBox().apply {
-                add(Vec3f(-viewport.width / 4f, -viewport.height / 4f, 0f))
-                add(Vec3f(viewport.width / 4f, viewport.height / 4f, 0f))
-            }
+            val resultPos = MutableVec3f(0.5f, 0.5f, 0f) // middle of the sprite
+            followNode.transform(resultPos)
+            viewGroup.toGlobalCoords(resultPos)
+            val deadZone = BoundingBox()//.apply {
+//                add(Vec3f(-viewport.width / 4f, -viewport.height / 4f, 0f))
+//                add(Vec3f(viewport.width / 4f, viewport.height / 4f, 0f))
+//            }
 
             with(cameraToControl) {
                 //camera shift
@@ -110,7 +102,7 @@ class CameraController(private val cameraToControl: OrthographicCamera, name: St
         }
 
     }
-    private val cameraUpdater = { _: Game, _: Any? ->
+    private val cameraUpdaterGameTick = { _: Game, _: Any? ->
         with(cameraToControl) {
             position.set(cameraAnimator.tick(ctx))
             lookAt.set(position.x, position.y, 0f)
@@ -118,23 +110,23 @@ class CameraController(private val cameraToControl: OrthographicCamera, name: St
         Unit
     }
 
-    private fun cameraCalculator(game: Game, boundNode: Group, followNode: Node): (RenderPass.UpdateEvent) -> Unit {
+    private fun cameraCalculator(game: Game, boundNode: BoundingBox, followNode: Mat4f): (RenderPass.UpdateEvent) -> Unit {
 
         val calculator = calculateCamera(boundNode, followNode)
 
         return { ev: RenderPass.UpdateEvent ->
-            if (game.isPlaying) {
+            //if (game.isPlaying) {
                 val pos = calculator(ev.viewport)
                 // anim?
                 cameraPos.to.set(
-                    pos.x /*+ (ctx.inputMgr.pointerState.primaryPointer.x.toFloat() - it.viewport.me.az.view.getWidth/2) / 50f*/,
-                    pos.y /*+ (ctx.inputMgr.pointerState.primaryPointer.y.toFloat() - it.viewport.me.az.view.getHeight/2) / 50f*/,
+                    pos.x /*+ (ctx.inputMgr.pointerState.primaryPointer.x.toFloat() - ev.viewport.width/2) / 50f*/,
+                    pos.y /*+ (ctx.inputMgr.pointerState.primaryPointer.y.toFloat() - ev.viewport.height/2) / 50f*/,
                     10f
                 )
                 cameraPos.from.set(cameraPos.value)
                 cameraAnimator.speed = 1f
                 cameraAnimator.progress = 0f
-            }
+            //}
         }
     }
 

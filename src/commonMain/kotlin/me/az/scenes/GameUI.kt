@@ -1,16 +1,9 @@
 package me.az.scenes
 
-import App
 import AppContext
-import ImageAtlas
-import ImageAtlasSpec
-import ViewSpec
-import de.fabmax.kool.AssetManager
-import de.fabmax.kool.KoolContext
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.scene.Group
 import me.az.ilode.Game
-import me.az.utils.logd
 import me.az.view.SpriteSystem
 import me.az.view.TextView
 
@@ -66,17 +59,20 @@ class GameUI(
     private val livesTextView by lazy {
         TextView(spriteSystem, livesText, fontAtlas) {
             translate(-28f / 2f + 13f, 0f, 0f)
+            scale(1f, -1f, 1f)
 
         }
     }
     private val scoreTextView by lazy {
         TextView(spriteSystem, scoreText, fontAtlas) {
             translate(-28f / 2f, 0f, 0f)
+            scale(1f, -1f, 1f)
         }
     }
     private val levelTextView by lazy {
         TextView(spriteSystem, levelText, fontAtlas) {
             translate(-28f / 2f + 20f, 0f, 0f)
+            scale(1f, -1f, 1f)
         }
     }
 

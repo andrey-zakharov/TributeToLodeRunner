@@ -25,15 +25,12 @@ import me.az.scenes.height
 import me.az.scenes.width
 import me.az.utils.*
 import me.az.view.sprite2d
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
 
 val simpleTextureProps = TextureProps(TexFormat.RGBA,
-    AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE,
-    FilterMethod.NEAREST, FilterMethod.NEAREST, mipMapping = false, maxAnisotropy = 1
-)
-val simpleValueTextureProps = TextureProps(TexFormat.R,
     AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE,
     FilterMethod.NEAREST, FilterMethod.NEAREST, mipMapping = false, maxAnisotropy = 1
 )
@@ -52,14 +49,6 @@ enum class GameSpeed(val fps: Int) {
     ;
     val msByPass get() = 1000 / fps
     val dis get() = name.removePrefix("SPEED_").lowercase().replace('_', ' ')
-}
-
-class ViewSpec (
-    val tileSize: Vec2i = Vec2i(20, 22),
-    val visibleSize: Vec2i = Vec2i(28, 16) // in tiles only level, but + ground + status?
-) {
-    val visibleWidth get() = visibleSize.x * tileSize.x
-    val visibleHeight get() = visibleSize.y * tileSize.y
 }
 
 const val backgroundImageFile = "images/cover.jpg"
@@ -184,10 +173,26 @@ class App(val ctx: KoolContext, initialState: AppState = AppState.MAINMENU) {
     class GameCamera(
         private val originalWidth: Int, private val originalHeight: Int
     ) : OrthographicCamera("plain") {
+        private val originalRatio = originalWidth.toFloat() / originalHeight
         init {
             logd { "created camera $originalWidth x $originalHeight" }
         }
         override fun updateCamera(renderPass: RenderPass, ctx: KoolContext) {
+            super.updateCamera(renderPass, ctx)
+/*            if (isKeepAspectRatio ) {
+                val (width, height) = if ( renderPass.viewport.aspectRatio < originalRatio ) {
+                    val d = (renderPass.viewport.aspectRatio / originalRatio)
+                    Pair( d * originalWidth.toFloat(), originalHeight.toFloat())
+//                    Pair( renderPass.viewport.width.toFloat(), renderPass.viewport.width / originalRatio )
+                } else {
+                    Pair( originalHeight * originalRatio, originalHeight.toFloat())
+                }
+                top = height
+                bottom = 0f
+                val hw = width / 2
+                left = - hw
+                right = hw
+            }*/
 
             /* fit pixel perfect
             val maxRatioX = floor(renderPass.viewport.width / originalWidth.toFloat())
@@ -222,8 +227,6 @@ class App(val ctx: KoolContext, initialState: AppState = AppState.MAINMENU) {
             val hw = renderPass.viewport.width / 2f /  scaleX //scaleX * originalWidth.toFloat() / 2f
             right = hw
             left = -hw*/
-
-            super.updateCamera(renderPass, ctx)
         }
     }
     companion object {

@@ -1,6 +1,8 @@
 {"levels": {
   "name": "custom",
-  "total": 3,
+  "total": 4,
+  "test level 1": ["&H-$"],
+  "test level 2": ["&-H$", "HHHH"],
   "level-001": [
     "& #0000#    $    $          ",
     "###----#H########## #####   ",
