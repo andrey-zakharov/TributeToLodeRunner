@@ -23,7 +23,7 @@ enum class TileSet(
     SPRITES_ZXSPECTRUM("zxs", screenWidth = 560, screenHeight = 384),
     SPRITES_IBM("ibm", 24, 22), // has 640x400 original and 26-tiles wide levels (24x20 tiles)
     SPRITES_NEC("nec", 24, 20), // has 640x400 original and 26-tiles wide levels
-    SPRITES_NES("nes", 16, 16, 2*256, 2*240),
+    SPRITES_NES("nes", 16, 16, 256, 240),
     ;
     val dis get() = name.removePrefix("SPRITES_")
 }
