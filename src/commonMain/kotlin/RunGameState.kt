@@ -17,6 +17,7 @@ class RunGameState(private val app: App) : StackedState<AppState, App>(AppState.
     var debugScene: Scene? = null
     private val keyListeners = mutableListOf<InputManager.KeyEventListener>()
     var exit = false
+    val game = Game(app.context)
 
     enum class LocalActions(
         override val keyCode: InputSpec,
@@ -36,14 +37,19 @@ class RunGameState(private val app: App) : StackedState<AppState, App>(AppState.
             }
         }),
         EXIT(InputManager.KEY_ESC.toInputSpec(), onRelease = {
-            exit = true
+            if ( gameScene?.pauseMenu?.isShown == true ) {
+                gameScene?.pauseMenu?.hideMenu()
+                game.resumeGame()
+            } else {
+                game.pauseGame()
+                gameScene?.pauseMenu?.showMenu()
+            }
         })
     }
 
     init {
         onEnter {
             exit = false
-            val game = Game(app.context)
 
             gameScene = GameLevelScene(
                 game, app.ctx,
@@ -55,14 +61,16 @@ class RunGameState(private val app: App) : StackedState<AppState, App>(AppState.
             }
 
             app.ctx.scenes += gameScene!!
+            app.ctx.scenes += gameScene!!.pauseMenu.ui
+
             debugScene = UiScene {
                 gameScene?.setupUi(this)!!
             }
-
             keyListeners.addAll( app.ctx.inputMgr.registerActions(this, LocalActions.values().asIterable()) )
 
             game.onStateChanged += {
                 when (this.name) {
+                    GameState.GAME_OVER -> exit = true
                     GameState.GAME_OVER_ANIMATION -> app.ctx.runDelayed((app.ctx.fps * 7).toInt()) {
                         exit = true
                     }

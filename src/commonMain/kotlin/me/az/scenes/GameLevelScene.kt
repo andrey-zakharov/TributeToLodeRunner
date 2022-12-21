@@ -11,6 +11,7 @@ import de.fabmax.kool.pipeline.Texture2d
 import de.fabmax.kool.scene.OrthographicCamera
 import de.fabmax.kool.scene.Scene
 import de.fabmax.kool.scene.animation.*
+import de.fabmax.kool.util.Color
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.yield
@@ -19,6 +20,8 @@ import me.az.ilode.GameState
 import me.az.utils.debugOnly
 import me.az.utils.format
 import me.az.utils.logd
+import me.az.view.Dialog
+import me.az.view.dialog
 import me.az.view.sprite2d
 import simpleTextureProps
 import kotlin.coroutines.CoroutineContext
@@ -249,6 +252,28 @@ class GameLevelScene (
         job.cancel()
         super.dispose(ctx)
     }
+
+    val pauseMenu by lazy { dialog("level title") { parent ->
+        Button("main menu") {
+            modifier.onClick += {
+                game.overGameInstant()
+            }
+        }
+
+        Button("continue") {
+            modifier.onClick += {
+                game.resumeGame()
+                parent.hideMenu()
+            }
+        }
+
+        Button("restart") {
+            modifier.onClick += {
+                game.abortGame()
+                parent.hideMenu()
+            }
+        }
+    } }
 }
 
 val OrthographicCamera.height get() = top - bottom

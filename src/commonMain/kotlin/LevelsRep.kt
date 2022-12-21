@@ -37,7 +37,7 @@ class LevelsRep(
 ) {
 
     val levels = mutableListOf <List<String>>()
-    val loadedLevels = mutableMapOf<Int, GameLevel>()
+    private val loadedLevels = mutableMapOf<Int, GameLevel>()
     companion object {
         val tilesByNames = Tile.values().associateBy { it.name.lowercase() }
     }

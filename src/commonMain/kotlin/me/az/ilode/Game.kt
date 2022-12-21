@@ -97,6 +97,10 @@ class Game(val state: AppContext) : CoroutineScope {
     fun prevLevel() = fsm.setState(GameState.GAME_PREV_LEVEL) // cheat
     fun nextLevel() = fsm.setState(GameState.GAME_NEXT_LEVEL) // cheat
     fun overGame() = fsm.setState(GameState.GAME_OVER_ANIMATION) // cheat
+    fun overGameInstant() = fsm.setState(GameState.GAME_OVER)
+    fun togglePauseGame() = fsm.toggleState(GameState.GAME_PAUSE)
+    fun pauseGame() = fsm.pushState(fsm.getState(GameState.GAME_PAUSE))
+    fun resumeGame() = fsm.popState()
 
     fun reset() {
         nextGuard = 0
@@ -217,6 +221,8 @@ class Game(val state: AppContext) : CoroutineScope {
             }
             // pause all game until anim
         }
+        state(GameState.GAME_PAUSE) {}
+        state(GameState.GAME_OVER) {}
 
         this.onStateChanged += { this@Game.onStateChanged.forEach { it(this) }}
     } }

@@ -22,17 +22,15 @@ suspend fun main(args: Array<String>) {
             localAssetPath = assetsDir
             renderBackend = Lwjgl3Context.Backend.OPEN_GL
             this.title = title
-            isFullscreen = true
+            //isFullscreen = true
 //        customFonts += "text" to "fonts/daugsmith/daugsmith.ttf"
             debugOnly {
                 isFullscreen = false
                 // apple has 280×192
                 // ibm has 320×200 or 640×200
-
                 val c = 4
                 width = 280*c
                 height = 192*c
-
             }
         }
     /*}*/

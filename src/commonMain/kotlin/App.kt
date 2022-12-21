@@ -338,7 +338,9 @@ class App(val ctx: KoolContext, initialState: AppState = AppState.MAINMENU) {
                 ctx.scenes += de.fabmax.kool.util.debugOverlay()
             }
         }),
-
+        PLAYMODE(InputManager.KEY_F2.toInputSpec(), onRelease = {
+            fsm.toggleState(AppState.MAINMENU)
+        }),
         DEBUGMODE(InputManager.KEY_F1.toInputSpec(), onRelease = {
             fsm.toggleState(AppState.DEBUG)
         })

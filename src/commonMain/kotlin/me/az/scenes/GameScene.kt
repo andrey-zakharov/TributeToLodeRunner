@@ -105,6 +105,7 @@ open class GameScene(val game: Game,
                 GameState.GAME_START -> {
                     levelView!!.runnerView.startBlink()
                 }
+                GameState.GAME_PAUSE,
                 GameState.GAME_RUNNING -> {
                     levelView!!.runnerView.stopBlink()
                 }
@@ -144,7 +145,7 @@ open class GameScene(val game: Game,
 
 //                                .scale(1.0, -1.0, 1.0)
                         )
-                        println(tile.modelMat.dump())
+                        //println(tile.modelMat.dump())
                     }
                         //.translate( -levelWidth / 2f, 0f, 0f)
                 }
