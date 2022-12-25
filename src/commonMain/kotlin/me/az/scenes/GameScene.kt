@@ -2,7 +2,7 @@ package me.az.scenes
 
 import AnimationFrames
 import App
-import App.Companion.bg
+import App.Companion.makeBackground
 import AppContext
 import ImageAtlas
 import ImageAtlasSpec
@@ -17,8 +17,6 @@ import de.fabmax.kool.modules.ui2.MutableStateValue
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.pipeline.FullscreenShaderUtil.generateFullscreenQuad
-import de.fabmax.kool.pipeline.shading.UnlitShader
-import de.fabmax.kool.pipeline.shading.unlitShader
 import de.fabmax.kool.scene.*
 import de.fabmax.kool.scene.animation.InterpolatedFloat
 import de.fabmax.kool.scene.animation.LinearAnimator
@@ -140,8 +138,11 @@ open class GameScene(val game: Game,
                         set(
                             Mat4d()
                                 .translate(index.toFloat() - game.level!!.width /2f, 1f, 0f)
-                                .mul(mask!!.modelMat)
-                                .translate(-off!!.camera.position.x, -off!!.camera.position.y, 0f)
+                                /*.mul(mask!!.modelMat)*/
+                                /*.translate(
+                                    -off!!.camera.position.x / appContext.spriteMode.value.tileWidth,
+                                    -off!!.camera.position.y / appContext.spriteMode.value.tileHeight, 0f)*/
+
 
 //                                .scale(1.0, -1.0, 1.0)
                         )
@@ -184,14 +185,13 @@ open class GameScene(val game: Game,
         tilesAnims.loadAnimations(newSpec, assets)
         tilesAnims.appendFrom(assets, newSpec, "hole")
 
-        // sequences could changed from tileset to tileset
+        // sequences could be changed from tileset to tileset
         refreshSequences()
     }
 
     override suspend fun loadResources(assets: AssetManager, ctx: KoolContext) = with(assets) {
         reload(appContext.spriteMode.value)
         sounds.loadSounds()
-        Unit
     }
 
     fun SpriteSystem.textView(text: MutableStateValue<String>, init: TextView.() -> Unit = {})
@@ -436,7 +436,7 @@ open class GameScene(val game: Game,
         levelView = null
     }
 
-    private val bg by lazy { bg() }
+    private val bg by lazy { makeBackground() }
 
     protected fun startOutro(ctx: KoolContext) =
         shatterRadiusAnim.apply {

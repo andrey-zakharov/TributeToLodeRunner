@@ -8,9 +8,9 @@ import me.az.view.SpriteSystem
 import me.az.view.TextView
 
 class GameUI(
-    val spriteSystem: SpriteSystem,
+    private val spriteSystem: SpriteSystem,
     val game: Game,
-    val gameSettings: AppContext
+    private val gameSettings: AppContext
     ) : Group()
 {
     private val fontAtlasId = spriteSystem.cfg.atlasIdByName["text"]!!
@@ -60,7 +60,6 @@ class GameUI(
         TextView(spriteSystem, livesText, fontAtlas) {
             translate(-28f / 2f + 13f, 0f, 0f)
             scale(1f, -1f, 1f)
-
         }
     }
     private val scoreTextView by lazy {

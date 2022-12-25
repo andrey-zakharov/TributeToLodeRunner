@@ -25,7 +25,6 @@ import me.az.scenes.height
 import me.az.scenes.width
 import me.az.utils.*
 import me.az.view.sprite2d
-import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
@@ -246,7 +245,7 @@ class App(val ctx: KoolContext, initialState: AppState = AppState.MAINMENU) {
             }
         }
 
-        fun Scene.bg() =
+        fun Scene.makeBackground() =
             sprite2d(
                 texture = Texture2d(simpleTextureProps) {
                     it.loadTextureData(backgroundImageFile, simpleTextureProps.format)

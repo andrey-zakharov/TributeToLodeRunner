@@ -223,7 +223,7 @@ sealed class Actor(val game: Game) : Controllable {
 
         // there should be way to avoid inheritance of ControllableState and MoveDown state
         fun ActorState.BehaviorMoveDown(onCenter: (Actor.() -> String?)? = null) = apply {
-            onUpdate {
+            onUpdate(0) {
 
                 val delta = availableSpaceDown
                 offset.y += delta
@@ -496,7 +496,7 @@ sealed class Actor(val game: Game) : Controllable {
         // bar and walk
         sealed class MoveRight(actor: Actor, animName: ActorSequence) : MovementState(actor, animName) {
             init {
-                onUpdate {
+                onUpdate(0) {
                     val delta = availableSpaceRight
                     offset.x += delta
                     centerY(delta / xMove.toFloat())
@@ -562,7 +562,7 @@ sealed class Actor(val game: Game) : Controllable {
                             protected val onCenter: (Actor.() -> Boolean)? = null)
             : MovementState(actor, ActorSequence.RunUpDown, name) {
             init {
-                onUpdate {
+                onUpdate(0) {
                     val pos = oy > 0
                     val delta = availableSpaceUp
                     offset.y -= delta

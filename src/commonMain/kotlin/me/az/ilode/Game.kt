@@ -120,7 +120,17 @@ class Game(val state: AppContext) : CoroutineScope {
             onEnter {
                 animEnds = false
                 level!!.reset()
+
+                guards.clear()
+                level!!.guardsPos.forEach {
+                    val g = Guard(this@Game)
+                    g.block.set(it)
+                    guards.add(g)
+                }
                 onLevelStart.forEach { it.invoke(level!!) }
+
+                level!!.dirty = true
+                level!!.status = GameLevel.Status.LEVEL_PLAYING
             }
         }
         state(GameState.GAME_RUNNING) {

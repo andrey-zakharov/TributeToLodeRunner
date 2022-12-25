@@ -86,6 +86,7 @@ class GameLevelScene (
             if ( this.name != GameState.GAME_OVER_ANIMATION ) {
                 // exit state
                 if (levelView?.findNode("gameover") != null) {
+                    logd { "removing gameover sprite"}
                     levelView?.run { -gameOverSprite }
                 }
             }
@@ -129,6 +130,7 @@ class GameLevelScene (
                     game.level = currentLevel
                     game.level?.run {
 //                        holesAnims = holeAnims
+                        reset()
                         addLevelView(ctx, this)
                     }
                 }
