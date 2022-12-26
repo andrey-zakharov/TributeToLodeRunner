@@ -68,10 +68,10 @@ class CameraController(val cameraToControl: OrthographicCamera, name: String? = 
             val resultPos = MutableVec3f(0.5f, 0.5f, 0f) // middle of the sprite
             followNode.transform(resultPos)
             viewGroup.toGlobalCoords(resultPos)
-            val deadZone = BoundingBox()//.apply {
-//                add(Vec3f(-viewport.width / 4f, -viewport.height / 4f, 0f))
-//                add(Vec3f(viewport.width / 4f, viewport.height / 4f, 0f))
-//            }
+            val deadZone = BoundingBox()/*.apply {
+                add(Vec3f(-viewport.width / 4f, -viewport.height / 4f, 0f))
+                add(Vec3f(viewport.width / 4f, viewport.height / 4f, 0f))
+            }*/
 
             with(cameraToControl) {
                 //camera shift

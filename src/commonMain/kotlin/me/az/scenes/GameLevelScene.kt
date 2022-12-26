@@ -145,9 +145,8 @@ class GameLevelScene (
                 else -> Unit
             }
         }
-
     }
-    private val currentLevel get() = levels.getLevel(appContext.currentLevel.value, tilesAnims, false)
+    private val currentLevel get() = levels.getLevel(appContext.currentLevel.value, tilesAnims, true)
 
     private val job = Job()
     override val coroutineContext: CoroutineContext

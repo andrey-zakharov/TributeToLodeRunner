@@ -130,6 +130,10 @@ open class GameScene(val game: Game,
             this += tilesAtlas // for ground
         }).also { ss ->
             ss.onUpdate += { ev ->
+                if ( groundDirty ) {
+                    updateGround()
+                    groundDirty = false
+                }
                 groundTiles.forEachIndexed { index, tile ->
                     //update pos
                     // under level view - level view posed by world coords aligned to top edge of camera's view
@@ -137,32 +141,22 @@ open class GameScene(val game: Game,
                     with(tile.modelMat) {
                         set(
                             Mat4d()
-                                .translate(index.toFloat() - game.level!!.width /2f, 1f, 0f)
-                                /*.mul(mask!!.modelMat)*/
-                                /*.translate(
+                                .translate(index.toFloat() - game.level!!.width /2f, -1f, 0f)
+                                .translate(
                                     -off!!.camera.position.x / appContext.spriteMode.value.tileWidth,
-                                    -off!!.camera.position.y / appContext.spriteMode.value.tileHeight, 0f)*/
-
-
-//                                .scale(1.0, -1.0, 1.0)
+                                    -off!!.camera.position.y / appContext.spriteMode.value.tileHeight, 0f)
                         )
-                        //println(tile.modelMat.dump())
                     }
-                        //.translate( -levelWidth / 2f, 0f, 0f)
                 }
+                ss.dirty = true
             }
-             // layout depends on tileset
-
-
+            // layout depends on tileset
         }
     }
 
     protected var runnerAnims = AnimationFrames(atlasOrder.indexOf("runner"), "runner")
     protected var guardAnims = AnimationFrames(atlasOrder.indexOf("guard"), "guard")
     protected var tilesAnims = AnimationFrames(atlasOrder.indexOf("tiles"), "tiles")
-
-    // val sequencesAtlas = mutableMapOf<String, List<Int>>() // pair of atlasId, tile id
-    // val sequences = mutableMapOf<String, List<Int>>() // pair of atlasId, tile id
 
     protected val sounds = SoundPlayer(assets)
 
@@ -210,21 +204,40 @@ open class GameScene(val game: Game,
             outerCamera.top = off!!.height + appContext.spriteMode.value.tileHeight * 2f
         }
 
-        +uiSpriteSystem
+
         spriteSystem.dirty = true
         uiSpriteSystem.dirty = true
 
         updateScales()
         game.reset() // start game
+        createGround()
+        +uiSpriteSystem
     }
 
-    private val groundTiles: List<SpriteInstance> by lazy {
+    //invoke after tiles anims loaded and ready/ fragile
+    // but we need groundTiles under UI which is ready in ctor and added first
+    // z sorting
+    private var groundDirty = true
+    private fun updateGround() {
+        // tilesAnims require
         val a = uiSpriteSystem.cfg.atlasIdByName["tiles"]!!
-        val ground = tilesAnims.sequence["ground"]!!.first()
-        (0 until (game.level?.width ?: 28)).map { x ->
-            uiSpriteSystem.sprite( a, ground, Mat4f() )
+        val groundTile = tilesAnims.sequence["ground"]!!.first()
+        groundTiles.forEach {
+            it.atlasId.set(a)
+            it.tileIndex.set(groundTile)
         }
     }
+    private fun createGround() {
+        uiSpriteSystem.sprites.removeAll( groundTiles )
+        groundTiles.clear()
+        groundTiles.addAll(
+            (0 until (game.level?.width ?: 28)).map { x ->
+                uiSpriteSystem.sprite( 0, 0, Mat4f() )
+            }
+        )
+    }
+
+    private val groundTiles = mutableListOf<SpriteInstance>()
 
     private fun updateScales(tileSet: TileSet = appContext.spriteMode.value) {
         systems.forEach {
@@ -251,9 +264,9 @@ open class GameScene(val game: Game,
             sounds.bank
         )
 
-        levelView?.run {
+        levelView?.let {
             // draw by sprite system, but still need updates
-            this@GameScene += this
+            +it
         }
 
         off = OffscreenRenderPass2d(spriteSystem, renderPassConfig {
@@ -322,6 +335,7 @@ open class GameScene(val game: Game,
                 }
                 it.dependsOn(pass)
                 addOffscreenPass(it)
+                /* does not work, need full screen rect, but we have level rect. BTW need frustum check
                 onRenderScene += { ctx ->
                     val mapW = off!!.viewport.width
                     val mapH = off!!.viewport.height
@@ -329,7 +343,7 @@ open class GameScene(val game: Game,
                     if (it.isEnabled && mapW > 0 && mapH > 0 && (mapW != it.width || mapH != it.height)) {
                         it.resize(mapW, mapH, ctx)
                     }
-                }
+                }*/
             }
         }
 
@@ -354,8 +368,8 @@ open class GameScene(val game: Game,
 
                 BoundingBox().apply {
                     add(listOf(
-                        Vec3f( max(0f, scaledMin.x + halfWidth), max(0f, scaledMax.y - halfHeight), 0f ),
-                        Vec3f( min(0f, scaledMax.x - halfWidth),  min(0f, scaledMin.y + halfHeight), 0f),
+                        Vec3f( min(0f, scaledMin.x + halfWidth), min(0f, scaledMax.y - halfHeight), 0f ),
+                        Vec3f( max(0f, scaledMax.x - halfWidth), max(0f, scaledMin.y + halfHeight), 0f),
                     ))
                 }
             }
@@ -363,6 +377,10 @@ open class GameScene(val game: Game,
             println(borderZone)
 
             levelView?.also { startTrack(game, borderZone, it.runnerView.instance.modelMat) }
+            // initial
+            cameraToControl.position.y = - appContext.spriteMode.value.tileHeight * 2f
+            cameraToControl.lookAt.y = cameraToControl.position.y
+//            cameraToControl.position.y -= appContext.spriteMode.value.tileHeight * 2f
         }
 
         // minimap TBD
@@ -390,9 +408,9 @@ open class GameScene(val game: Game,
 //                     unlitShader { useStaticColor(Color.RED) }
                 onUpdate += {
 
-                    setIdentity()
+                    //setIdentity()
                     //(ctx.windowHeight - visibleHeight).toFloat()
-                    translate(0f, appContext.spriteMode.value.tileHeight * 2f, 0f)
+                    //translate(0f, appContext.spriteMode.value.tileHeight * 2f, 0f)
 
                     (shader as? MaskShader)?.visibleRadius = shatterRadiusAnim.tick(it.ctx)
                     // hack to sync anims
@@ -406,7 +424,7 @@ open class GameScene(val game: Game,
                 }
             }
         }
-        +mask!!
+        addNode(mask!!, 0)
 
         outerCamera.top = off!!.height + appContext.spriteMode.value.tileHeight * 2f
         onUpdate += ticker // start play

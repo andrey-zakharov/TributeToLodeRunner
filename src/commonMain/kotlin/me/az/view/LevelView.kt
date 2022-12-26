@@ -5,6 +5,7 @@ import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.Mat4f
 import de.fabmax.kool.math.randomI
 import de.fabmax.kool.modules.audio.WavFile
+import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.scene.Group
 import de.fabmax.kool.util.Time
 import de.fabmax.kool.util.logE
@@ -68,12 +69,15 @@ class LevelView(
         }
     }
 
-    val tmpPos = Mat4f()
+    private val tmpPos = Mat4f()
+    private val atlasView = mutableStateOf(tilesAnims.atlasId)
     private fun createSprite(x: Int, y: Int): SpriteInstance {
         tmpPos.set(modelMat)
             .translate(x.toFloat(), y.toFloat(), 0f)
             .scale(1f, -1f, 1f) // one for coords space
-        return spriteSystem.sprite(tilesAnims.atlasId, 0, tmpPos)
+        val s = SpriteInstance(atlasView, tmpPos, bgAlpha = mutableStateOf(1f) )
+        spriteSystem.sprites.add( s )//spriteSystem.sprite(, 0, tmpPos)
+        return s
     }
 
     // specific of this set of tile instances that do not need pos, its const celled
