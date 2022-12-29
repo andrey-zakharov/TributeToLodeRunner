@@ -155,7 +155,7 @@ class GameLevelScene (
     private lateinit var gameOverTex: Texture2d
     private val levels = LevelsRep(assets, this)
 
-    val debug = MutableStateValue("")
+    private val debug = MutableStateValue("")
 
     override suspend fun loadResources(assets: AssetManager, ctx: KoolContext) {
         super.loadResources(assets, ctx)
@@ -166,7 +166,7 @@ class GameLevelScene (
     fun setupUi(scene: Scene) = debugOnly { with(scene) {
         +Panel {
             modifier
-                .width(Grow(1f, max = FitContent))
+                .width(Grow(1f, max = 300f.dp))
                 .height(FitContent)
                 .margin(start = 25.dp, top = 25.dp, bottom = 60.dp)
                 .layout(ColumnLayout)
@@ -179,6 +179,7 @@ class GameLevelScene (
                         .height(FitContent)
                     onUpdate += {
                         with(game) {
+
                             debug.set(
                                 """
                                     #speedAnim = %%s %%.3f
@@ -186,7 +187,8 @@ class GameLevelScene (
                                     shatter = %.3f
                                     
                                 global runner center = %.1f x %.1f
-                                camera = %.1f/%.1f x %.1f/%.1f
+                                off.camera = %.1f x %.1f ${cameraController?.debug}
+                                ui.camera =  %.1f x %.1f
                                 act = %s
                                 barrier = %b
                                 has guard below = %b
@@ -198,11 +200,11 @@ class GameLevelScene (
                                     .format(
 //                                        speedAnim.dis(), speedAnim.value.value, scaleAnim.dis(), scaleAnim.value.value,
                                         currentShutter,
-                                        levelView?.runnerView?.globalCenter?.x,
-                                        levelView?.runnerView?.globalCenter?.y,
+                                        levelView?.runnerView?.instance?.modelMat?.get(12), // x
+                                        levelView?.runnerView?.instance?.modelMat?.get(13), // x
                                         off?.camera?.position?.x,
-                                        camera.position.x,
                                         off?.camera?.position?.y,
+                                        camera.position.x,
                                         camera.position.y,
                                         level?.act?.get(runner.x)?.get(runner.y) ?: "<no level>",
                                         level?.isBarrier(runner.x, runner.y) ?: false,
@@ -220,6 +222,10 @@ class GameLevelScene (
             Row { LabeledSwitch("stop animations", game.stopAnims) }
             Row { LabeledSwitch("stop guards", appContext.stopGuards) }
             Row { LabeledSwitch("immortal", appContext.immortal) }
+//            Row { Image(off?.colorTexture) {
+//                modifier.width = 240.dp
+//                modifier.height = 240.dp
+//            } }
         }
     } }
 

@@ -4,6 +4,7 @@ import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.Mat4f
 import de.fabmax.kool.math.MutableVec3f
 import de.fabmax.kool.math.Vec3f
+import de.fabmax.kool.math.min
 import de.fabmax.kool.math.spatial.BoundingBox
 import de.fabmax.kool.pipeline.RenderPass
 import de.fabmax.kool.scene.Group
@@ -45,10 +46,6 @@ class CameraController(val cameraToControl: OrthographicCamera, name: String? = 
     }
 
     private var calculator: ((RenderPass.UpdateEvent) -> Unit)? = null
-//    var boundNode: Group? = null
-//    var followNode: Node? = null
-
-//    fun calculateCamera(levelView!!, levelView!!.runnerView)
 
     fun startTrack(game: Game, boundNode: BoundingBox, followNode: Mat4f) {
         calculator = cameraCalculator(game, boundNode, followNode)
@@ -62,29 +59,36 @@ class CameraController(val cameraToControl: OrthographicCamera, name: String? = 
         game.onPlayGame -= cameraUpdaterGameTick
     }
 
+    var debug = ""
     private fun calculateCamera(borderZone: BoundingBox, followNode: Mat4f): (viewport: Viewport) -> MutableVec3f {
 
         return { viewport ->
             val resultPos = MutableVec3f(0.5f, 0.5f, 0f) // middle of the sprite
             followNode.transform(resultPos)
             viewGroup.toGlobalCoords(resultPos)
-            val deadZone = BoundingBox()/*.apply {
-                add(Vec3f(-viewport.width / 4f, -viewport.height / 4f, 0f))
-                add(Vec3f(viewport.width / 4f, viewport.height / 4f, 0f))
-            }*/
+            val visibleWidth = min( cameraToControl.width, viewport.width * (cameraToControl.height / viewport.height))
+            val deadZone = BoundingBox().apply {
+//                add(Vec3f(-1f, -1f, 0f))
+//                add(Vec3f(1f, 1f, 0f))
+                add(Vec3f(-visibleWidth / 4f, -cameraToControl.height / 4f, 0f))
+                add(Vec3f(visibleWidth / 4f, cameraToControl.height / 4f, 0f))
+            }
 
             with(cameraToControl) {
-                //camera shift
-                resultPos -= Vec3f(0f, this@with.height / 2f, 0f)
+                // camera shift origin in viewport center
+                resultPos -= Vec3f(0f, height / 2f, 0f)
                 // get distance from camera. if more than viewport / 4 - move
-                val diff = resultPos - this@with.globalLookAt
+                val diff = resultPos - globalLookAt
+                //debug = diff.toString()
+                debug = "${viewport.width} ${cameraToControl.width} $visibleWidth"
+
 
                 if ( diff.x > deadZone.max.x ) {
-                    resultPos.x = this@with.globalPos.x + diff.x - deadZone.max.x
+                    resultPos.x = globalPos.x + diff.x - deadZone.max.x
                 } else if ( diff.x < deadZone.min.x ) {
-                    resultPos.x = this@with.globalPos.x - (deadZone.min.x - diff.x)
+                    resultPos.x = globalPos.x - (deadZone.min.x - diff.x)
                 } else {
-                    resultPos.x = this@with.globalPos.x
+                    resultPos.x = globalPos.x
                 }
 
                 if ( diff.y > deadZone.max.y ) {
