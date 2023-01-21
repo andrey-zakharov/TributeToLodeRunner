@@ -1,18 +1,8 @@
-import de.fabmax.kool.modules.audio.AudioOutput
-import de.fabmax.kool.modules.audio.synth.Melody
-import de.fabmax.kool.modules.audio.synth.Oscillator
-import de.fabmax.kool.modules.audio.synth.SampleNode
-import de.fabmax.kool.modules.audio.synth.Wave
-import de.fabmax.kool.modules.ksl.KslUnlitShader
-import de.fabmax.kool.modules.ksl.blocks.ColorBlockConfig
 import de.fabmax.kool.scene.Scene
-import de.fabmax.kool.scene.colorMesh
-import de.fabmax.kool.scene.scene
-import de.fabmax.kool.util.Color
 import me.az.ilode.Game
 import me.az.ilode.START_HEALTH
 import me.az.scenes.MainMenuScene
-import me.az.utils.StackedState
+import me.az.utils.*
 
 class MainMenuState(private val app: App) : StackedState<AppState, App>(AppState.MAINMENU) {
     var exitGame = false

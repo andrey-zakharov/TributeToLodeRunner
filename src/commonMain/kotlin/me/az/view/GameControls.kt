@@ -4,9 +4,9 @@ import KeyAction
 import de.fabmax.kool.InputManager
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.scene.Node
-import me.az.ilode.Game
 import me.az.app.controls.InputSpec
 import me.az.app.controls.toInputSpec
+import me.az.ilode.Game
 import registerActions
 import unregisterActions
 

@@ -1,9 +1,8 @@
 package me.az.view
 
 import AnimationFrames
-import ImageAtlas
-import de.fabmax.kool.KoolContext
-import de.fabmax.kool.math.*
+import de.fabmax.kool.math.Mat4f
+import de.fabmax.kool.math.clamp
 import de.fabmax.kool.modules.audio.AudioOutput
 import de.fabmax.kool.modules.audio.MixNode
 import de.fabmax.kool.modules.audio.WavFile
@@ -19,10 +18,8 @@ import de.fabmax.kool.util.logW
 import me.az.ilode.Actor
 import me.az.ilode.ActorEvent
 import me.az.ilode.Sound
-import me.az.scenes.Sequences
 import me.az.utils.lerp
 import me.az.utils.logd
-import me.az.utils.mul
 
 class ActorView(
     private val actor: Actor,

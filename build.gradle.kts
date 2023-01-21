@@ -1,4 +1,4 @@
-import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig.*
+import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig.Mode
 
 plugins {
     kotlin("multiplatform")
@@ -27,7 +27,6 @@ kotlin {
             distribution {
                 directory = File("${rootDir}/dist/")
                 name = "app"
-
             }
             commonWebpackConfig {
                 // small js code
@@ -53,6 +52,7 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
+                implementation(project("bits"))
                 implementation("de.fabmax.kool:kool-core:${koolVersion}")
 //                implementation(":kool-core")
                 implementation(kotlin("stdlib-common"))

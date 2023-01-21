@@ -1,14 +1,14 @@
 import de.fabmax.kool.InputManager
 import de.fabmax.kool.modules.ui2.UiScene
 import de.fabmax.kool.scene.Scene
-import me.az.ilode.Game
-import me.az.ilode.GameState
 import me.az.app.controls.InputSpec
 import me.az.app.controls.toInputSpec
+import me.az.ilode.Game
+import me.az.ilode.GameState
 import me.az.scenes.GameLevelScene
 import me.az.scenes.GameUI
-import me.az.utils.StackedState
 import me.az.view.GameControls
+import me.az.utils.StackedState
 
 class RunGameState(private val app: App) : StackedState<AppState, App>(AppState.RUNGAME) {
 

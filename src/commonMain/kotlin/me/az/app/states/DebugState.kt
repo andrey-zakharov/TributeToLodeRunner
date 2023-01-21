@@ -12,21 +12,21 @@ import de.fabmax.kool.pipeline.DepthCompareOp
 import de.fabmax.kool.pipeline.shadermodel.vertexStage
 import de.fabmax.kool.pipeline.shading.UnlitMaterialConfig
 import de.fabmax.kool.pipeline.shading.UnlitShader
-import de.fabmax.kool.pipeline.shading.unlitShader
 import de.fabmax.kool.scene.*
 import de.fabmax.kool.scene.PointMesh.Companion.ATTRIB_POINT_SIZE
-import de.fabmax.kool.scene.animation.*
+import de.fabmax.kool.scene.animation.Animator
+import de.fabmax.kool.scene.animation.InterpolatedFloat
+import de.fabmax.kool.scene.animation.LinearAnimator
+import de.fabmax.kool.scene.animation.SpringDamperFloat
 import de.fabmax.kool.scene.geometry.PrimitiveType
 import de.fabmax.kool.toString
 import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.Time
 import kotlinx.coroutines.*
-import me.az.utils.StackedState
-import me.az.utils.addDebugAxis
 import me.az.view.SpriteConfig
 import me.az.view.SpriteSystem
 import me.az.view.TextView
-import kotlin.math.PI
+import me.az.utils.*
 
 class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DEBUG) {
 

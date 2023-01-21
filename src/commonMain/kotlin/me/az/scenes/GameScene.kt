@@ -203,7 +203,7 @@ open class GameScene(val game: Game,
             updateScales(it)
             outerCamera.top = off!!.height + appContext.spriteMode.value.tileHeight * 2f
         }
-
+        +uiSpriteSystem
 
         spriteSystem.dirty = true
         uiSpriteSystem.dirty = true
@@ -211,7 +211,6 @@ open class GameScene(val game: Game,
         updateScales()
         game.reset() // start game
         createGround()
-        +uiSpriteSystem
     }
 
     //invoke after tiles anims loaded and ready/ fragile
@@ -232,7 +231,9 @@ open class GameScene(val game: Game,
         groundTiles.clear()
         groundTiles.addAll(
             (0 until (game.level?.width ?: 28)).map { x ->
-                uiSpriteSystem.sprite( 0, 0, Mat4f() )
+                val s = SpriteInstance(initialModelMat = Mat4f())
+                uiSpriteSystem.sprites.add( 0, s )
+                s
             }
         )
     }
@@ -424,6 +425,7 @@ open class GameScene(val game: Game,
                 }
             }
         }
+        //WTF #1? worked fine, not semi transparent
         addNode(mask!!, 0)
 
         outerCamera.top = off!!.height + appContext.spriteMode.value.tileHeight * 2f

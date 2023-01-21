@@ -10,12 +10,14 @@ import de.fabmax.kool.pipeline.RenderPass
 import de.fabmax.kool.scene.Group
 import de.fabmax.kool.scene.Node
 import de.fabmax.kool.scene.OrthographicCamera
-import de.fabmax.kool.scene.animation.*
+import de.fabmax.kool.scene.animation.Animator
+import de.fabmax.kool.scene.animation.InterpolatedFloat
+import de.fabmax.kool.scene.animation.InterpolatedValue
+import de.fabmax.kool.scene.animation.InverseSquareAnimator
 import de.fabmax.kool.util.Viewport
 import me.az.ilode.Game
 import me.az.scenes.height
 import me.az.scenes.width
-import me.az.utils.StackedState
 
 private operator fun Vec3f.minus(position: Vec3f) = Vec3f(
     this.x - position.x,

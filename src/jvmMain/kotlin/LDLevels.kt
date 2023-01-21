@@ -2,7 +2,6 @@ import java.io.BufferedInputStream
 import java.io.DataInputStream
 import java.io.File
 import java.io.PrintStream
-import java.lang.IllegalArgumentException
 
 const val mask = """([\x00-\x09]{416})\x00{39}([A-Z \x00]{38})""" //
 

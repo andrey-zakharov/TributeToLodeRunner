@@ -13,7 +13,6 @@ import me.az.ilode.*
 import me.az.utils.Act
 import me.az.utils.ActingList
 import me.az.utils.ActionStatus
-import me.az.utils.logd
 
 class AnimateSprite(
     val sprite: SpriteInstance,

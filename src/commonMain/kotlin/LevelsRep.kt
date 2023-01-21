@@ -1,7 +1,10 @@
 import de.fabmax.kool.AssetManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.az.ilode.GameLevel
 import me.az.ilode.Tile
 import me.az.ilode.generateGameLevel

@@ -4,12 +4,9 @@ import AppContext
 import GameSpeed
 import LevelSet
 import LevelsRep
-import TileSet
 import de.fabmax.kool.AssetManager
 import de.fabmax.kool.InputManager
 import de.fabmax.kool.KoolContext
-import de.fabmax.kool.math.MutableVec3d
-import de.fabmax.kool.math.MutableVec3f
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.modules.ui2.*
 import kotlinx.coroutines.launch
@@ -19,7 +16,6 @@ import me.az.ilode.GameLevel
 import me.az.ilode.GameState
 import me.az.utils.logd
 import me.az.utils.plus
-import me.az.view.TextView
 import unregisterActions
 import kotlin.math.max
 import kotlin.math.min

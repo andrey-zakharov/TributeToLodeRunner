@@ -1,6 +1,5 @@
 package me.az.ilode
 
-import de.fabmax.kool.math.Vec2i
 import kotlin.math.abs
 
 

@@ -7,7 +7,6 @@ import de.fabmax.kool.modules.ksl.blocks.mvpMatrix
 import de.fabmax.kool.modules.ksl.lang.*
 import de.fabmax.kool.pipeline.Attribute
 import de.fabmax.kool.pipeline.BlendMode
-import de.fabmax.kool.pipeline.FullscreenShaderUtil.fullscreenQuadVertexStage
 
 open class MaskShader(cfg: UnlitShaderConfig, model: KslProgram = MaskModel(cfg)) : KslUnlitShader(cfg, model) {
     var visibleRadius by uniform1f("radius") // in pixels

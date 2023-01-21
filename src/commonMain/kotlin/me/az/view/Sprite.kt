@@ -12,10 +12,6 @@ import de.fabmax.kool.modules.ui2.MutableStateValue
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.*
 import de.fabmax.kool.scene.*
-import de.fabmax.kool.scene.animation.Animator
-import de.fabmax.kool.scene.animation.InterpolatedFloat
-import de.fabmax.kool.scene.animation.InverseSquareAnimator
-import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.Float32Buffer
 import me.az.utils.format
 import me.az.view.SpriteInstance.Companion.BGCOLOR

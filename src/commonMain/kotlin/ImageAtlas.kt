@@ -4,11 +4,9 @@ import de.fabmax.kool.math.Vec4i
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.pipeline.BufferedTextureLoader
 import de.fabmax.kool.pipeline.Texture3d
-import kotlinx.coroutines.Job
 import kotlinx.serialization.*
 import kotlinx.serialization.json.*
 import me.az.utils.logd
-import kotlin.math.floor
 
 enum class TileSet(
     val path: String,

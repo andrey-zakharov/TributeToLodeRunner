@@ -7,4 +7,4 @@ pluginManagement {
 }
 
 rootProject.name = "Infinner"
-
+include("bits")

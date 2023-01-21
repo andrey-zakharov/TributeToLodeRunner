@@ -3,8 +3,10 @@ package me.az.shaders
 import de.fabmax.kool.modules.ksl.KslShader
 import de.fabmax.kool.modules.ksl.blocks.mvpMatrix
 import de.fabmax.kool.modules.ksl.lang.*
-import de.fabmax.kool.pipeline.*
-import de.fabmax.kool.scene.Mesh
+import de.fabmax.kool.pipeline.Attribute
+import de.fabmax.kool.pipeline.BlendMode
+import de.fabmax.kool.pipeline.CullMethod
+import de.fabmax.kool.pipeline.DepthCompareOp
 
 class TileMapShaderConf() {
 

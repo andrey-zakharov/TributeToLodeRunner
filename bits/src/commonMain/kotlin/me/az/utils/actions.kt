@@ -37,11 +37,11 @@ abstract class Act<C>(
             val cb = u.next()
             val ret = cb(context, dt)
 
-            if ( ret == ActionStatus.DONE || ret == ActionStatus.ERROR ) {
+            if ( ret == ActionStatus.DONE || ret == ActionStatus.ERROR) {
                 u.remove()
             }
 
-            if ( ret == ActionStatus.ERROR ) {
+            if ( ret == ActionStatus.ERROR) {
                 hasError = true
             }
         }

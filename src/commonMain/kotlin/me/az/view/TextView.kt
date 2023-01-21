@@ -5,7 +5,6 @@ import de.fabmax.kool.math.Mat4d
 import de.fabmax.kool.math.Mat4f
 import de.fabmax.kool.modules.ui2.MutableStateValue
 import de.fabmax.kool.scene.Group
-import me.az.utils.logd
 
 class TextView (
     private val spriteSystem: SpriteSystem,

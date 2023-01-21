@@ -11,7 +11,6 @@ import de.fabmax.kool.pipeline.Texture2d
 import de.fabmax.kool.scene.OrthographicCamera
 import de.fabmax.kool.scene.Scene
 import de.fabmax.kool.scene.animation.*
-import de.fabmax.kool.util.Color
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.yield
@@ -20,7 +19,6 @@ import me.az.ilode.GameState
 import me.az.utils.debugOnly
 import me.az.utils.format
 import me.az.utils.logd
-import me.az.view.Dialog
 import me.az.view.dialog
 import me.az.view.sprite2d
 import simpleTextureProps
@@ -146,7 +144,7 @@ class GameLevelScene (
             }
         }
     }
-    private val currentLevel get() = levels.getLevel(appContext.currentLevel.value, tilesAnims, true)
+    private val currentLevel get() = levels.getLevel(appContext.currentLevel.value, tilesAnims, false)
 
     private val job = Job()
     override val coroutineContext: CoroutineContext
@@ -222,6 +220,27 @@ class GameLevelScene (
             Row { LabeledSwitch("stop animations", game.stopAnims) }
             Row { LabeledSwitch("stop guards", appContext.stopGuards) }
             Row { LabeledSwitch("immortal", appContext.immortal) }
+            Row {
+                Text("camera") {
+                    labelStyle(Grow.Std)
+                }
+            }
+            Row { LazyList(
+                width = Grow.Std,
+                height = Grow(1f, max = 400f.dp)
+            ) {
+
+                itemsIndexed(uiSpriteSystem.sprites) { i, item ->
+                    Text("${item.atlasId.value} ${item.tileIndex.value}") {
+                        modifier
+                            .width(Grow.Std)
+                            .height(sizes.normalText.sizePts.dp)
+                            .textAlignY(AlignmentY.Center)
+
+                    }
+
+                }
+            }}
 //            Row { Image(off?.colorTexture) {
 //                modifier.width = 240.dp
 //                modifier.height = 240.dp

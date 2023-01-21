@@ -8,7 +8,6 @@ import org.mifek.wfc.models.OverlappingCartesian2DModel
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.io.File
-import java.io.RandomAccessFile
 import javax.imageio.stream.FileImageOutputStream
 import kotlin.math.floor
 
