@@ -52,13 +52,14 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                implementation(project("bits"))
+                implementation(project(":bits"))
                 implementation("de.fabmax.kool:kool-core:${koolVersion}")
 //                implementation(":kool-core")
                 implementation(kotlin("stdlib-common"))
                 implementation(DepsCommon.kotlinCoroutines)
                 implementation(DepsCommon.kotlinSerialization)
                 implementation(DepsCommon.kotlinSerializationJson)
+                implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.4.0")
                 implementation("com.russhwolf:multiplatform-settings-no-arg:0.9")
                 implementation("org.mifek.wfc:WFC-Kotlin:1.2.1")
             }

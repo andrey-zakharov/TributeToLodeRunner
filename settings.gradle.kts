@@ -7,4 +7,6 @@ pluginManagement {
 }
 
 rootProject.name = "Infinner"
-include("bits")
+include(":bits")
+project(":bits").projectDir = File("../bits")
+
