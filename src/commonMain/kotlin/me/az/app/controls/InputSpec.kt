@@ -1,7 +1,7 @@
 package me.az.app.controls
 
-import de.fabmax.kool.KeyCode
-import de.fabmax.kool.LocalKeyCode
+import de.fabmax.kool.input.KeyCode
+import de.fabmax.kool.input.LocalKeyCode
 
 typealias KeyMod = Int
 data class InputSpec(val code: KeyCode, val modificatorBitMask: Int)

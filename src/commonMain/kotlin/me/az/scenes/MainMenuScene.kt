@@ -1,15 +1,17 @@
 package me.az.scenes
 
-import AppContext
+import GameContext
 import GameSpeed
 import LevelSet
 import LevelsRep
-import de.fabmax.kool.AssetManager
-import de.fabmax.kool.InputManager
+
 import de.fabmax.kool.KoolContext
+import de.fabmax.kool.input.InputStack
+import de.fabmax.kool.input.KeyboardInput
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.modules.ui2.*
 import kotlinx.coroutines.launch
+import me.az.AssetManager
 import me.az.Version
 import me.az.ilode.Game
 import me.az.ilode.GameLevel
@@ -27,17 +29,17 @@ data class MainMenuContext(
     val level: MutableStateValue<Int> = mutableStateOf(0)
 )
 
-class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
-    GameScene(game, assets, context, name = "mainmenu") {
+class MainMenuScene(context: GameContext, game: Game, assets: AssetManager) :
+    GameScene(game, assets, name = "mainmenu") {
 
     val menuContext = MainMenuContext(
         mutableStateOf(context.levelSet.value), mutableStateOf(context.currentLevel.value)
     )
 
-    private val subs = mutableListOf<InputManager.KeyEventListener>()
+    private val subs = mutableListOf<InputStack.SimpleKeyListener>()
 
-    private val currentSpriteName = mutableStateOf(appContext.spriteMode.value.dis)
-    private val currentSpeedName = mutableStateOf(appContext.speed.value.dis)
+    private val currentSpriteName = mutableStateOf(gameContext.spriteMode.value.dis)
+    private val currentSpeedName = mutableStateOf(gameContext.speed.value.dis)
     private val currentLevelSet = mutableStateOf(menuContext.levelSet.value.dis)
     private var maxLevelId = Int.MAX_VALUE // reload
 
@@ -93,10 +95,10 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
     }
 
     init {
-        appContext.spriteMode.onChange {
+        gameContext.spriteMode.onChange {
             currentSpriteName.set(it.dis)
         }
-        appContext.speed.onChange {
+        gameContext.speed.onChange {
             currentSpeedName.set(it.dis)
         }
         menuContext.levelSet.onChange {
@@ -208,14 +210,14 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
         // game speed
         staticLabel("speed", labelsX, y.toFloat() - 1)
         commands += MenuCommand(pos = Vec2i(leftCol, y)) {
-            with(appContext.speed) {
+            with(gameContext.speed) {
                 set( GameSpeed.values()[ (value.ordinal - 1).mod(GameSpeed.values().size) ] )
                 game.teleportRunnerRight()
             }
         }
 
         commands += LabeledMenuCommand(pos = Vec2i(rightCol, y), label = currentSpeedName) {
-            with(appContext.speed) {
+            with(gameContext.speed) {
                 set( GameSpeed.values()[ (value.ordinal + 1) % GameSpeed.values().size ] )
                 game.teleportRunnerLeft()
             }
@@ -226,12 +228,12 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
         // tileset
         staticLabel("sprites", labelsX, y - 1f)
         commands += MenuCommand(pos = Vec2i(leftCol, y)) {
-            appContext.prevSpriteSet()
+            gameContext.prevSpriteSet()
             game.teleportRunnerRight()
         }
 
         commands += LabeledMenuCommand(pos = Vec2i(rightCol, y), label = currentSpriteName) {
-            appContext.nextSpriteSet()
+            gameContext.nextSpriteSet()
             game.teleportRunnerLeft()
         }
 
@@ -249,11 +251,11 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
         }
 
         val version = "$Version by Andrey Zakharov"
-        +uiSpriteSystem.textView(version) {
+        this += uiSpriteSystem.textView(version) {
 //                        translate(10f, currentSpriteSet.value.tileHeight.toFloat() / 2f , 0f)
-            scale(1f / 3f, 1f / 3f, 1f)
-            translate(-(version.length/ 2f), 0f, 0f)
-            scale(1f, -1f, 1f)
+            transform.scale(1f / 3f, 1f / 3f, 1f)
+            transform.translate(-(version.length/ 2f), 0f, 0f)
+            transform.scale(1f, -1f, 1f)
         }
     }
 
@@ -276,8 +278,8 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
             staticLabels.forEach {
                 view.addNode(
                     spriteSystem.textView(it.text) {
-                        translate(it.x.toDouble(), it.y.toDouble(), 0.0)
-                        scale(0.5f, 0.5f, 1f)
+                        transform.translate(it.x.toDouble(), it.y.toDouble(), 0.0)
+                        transform.scale(0.5f, 0.5f, 1f)
                     }
                 )
             }
@@ -289,7 +291,7 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
             //arranging to level coords
             levelView?.addNode(
                 spriteSystem.textView(it.label) {
-                    translate( (it.pos.x + it.labelDelta.x).toDouble(), (it.pos.y + it.labelDelta.y).toDouble(), 0.0)
+                    transform.translate( (it.pos.x + it.labelDelta.x).toDouble(), (it.pos.y + it.labelDelta.y).toDouble(), 0.0)
                 }
             )
         }
@@ -314,7 +316,7 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
             logd { "main menu game change: $name" }
             when(name) {
                 GameState.GAME_NEW_LEVEL -> {
-                    addLevelView(ctx, game.level!!)
+                    game.level?.let { addLevelView(ctx, it) }
                     setupStaticLabels()
                     setupCommands()
                 }
@@ -348,7 +350,7 @@ class MainMenuScene(context: AppContext, game: Game, assets: AssetManager) :
         //game.stop()
         game.runner.stop()
         super.dispose(ctx)
-        ctx.inputMgr.unregisterActions(subs)
+        KeyboardInput.unregisterActions(subs)
         subs.clear()
     }
 

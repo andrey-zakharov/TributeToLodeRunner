@@ -1,4 +1,4 @@
-import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig.Mode
+ import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig.Mode
 
 plugins {
     kotlin("multiplatform")
@@ -33,7 +33,7 @@ kotlin {
                 //mode = KotlinWebpackConfig.Mode.PRODUCTION
                 // readable js code but ~twice the file size
                 mode = if(project.hasProperty("prod")) Mode.PRODUCTION else Mode.DEVELOPMENT
-                cssSupport.enabled = true
+                //cssSupport.enabled = true
                 //outputPath = File(buildDir, "/processedResources/js/main/")
             }
         }
@@ -43,8 +43,8 @@ kotlin {
         withJava()
         compilations.all {
             kotlinOptions {
-                jvmTarget = "1.8"
-                freeCompilerArgs = freeCompilerArgs + "-Xbackend-threads=0"
+                jvmTarget = "11"
+                freeCompilerArgs += "-Xbackend-threads=0"
             }
         }
     }
@@ -52,7 +52,12 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
-                implementation(project(":bits"))
+                //implementation("me.zakharov:kit") {
+//                    version {
+//                        branch = "main"
+//                    }
+                //}
+//                implementation(project(":bits"))
                 implementation("de.fabmax.kool:kool-core:${koolVersion}")
 //                implementation(":kool-core")
                 implementation(kotlin("stdlib-common"))
@@ -61,7 +66,7 @@ kotlin {
                 implementation(DepsCommon.kotlinSerializationJson)
                 implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.4.0")
                 implementation("com.russhwolf:multiplatform-settings-no-arg:0.9")
-                implementation("org.mifek.wfc:WFC-Kotlin:1.2.1")
+//                implementation("org.mifek.wfc:WFC-Kotlin:1.2.1")
             }
         }
         val jsMain by getting {

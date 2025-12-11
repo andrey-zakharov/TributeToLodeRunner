@@ -1,8 +1,9 @@
 import de.fabmax.kool.scene.Scene
+import me.az.DefaultAssetManager
 import me.az.ilode.Game
 import me.az.ilode.START_HEALTH
 import me.az.scenes.MainMenuScene
-import me.az.utils.*
+import zakharov.kit.fsm.StackedState
 
 class MainMenuState(private val app: App) : StackedState<AppState, App>(AppState.MAINMENU) {
     var exitGame = false
@@ -14,7 +15,7 @@ class MainMenuState(private val app: App) : StackedState<AppState, App>(AppState
 
             val game = Game(app.context)
             // preload
-            mainMenu = MainMenuScene(app.context, game, app.ctx.assetMgr).also {
+            mainMenu = MainMenuScene(app.context, game, DefaultAssetManager).also {
                 app.ctx.scenes += it
             }
 //            mainUiMenu?.run { app.ctx.scenes += this }
@@ -24,13 +25,13 @@ class MainMenuState(private val app: App) : StackedState<AppState, App>(AppState
         onExit {
             mainUiMenu?.run {
                 app.ctx.scenes -= this
-                app.ctx.runDelayed(1) { dispose(app.ctx) }
+                //app.ctx.runDelayed(1) { dispose(app.ctx) }
             }
             mainUiMenu = null
 
             mainMenu?.run {
                 app.ctx.scenes -= this
-                app.ctx.runDelayed(1) { dispose(app.ctx) }
+                //app.ctx.runDelayed(1) { dispose(app.ctx) }
             }
             mainMenu = null
             //app.ctx.scenes.clear()

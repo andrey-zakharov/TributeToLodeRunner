@@ -7,12 +7,13 @@ import de.fabmax.kool.math.randomI
 import de.fabmax.kool.modules.audio.WavFile
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.scene.Group
+import de.fabmax.kool.scene.Node
 import de.fabmax.kool.util.Time
 import de.fabmax.kool.util.logE
 import me.az.ilode.*
-import me.az.utils.Act
-import me.az.utils.ActingList
-import me.az.utils.ActionStatus
+import zakharov.kit.actions.Act
+import zakharov.kit.actions.ActingList
+import zakharov.kit.actions.ActionStatus
 
 class AnimateSprite(
     val sprite: SpriteInstance,
@@ -47,7 +48,7 @@ class LevelView(
     private val guardAnims: AnimationFrames,
     soundsBank: Map<Sound, WavFile>
 
-) : Group() {
+) : Node() {
 
     val runnerView by lazy {
         ActorView( game.runner, spriteSystem, runnerAnims, soundsBank = soundsBank)
@@ -64,7 +65,7 @@ class LevelView(
         }
 
         game.guards.forEach {
-            +ActorView(it, spriteSystem, guardAnims,"guard", soundsBank)
+            this += ActorView(it, spriteSystem, guardAnims,"guard", soundsBank)
         }
     }
 
@@ -148,8 +149,8 @@ class LevelView(
 
     init {
         // lode runners code has x started from leftmost to right, y from top to bottom
-        translate(-level.width / 2f, level.height.toFloat() - 1, 0f) // 2 rows but actually should be layered by tileset dependent layout
-        scale(1f, -1f, 1f) // one for tiling mirroring
+        transform.translate(-level.width / 2f, level.height.toFloat() - 1, 0f) // 2 rows but actually should be layered by tileset dependent layout
+        transform.scale(1f, -1f, 1f) // one for tiling mirroring
         updateModelMat()
         //    addDebugAxis()
 
@@ -157,7 +158,7 @@ class LevelView(
         level.onTileUpdate(::onTileUpdate)
         fullRefresh()
 
-        +runnerView
+        this += runnerView
         game.onLevelStart += onLevelStart
         onLevelStart(game.level!!)
     }

@@ -7,14 +7,15 @@ import de.fabmax.kool.scene.animation.Animator
 import de.fabmax.kool.scene.animation.InterpolatedFloat
 import de.fabmax.kool.scene.animation.InverseSquareAnimator
 import de.fabmax.kool.util.Color
-import me.az.utils.buildStateMachine
+import zakharov.kit.fsm.stackedStateMachine
+
 
 // title mutable string?
-fun dialog(title: String, block: (RowScope.(parent: Dialog) -> Unit)?) = Dialog(mutableStateOf(title), block)
-fun dialog(title: MutableStateValue<String>, block: (RowScope.(parent: Dialog) -> Unit)?) = Dialog(title, block)
+fun Scene.dialog(title: String, block: (RowScope.(parent: Dialog) -> Unit)?) = Dialog(this, mutableStateOf(title), block)
+fun Scene.dialog(title: MutableStateValue<String>, block: (RowScope.(parent: Dialog) -> Unit)?) = Dialog(this, title, block)
 
-class Dialog(val title: MutableStateValue<String>, block: (RowScope.(parent: Dialog) -> Unit)? ) {
-    private val panel = Panel(
+class Dialog(scene: Scene, val title: MutableStateValue<String>, block: (RowScope.(parent: Dialog) -> Unit)? ) {
+    private val panel = scene.Panel(
         sizes = Sizes.large,
         colors = Colors.darkColors(
             primary = Color("efefef"),
@@ -80,7 +81,7 @@ class Dialog(val title: MutableStateValue<String>, block: (RowScope.(parent: Dia
     enum class DialogState {
         CLOSED, OPENING, OPENED, CLOSING
     }
-    val fsm by lazy { buildStateMachine<DialogState, Pair<KoolContext, Dialog>>(DialogState.CLOSED) {
+    val fsm by lazy { stackedStateMachine<DialogState, Pair<KoolContext, Dialog>>(DialogState.CLOSED) {
         state(DialogState.OPENING) {
             onEnter {
                 pauseMenuAnimator.value.from = -1000f
@@ -130,7 +131,7 @@ class Dialog(val title: MutableStateValue<String>, block: (RowScope.(parent: Dia
 
     private fun animate(ctx: KoolContext) {
         val trans = pauseMenuAnimator.tick(ctx)
-        panel.setIdentity().scale(1f, -1f, 1f).translate(0f, trans, 0f)
+        panel.modelMat.setIdentity().scale(1.0, -1.0, 1.0).translate(0f, trans, 0f)
     }
 
     private val pauseMenuAnimator = InverseSquareAnimator(InterpolatedFloat(-2000f, 0f)).also {

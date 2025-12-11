@@ -1,14 +1,14 @@
 package me.az.ilode
 
-import AppContext
+import GameContext
 import SoundPlayer
 import de.fabmax.kool.modules.ui2.MutableStateValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import me.az.utils.StackedState
-import me.az.utils.buildStateMachine
+import zakharov.kit.fsm.StackedState
+import zakharov.kit.fsm.stackedStateMachine
 import kotlin.coroutines.CoroutineContext
 
 //class IntProperty(key: String? = null, defaultValue: Int, minValue: Int?, maxValue: Int?): ReadWriteProperty<Any?, Int> {
@@ -36,7 +36,7 @@ enum class Sound(private val fileNameO: String? = null, private val fileNameCall
     val fileName get() = fileNameO ?: fileNameCall?.invoke() ?: name.lowercase()
 }
 //system
-class Game(val state: AppContext) : CoroutineScope {
+class Game(val state: GameContext) : CoroutineScope {
     sealed class GameEvent {
         object Tick: GameEvent()
         class AnimationEnds(val animName: String): GameEvent()
@@ -106,12 +106,12 @@ class Game(val state: AppContext) : CoroutineScope {
         nextGuard = 0
         nextMoves = 0
 //        runner?.reset()
-        fsm.reset(true)
+        fsm.reset(/*true*/)
     }
 
     fun finish() = fsm.finish()
 
-    private val fsm by lazy { buildStateMachine(GameState.GAME_NEW_LEVEL) {
+    private val fsm by lazy { stackedStateMachine<GameState, Game>(GameState.GAME_NEW_LEVEL) {
         state(GameState.GAME_START) {
             edge(GameState.GAME_RUNNING) {
                 validWhen { runner.anyKeyPressed }

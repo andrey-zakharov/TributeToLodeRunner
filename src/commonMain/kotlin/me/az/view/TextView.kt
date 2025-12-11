@@ -4,7 +4,7 @@ import ImageAtlas
 import de.fabmax.kool.math.Mat4d
 import de.fabmax.kool.math.Mat4f
 import de.fabmax.kool.modules.ui2.MutableStateValue
-import de.fabmax.kool.scene.Group
+import de.fabmax.kool.scene.Node
 
 class TextView (
     private val spriteSystem: SpriteSystem,
@@ -12,7 +12,7 @@ class TextView (
     private val fontAtlas: ImageAtlas,
     private val defaultBgAlpha: Float = 0.75f,
     init: TextView.() -> Unit = {}
-): Group() {
+): Node() {
     private val chars = mutableListOf<SpriteInstance>()
     private val tmpMat = Mat4d()
 

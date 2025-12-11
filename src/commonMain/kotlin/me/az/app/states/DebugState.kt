@@ -3,15 +3,14 @@ package me.az.app.states
 import App
 import AppState
 import TileSet
+import de.fabmax.kool.Assets
+import de.fabmax.kool.input.PointerInput
 import de.fabmax.kool.math.*
 import de.fabmax.kool.modules.ksl.KslUnlitShader
 import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.Attribute
 import de.fabmax.kool.pipeline.CullMethod
 import de.fabmax.kool.pipeline.DepthCompareOp
-import de.fabmax.kool.pipeline.shadermodel.vertexStage
-import de.fabmax.kool.pipeline.shading.UnlitMaterialConfig
-import de.fabmax.kool.pipeline.shading.UnlitShader
 import de.fabmax.kool.scene.*
 import de.fabmax.kool.scene.PointMesh.Companion.ATTRIB_POINT_SIZE
 import de.fabmax.kool.scene.animation.Animator
@@ -23,10 +22,11 @@ import de.fabmax.kool.toString
 import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.Time
 import kotlinx.coroutines.*
+import me.az.DefaultAssetManager
 import me.az.view.SpriteConfig
 import me.az.view.SpriteSystem
 import me.az.view.TextView
-import me.az.utils.*
+import zakharov.kit.fsm.StackedState
 
 class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DEBUG) {
 
@@ -114,7 +114,17 @@ class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DE
                         })
                     }
 
-                    val unlitCfg = UnlitMaterialConfig().apply {
+                    val cfg = KslUnlitShader.UnlitShaderConfig().apply {
+                        color { constColor(Color.LIGHT_BLUE) }
+                    }
+
+                    val model = KslUnlitShader.Model( cfg ).apply {
+                        vertexStage {
+                            //outPointSize = attributeNode(ATTRIB_POINT_SIZE).output)
+                        }
+                    }
+
+                    /* val unlitCfg = UnlitMaterialConfig().apply {
                         useStaticColor(Color.LIGHT_BLUE)
                         isInstanced = true
                     }
@@ -123,16 +133,16 @@ class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DE
                         vertexStage {
                             pointSize(attributeNode(ATTRIB_POINT_SIZE).output)
                         }
-                    }
+                    }*/
                     instances = MeshInstanceList(listOf(Attribute.INSTANCE_MODEL_MAT))
-                    shader = UnlitShader(unlitCfg, unlitModel)
+                    shader = KslUnlitShader(cfg, model)
 
                     onUpdate += { ev ->
                         instances!!.clear()
                         parts.filter { it.ttl > 0 }.forEach {
                             it.update(ev.deltaT)
                             instances!!.addInstance {
-                                put(Mat4f().translate(it.x, it.y, 0f).matrix)
+                                put(Mat4f().translate(it.x, it.y, 0f).array)
                             }
 
                         }
@@ -140,36 +150,35 @@ class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DE
                 }
 
                 val universeScale = mutableStateOf(ScalesKm.astroUnit) // 1 light year in km
-                +particleMesh
+                this += particleMesh
                 val timeScale = 0.010f
-                +group("sun") {
+                this += group("sun") {
                     //scale(universeScale.value.scale)
-                    +group("earth") {
+                    this += group("earth") {
                         val angle = LinearAnimator(InterpolatedFloat(0f, 360f)).apply {
                             repeating = Animator.REPEAT
                             duration = 365f
                             speed = 1f / timeScale
                         }
                         onUpdate += { ev->
-                            setIdentity()
-                            rotate(angle.tick(ev.ctx), Vec3f.Z_AXIS) // this is not true. respect orbits!
-                            translate(2.5, 0.0, 0.0)
+                            transform.setIdentity()
+                            transform.rotate(angle.tick(ev.ctx), Vec3f.Z_AXIS) // this is not true. respect orbits!
+                            transform.translate(2.5, 0.0, 0.0)
                         }
                         //addDebugAxis()
 
 
-                        +group("moon") {
+                        this += group("moon") {
                             val angle = LinearAnimator(InterpolatedFloat(0f, 360f)).apply {
                                 repeating = Animator.REPEAT
                                 duration = 28f
                                 speed = 1f / timeScale
                             }
                             onUpdate += {ev->
-                                setIdentity()
-                                rotate(angle.tick(ev.ctx), Vec3f.Z_AXIS) // this is not true. respect orbits!
-                                translate(0.5, 0.0, 0.0)
+                                transform.setIdentity()
+                                transform.rotate(angle.tick(ev.ctx), Vec3f.Z_AXIS) // this is not true. respect orbits!
+                                transform.translate(0.5, 0.0, 0.0)
                                 addTrailPoint(globalCenter.x, globalCenter.y)
-
                             }
                             //addDebugAxis()
                         }
@@ -195,8 +204,8 @@ class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DE
 
                 ss.sprite(0, 0, Mat4f().set(modelMat))
 
-                app.ctx.assetMgr.launch {
-                    cfg.atlases.map { async { it.load(TileSet.SPRITES_APPLE2, this@launch) } }.awaitAll()
+                Assets.launch {
+                    cfg.atlases.map { async { it.load(TileSet.SPRITES_APPLE2, DefaultAssetManager) } }.awaitAll()
                     ss.dirty = true
                 }
                 val ins = Array(n) { i ->
@@ -215,7 +224,7 @@ class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DE
                 }
 
                 //addDebugAxis()
-                +ss
+                this += ss
 
                 scope.launch {
                     var mode = 0 // pos scale tileindex
@@ -276,17 +285,17 @@ class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DE
                 }
 
                 val fontAtlas = cfg.atlases[cfg.atlasIdByName["text"]!!]
-                +TextView(ss, mutableStateOf("abcd"), fontAtlas) {
+                this += TextView(ss, mutableStateOf("abcd"), fontAtlas) {
 
                 }
 
                 // test text
                 val text = mutableStateOf("test")
 
-                +TextView(ss, text, fontAtlas) {
-                    scale(0.5f)
-                    rotate(45f, Vec3f.Z_AXIS)
-                    translate(-2f, 2f, 0f)
+                this += TextView(ss, text, fontAtlas) {
+                    transform.scale(0.5f)
+                    transform.rotate(45f, Vec3f.Z_AXIS)
+                    transform.translate(-2f, 2f, 0f)
                 }
                 scope.launch {
                     while(true) {
@@ -312,7 +321,7 @@ class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DE
         }
         fun scene2() = scene("debug") {
             val randomCh = { randomF(0f, 1f) }
-            +colorMesh {
+            this += colorMesh {
                 instances = MeshInstanceList(
                     listOf(Attribute.INSTANCE_MODEL_MAT, Attribute.INSTANCE_COLOR), 0
                 )
@@ -320,7 +329,7 @@ class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DE
 
                 instances?.addInstances(n) { buf ->
                     for (i in 0 until n) {
-                        buf.put(Mat4f().translate(randomPos, randomPos, 0f).matrix)
+                        buf.put(Mat4f().translate(randomPos, randomPos, 0f).array)
                         buf.put(randomCh())
                         buf.put(randomCh())
                         buf.put(randomCh())
@@ -329,7 +338,7 @@ class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DE
                 }
 
                 shader = KslUnlitShader {
-                    isInstanced = true
+                    //isInstanced = true
                     pipeline {
                         cullMethod = CullMethod.NO_CULLING
                         depthTest = DepthCompareOp.DISABLED
@@ -357,7 +366,7 @@ class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DE
                         instances?.let {
                             val offset = it.instanceSizeF * idx
 
-                            val matmod = Mat4f().translate(randomPos, randomPos, 0f).matrix
+                            val matmod = Mat4f().translate(randomPos, randomPos, 0f).array
                             matmod.forEachIndexed { index, fl ->
                                 it.dataF[offset + index] = fl
                             }
@@ -374,7 +383,7 @@ class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DE
         }
 
         fun scene1() = UiScene() {
-            +Panel(sizes = Sizes.medium) {
+            this += Panel(sizes = Sizes.medium) {
                 modifier
                     .alignY(AlignmentY.Top)
                     .alignX(AlignmentX.Center)
@@ -388,7 +397,7 @@ class DebugState(private val app: App) : StackedState<AppState, App>(AppState.DE
 
             }
             onUpdate {
-                debug.set(ctx.inputMgr.pointerState.pointers
+                debug.set(PointerInput.pointerState.pointers
                     //.filter { it.isValid && !it.isConsumed() && it.isAnyButtonDown }
                     .joinToString("\n") {
                         "id: ${it.id}\t valid: ${it.isValid}\t consumed=${it.isConsumed()} ${it.x.toString(2)} x ${

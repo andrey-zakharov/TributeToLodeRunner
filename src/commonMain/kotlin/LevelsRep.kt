@@ -1,13 +1,13 @@
-import de.fabmax.kool.AssetManager
+
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import me.az.AssetManager
 import me.az.ilode.GameLevel
 import me.az.ilode.Tile
-import me.az.ilode.generateGameLevel
 import me.az.ilode.loadGameLevel
 
 enum class LevelSet(val path: String) {
@@ -46,7 +46,7 @@ class LevelsRep(
     }
 
     suspend fun load(levelSet: LevelSet) {
-        val json = assets.loadAsset("maps/${levelSet.path}.json")!!.toArray().decodeToString()
+        val json = assets.loadAsset("maps/${levelSet.path}.json").decodeToString()
         val obj = Json.decodeFromString<JsonObject>(json)
 
         with(obj["levels"] as JsonObject) {
@@ -73,14 +73,14 @@ class LevelsRep(
             if ( generated ) {
                 val fromMap = levels[lid]
 
-                generateGameLevel(
+                TODO() /*generateGameLevel(
                     lid,
                     fromMap,
                     mapWidth = 24 + fromMap.first().length,
                     mapHeight = 12 + fromMap.size,
                     tilesAtlasIndex = tileAnims.sequence,
                     scope = scope
-                )
+                )*/
             } else
                 loadGameLevel(lid, levels[lid], tileAnims.sequence)
         }

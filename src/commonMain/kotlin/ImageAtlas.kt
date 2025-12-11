@@ -1,4 +1,4 @@
-import de.fabmax.kool.AssetManager
+import de.fabmax.kool.Assets.loadTextureAtlasData
 import de.fabmax.kool.math.Vec2i
 import de.fabmax.kool.math.Vec4i
 import de.fabmax.kool.modules.ui2.mutableStateOf
@@ -6,6 +6,7 @@ import de.fabmax.kool.pipeline.BufferedTextureLoader
 import de.fabmax.kool.pipeline.Texture3d
 import kotlinx.serialization.*
 import kotlinx.serialization.json.*
+import me.az.AssetManager
 import me.az.utils.logd
 
 enum class TileSet(
@@ -70,7 +71,7 @@ class ImageAtlas(val name: String, whenLoaded: () -> Unit = {}) {
 
     private suspend fun AssetManager.loadGeom(tileset: TileSet) {
         val tilesMapPath = "sprites/${tileset.path}/$name.json"
-        val content = loadAsset(tilesMapPath)!!.toArray().decodeToString()
+        val content = loadAsset(tilesMapPath).decodeToString()
         val jsonObj = Json.decodeFromString<JsonObject>(content)
         if ( !jsonObj.containsKey("geom") ) throw IllegalStateException("no geom for atlas ${tileset.dis} $name")
         geometry = AtlasGeometry.from(jsonObj["geom"]!!)

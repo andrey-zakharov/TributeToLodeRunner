@@ -1,6 +1,6 @@
 package me.az.scenes
 
-import AppContext
+import GameContext
 import de.fabmax.kool.modules.ui2.mutableStateOf
 import de.fabmax.kool.scene.Group
 import me.az.ilode.Game
@@ -10,7 +10,7 @@ import me.az.view.TextView
 class GameUI(
     private val spriteSystem: SpriteSystem,
     val game: Game,
-    private val gameSettings: AppContext
+    private val gameSettings: GameContext
     ) : Group()
 {
     private val fontAtlasId = spriteSystem.cfg.atlasIdByName["text"]!!
@@ -79,7 +79,7 @@ class GameUI(
         game.onStateChanged += { dirty = true }
         gameSettings.score.onChange {
             dirty = true
-            scoreTextView.setDirty()
+            scoreTextView.transform.markDirty()
         }
         gameSettings.currentLevel.onChange {
             dirty = true
@@ -88,9 +88,9 @@ class GameUI(
             dirty = true
         }
 
-        +scoreTextView
-        +livesTextView
-        +levelTextView
+        this += scoreTextView
+        this += livesTextView
+        this += levelTextView
 
         onUpdate += {
             if ( dirty ) {

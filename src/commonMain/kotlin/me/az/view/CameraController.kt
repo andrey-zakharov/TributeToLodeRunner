@@ -37,7 +37,7 @@ class InterpolatedVec3f(val from: MutableVec3f, val `to`: MutableVec3f) : Interp
     }
 }
 
-class CameraController(val cameraToControl: OrthographicCamera, name: String? = "camcontrol", val ctx: KoolContext, val viewGroup: Group) : Node(name) {
+class CameraController(val cameraToControl: OrthographicCamera, name: String? = "camcontrol", val ctx: KoolContext, val viewGroup: Node) : Node(name) {
 
     private val cameraPos = InterpolatedVec3f(MutableVec3f(cameraToControl.position), MutableVec3f(cameraToControl.position))
     private val cameraAnimator = InverseSquareAnimator(cameraPos).apply {

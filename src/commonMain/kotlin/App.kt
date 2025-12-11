@@ -2,19 +2,25 @@ import com.russhwolf.settings.Settings
 import com.russhwolf.settings.boolean
 import com.russhwolf.settings.float
 import com.russhwolf.settings.int
-import de.fabmax.kool.InputManager
+import de.fabmax.kool.Assets.loadTextureData
 import de.fabmax.kool.KoolContext
+import de.fabmax.kool.input.InputStack
+import de.fabmax.kool.input.KeyEvent
+import de.fabmax.kool.input.KeyboardInput
+import de.fabmax.kool.input.KeyboardInput.KEY_BACKSPACE
+import de.fabmax.kool.input.KeyboardInput.KEY_F1
+import de.fabmax.kool.input.KeyboardInput.KEY_F2
+import de.fabmax.kool.input.KeyboardInput.KEY_MOD_CTRL
 import de.fabmax.kool.math.*
 import de.fabmax.kool.modules.ui2.*
 import de.fabmax.kool.pipeline.*
-import de.fabmax.kool.scene.Camera
-import de.fabmax.kool.scene.OrthographicCamera
-import de.fabmax.kool.scene.Scene
+import de.fabmax.kool.scene.*
 import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import me.az.DefaultAssetManager
 import me.az.app.controls.InputSpec
 import me.az.app.controls.toInputSpec
 import me.az.app.states.DebugState
@@ -25,6 +31,8 @@ import me.az.scenes.height
 import me.az.scenes.width
 import me.az.utils.*
 import me.az.view.sprite2d
+import zakharov.kit.fsm.StackedState
+import zakharov.kit.fsm.stackedStateMachine
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
@@ -100,7 +108,7 @@ class GameSettings(val settings: Settings) {
     var actorMoveY = 4
 }
 
-class AppContext(val gameSettings: GameSettings) {
+class GameContext(val gameSettings: GameSettings) {
     val score = mutableStateOf(gameSettings.curScore).also { it.onChange { gameSettings.curScore = it } }
     val spriteMode = mutableStateOf(gameSettings.spriteMode).also { it.onChange { gameSettings.spriteMode = it } }
     val levelSet = mutableStateOf(gameSettings.version).also { it.onChange { gameSettings.version = it } }
@@ -132,9 +140,9 @@ class App(val ctx: KoolContext, initialState: AppState = AppState.MAINMENU) {
 
     private val settings = Settings()
     val gameSettings = GameSettings(settings)
-    val context = AppContext(gameSettings)
+    val context = GameContext(gameSettings)
 
-    val fsm = buildStateMachine(initialState) {
+    val fsm = stackedStateMachine(initialState) {
         this += MainMenuState(this@App)
         this += RunGameState(this@App)
         this += ExitState(this@App)
@@ -150,7 +158,7 @@ class App(val ctx: KoolContext, initialState: AppState = AppState.MAINMENU) {
             test2()
         }
 
-        ctx.inputMgr.registerActions(this, AppActions.values().asIterable())
+        KeyboardInput.registerActions(this, AppActions.entries.asIterable())
 //        changeState(RunGameState)
 
 
@@ -248,7 +256,7 @@ class App(val ctx: KoolContext, initialState: AppState = AppState.MAINMENU) {
         fun Scene.makeBackground() =
             sprite2d(
                 texture = Texture2d(simpleTextureProps) {
-                    it.loadTextureData(backgroundImageFile, simpleTextureProps.format)
+                    loadTextureData(backgroundImageFile, simpleTextureProps.format)
                 },
                 name = "bg"
             ).apply {
@@ -302,7 +310,7 @@ class App(val ctx: KoolContext, initialState: AppState = AppState.MAINMENU) {
     }
 
     suspend fun test4() {
-        val rep = LevelsRep(ctx.assetMgr, scope)
+        val rep = LevelsRep(DefaultAssetManager, scope)
         for (s in LevelSet.values()) {
             rep.load(s)
             debugOnly {
@@ -323,27 +331,32 @@ class App(val ctx: KoolContext, initialState: AppState = AppState.MAINMENU) {
         if ( !cond ) throw AssertionError(msg())
     }
 
+    // KEY binds for MAIN MENU
     enum class AppActions(override val keyCode: InputSpec,
-                          override val onPress: App.(InputManager.KeyEvent) -> Unit = {},
-                          override val onRelease: App.(InputManager.KeyEvent) -> Unit) : KeyAction<App> {
-        EXIT(InputManager.KEY_BACKSPACE.toInputSpec(), onPress = {
+                          override val onPress: App.(KeyEvent) -> Unit = {},
+                          override val onRelease: App.(KeyEvent) -> Unit) : KeyAction<App> {
+        EXIT(KEY_BACKSPACE.toInputSpec(), onPress = {
             fsm.popState()
             fsm.setState(AppState.MAINMENU)
         }, onRelease = {}),
-        DEBUG('d'.toInputSpec(InputManager.KEY_MOD_CTRL), onRelease = {
+        DEBUG('d'.toInputSpec(KEY_MOD_CTRL), onRelease = {
             if ( ctx.scenes.any { it.name == "debug-overlay" } ) {
                 ctx.scenes.removeAll { it.name == "debug-overlay" }
             } else {
                 ctx.scenes += de.fabmax.kool.util.debugOverlay()
             }
         }),
-        PLAYMODE(InputManager.KEY_F2.toInputSpec(), onRelease = {
+        PLAYMODE(KEY_F2.toInputSpec(), onRelease = {
             fsm.toggleState(AppState.MAINMENU)
         }),
-        DEBUGMODE(InputManager.KEY_F1.toInputSpec(), onRelease = {
+        DEBUGMODE(KEY_F1.toInputSpec(), onRelease = {
             fsm.toggleState(AppState.DEBUG)
         })
     }
+}
+
+internal fun Transform.resetScale() {
+    this.setScale(1f)
 }
 
 
@@ -359,12 +372,12 @@ internal fun touchControls(controllable: Controllable): Scene {
     val deadZone = 0.2f
     val vjcTex by lazy {
         Texture2d(bluredTextureProps) {
-            return@Texture2d it.loadTextureData("images/JoystickSplitted.png", bluredTextureProps.format)
+           loadTextureData("images/JoystickSplitted.png", bluredTextureProps.format)
         }
     }
     val handleTex by lazy {
         Texture2d(bluredTextureProps) {
-            return@Texture2d it.loadTextureData("images/SmallHandleFilledGrey.png", bluredTextureProps.format)
+            loadTextureData("images/SmallHandleFilledGrey.png", bluredTextureProps.format)
         }
     }
     val colors = Colors.darkColors(
@@ -372,9 +385,12 @@ internal fun touchControls(controllable: Controllable): Scene {
     )
     val tmp = MutableVec3f()
     val ray = Ray()
+
+
     return UiScene("virtual joystick", false) {
 
-        +sprite2d(vjcTex).apply {
+
+        this += sprite2d(vjcTex).apply {
 //            onProcessInput += {
             onUpdate += { ev->
 
@@ -424,7 +440,7 @@ internal fun touchControls(controllable: Controllable): Scene {
                 }
             }
 
-            +sprite2d(handleTex).also { inner ->
+            this += sprite2d(handleTex).also { inner ->
 
                 inner.onUpdate += {
                     if ( vjcTex.loadedTexture != null && handleTex.loadedTexture != null ) {
@@ -446,7 +462,7 @@ internal fun touchControls(controllable: Controllable): Scene {
 
         }
 
-        +Panel(colors = Colors.darkColors(
+        this += Panel(colors = Colors.darkColors(
             background = Color(0f, 0f, 0f, 0.5f)
         )) {
 
@@ -539,13 +555,13 @@ internal fun touchControls(controllable: Controllable): Scene {
 interface KeyAction<E> {
     val name: String
     val keyCode: InputSpec
-    val onPress: E.(InputManager.KeyEvent) -> Unit
-    val onRelease: E.(InputManager.KeyEvent) -> Unit
+    val onPress: E.(KeyEvent) -> Unit
+    val onRelease: E.(KeyEvent) -> Unit
 }
-fun<E> InputManager.registerActions(root: E, actions: Array<KeyAction<E>>) = registerActions(root, actions.asIterable())
-fun<E> InputManager.registerActions(root: E, actions: Iterable<KeyAction<E>>, ) =
+fun<E> KeyboardInput.registerActions(root: E, actions: Array<KeyAction<E>>) = registerActions(root, actions.asIterable())
+fun<E> KeyboardInput.registerActions(root: E, actions: Iterable<KeyAction<E>>, ) =
     actions.map { action ->
-        registerKeyListener(
+        addKeyListener(
             keyCode = action.keyCode.code,
             name = action.name,
             filter = { ev -> (action.keyCode.modificatorBitMask xor ev.modifiers) == 0 }
@@ -555,7 +571,7 @@ fun<E> InputManager.registerActions(root: E, actions: Iterable<KeyAction<E>>, ) 
         }
     }
 
-fun InputManager.unregisterActions(actions: Iterable<InputManager.KeyEventListener>) {
+fun KeyboardInput.unregisterActions(actions: Iterable<InputStack.SimpleKeyListener>) {
     actions.forEach { removeKeyListener(it) }
 }
 

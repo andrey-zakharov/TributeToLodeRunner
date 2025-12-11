@@ -1,8 +1,9 @@
 package me.az.scenes
 
-import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.scene.Scene
+import me.az.AssetManager
+import me.az.DefaultAssetManager
 
 abstract class AsyncScene(name: String? = null) : Scene(name) {
     private var sceneState = State.NEW
@@ -17,7 +18,7 @@ abstract class AsyncScene(name: String? = null) : Scene(name) {
             // load resources (async from AssetManager CoroutineScope)
             sceneState = State.LOADING
             ctx.assetMgr.launch {
-                loadResources(this, ctx)
+                loadResources(DefaultAssetManager, ctx)
                 sceneState = State.SETUP
             }
         }

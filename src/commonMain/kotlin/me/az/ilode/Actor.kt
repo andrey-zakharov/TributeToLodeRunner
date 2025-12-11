@@ -2,7 +2,8 @@ package me.az.ilode
 
 import de.fabmax.kool.math.MutableVec2i
 import de.fabmax.kool.math.Vec2i
-import me.az.utils.*
+import zakharov.kit.fsm.StackedState
+import zakharov.kit.fsm.stackedStateMachine
 
 // remnants
 enum class Action {
@@ -56,7 +57,7 @@ sealed class Actor(val game: Game) : Controllable {
 
     open val fsm by lazy {
         val stopState = ActorState.StopState(this)
-        buildStateMachine(stopState.name) {
+        stackedStateMachine(stopState.name) {
             this += stopState
             this += ActorState.MoveLeft.RunLeft(this@Actor)
             this += ActorState.MoveLeft.BarLeft(this@Actor)

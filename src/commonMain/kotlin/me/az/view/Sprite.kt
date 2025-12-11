@@ -18,6 +18,7 @@ import me.az.view.SpriteInstance.Companion.BGCOLOR
 import me.az.view.SpriteInstance.Companion.INSTANCE_ATTRIBS
 import me.az.view.SpriteInstance.Companion.MODMAT
 import me.az.view.SpriteInstance.Companion.TILE_INDEX
+import resetScale
 
 // represent both simple texture2d or frame in atlas
 fun sprite2d(texture: Texture2d,
@@ -67,10 +68,10 @@ open class Sprite(
     }
 
     private fun buildMesh() {
-        removeAllChildren()
+        clearChildren()
         setIdentity()
-        +group("scaler") {
-            +mesh(SpriteShader.SPRITE_MESH_ATTRIBS, "${this@Sprite.name} mesh") {
+        this += group("scaler") {
+            this += mesh(SpriteShader.SPRITE_MESH_ATTRIBS, "${this@Sprite.name} mesh") {
                 generate {
                     rect {
                         origin.set(-width / 2f, -height / 2f, 0f)
@@ -92,7 +93,7 @@ open class Sprite(
 
             onResize += {w, h ->
                 this@group.transform.resetScale()
-                this@group.scale(w.toDouble(), h.toDouble(), 1.0)
+                this@group.transform.scale(w.toDouble(), h.toDouble(), 1.0)
             }
         }
     }
@@ -167,7 +168,7 @@ fun Node.dump(nestLevel: Int = 0): String {
     return "${c}name=$name modelMat=${modelMat.dis()}"
 }
 fun Group.dump(level: Int = 0): String {
-    return "${(this as Node).dump(level)} transform=${transform.dis()} children=${children.size}\n" +
+    return "${(this as Node).dump(level)} transform=${transform.matrix.dis()} children=${children.size}\n" +
         children.joinToString("\n") {
             when (it) {
                 is Group -> it.dump(level + 1)
@@ -215,7 +216,7 @@ data class SpriteInstance(
         _parent = instances
         with(instances.dataF) {
             // pos 0
-            put(modelMat.matrix) // 0
+            put(modelMat.array) // 0
             put(_atlasFloat) // 16
             put(tileIndex.value.toFloat()) // 17
             // bg alpha
@@ -267,7 +268,7 @@ class SpriteConfig(init: SpriteConfig.() -> Unit = {}) {
 class SpriteSystem(
     val cfg: SpriteConfig,
     name: String? = null,
-): Group(name) {
+): Node(name) {
 
     val instances = MeshInstanceList(INSTANCE_ATTRIBS, 0)
     val sprites = mutableListOf<SpriteInstance>()
@@ -282,7 +283,7 @@ class SpriteSystem(
 //        println("full refresh system sprite")
         cfg.atlases.forEachIndexed { index, imageAtlas ->
             //if (imageAtlas.tex.value?.loadingState == Texture.LoadingState.LOADED )
-            spriteShader.textures.set(index, imageAtlas.tex.value)
+            spriteShader.textures[index] = imageAtlas.tex.value
         }
 
         instances.run {
@@ -350,7 +351,7 @@ class SpriteSystem(
         }
 
     init {
-        +mesh
+        this += mesh
         cfg.atlases.forEach { it.tex.onChange {
             //dirty = true
         } }

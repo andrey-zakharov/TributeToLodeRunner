@@ -1,3 +1,5 @@
+import java.net.URI
+
 pluginManagement {
     plugins {
         val kotlinVersion: String by settings
@@ -6,7 +8,17 @@ pluginManagement {
     }
 }
 
+sourceControl {
+    gitRepository(
+        //URI.create("https://github.com/andrey-zakharov/kit.git")
+        uri("../kit")
+    ) {
+        producesModule("me.zakharov:kit")
+    }
+}
+
 rootProject.name = "Infinner"
-include(":bits")
-project(":bits").projectDir = File("../bits")
+//include(":bits")
+//project(":bits").projectDir = File("../kit")
+//include("bits")
 

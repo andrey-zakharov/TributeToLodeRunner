@@ -14,16 +14,17 @@ const val SCORE_GOLD     = 250
 const val SCORE_FALL     = 75
 const val SCORE_DIES     = 75
 
-/**
- * SCORING
-        The scoring with CHAMPIONSHIP LODE RUNNER is as follows:
-        Completing a level ......... . .. . .................... 2000 points
-        Picking up a gold chest . .. .. .. . . . ......... . .......... 500 points
-        Trapping an enemy . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 100 points
-        Enemy dying in a hole . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 100 points
- */
+
 val Controllable.anyKeyPressed get() = digLeft || digRight || inputVec.x != 0 || inputVec.y != 0
 
+/**
+ * SCORING
+ * The scoring with CHAMPIONSHIP LODE RUNNER is as follows:
+ * - Completing a level ................................. 2000 points
+ * - Picking up a gold chest ............................  500 points
+ * - Trapping an enemy ..................................  100 points
+ * - Enemy dying in a hole ..............................  100 points
+ */
 class Runner(game: Game) : Actor(game), Controllable {
     var health = game.state.runnerLifes.value
         set(value) {

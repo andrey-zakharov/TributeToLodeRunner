@@ -1,5 +1,5 @@
 package me.az.ilode
-
+/*
 import org.mifek.wfc.adapters.GifSequenceWriter
 import org.mifek.wfc.core.Cartesian2DWfcAlgorithm
 import org.mifek.wfc.core.WfcAlgorithm
@@ -84,7 +84,7 @@ var writer: GifSequenceWriter? = null
 var lastAssign: Int? = null
 var lastBan: Int? = null
 var afterWarmup = false
-
+/*
 actual fun debugAlgoStart(
     levelId: Int,
     model: OverlappingCartesian2DModel,
@@ -140,4 +140,4 @@ actual fun debugAlgoStart(
 ////            debugAlgo(wcf, algo)
 ////        }
 //    }
-}
+}*/

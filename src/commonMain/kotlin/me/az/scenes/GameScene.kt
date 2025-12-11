@@ -3,14 +3,15 @@ package me.az.scenes
 import AnimationFrames
 import App
 import App.Companion.makeBackground
-import AppContext
+import GameContext
 import ImageAtlas
 import ImageAtlasSpec
 import RunnerController
 import SoundPlayer
 import TileSet
-import de.fabmax.kool.AssetManager
+
 import de.fabmax.kool.KoolContext
+import de.fabmax.kool.input.KeyboardInput
 import de.fabmax.kool.math.*
 import de.fabmax.kool.math.spatial.BoundingBox
 import de.fabmax.kool.modules.ui2.MutableStateValue
@@ -24,13 +25,16 @@ import de.fabmax.kool.util.Color
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import me.az.AssetManager
 import me.az.ilode.Game
 import me.az.ilode.GameLevel
 import me.az.ilode.GameState
 import me.az.ilode.anyKeyPressed
 import me.az.shaders.CRTShader
 import me.az.shaders.MaskShader
+import me.az.utils.runDelayed
 import me.az.view.*
+import resetScale
 import kotlin.math.ceil
 import kotlin.math.sqrt
 
@@ -38,17 +42,16 @@ typealias Sequences = Map<String, List<Int>>
 
 open class GameScene(val game: Game,
                      val assets: AssetManager,
-                     val appContext: AppContext,
                      private val visibleSize: Vec2i = Vec2i(28, 16), // in tiles only level, but + ground + status?
                      name: String?,
 ) : AsyncScene(name) {
-
+    val gameContext = game.state
     val currentShutter get() = shatterRadiusAnim.value.value
     var levelView: LevelView? = null
 
     //cam
-    protected val screenWidth get() = appContext.spriteMode.value.screenWidth
-    protected val screenHeight get() = appContext.spriteMode.value.screenHeight
+    protected val screenWidth get() = gameContext.spriteMode.value.screenWidth
+    protected val screenHeight get() = gameContext.spriteMode.value.screenHeight
 
     // for level view
 
@@ -58,7 +61,7 @@ open class GameScene(val game: Game,
     protected val maxShatterRadius = ceil(sqrt((levelWidth* levelWidth + levelHeight * levelHeight).toDouble()) / 2).toInt()
 
     var cameraController: CameraController? = null
-    private var mask: Group? = null
+    private var mask: Node? = null
 
     protected val shatterRadiusAnim = LinearAnimator(InterpolatedFloat(0f, 1f)).apply {
         duration = 1f
@@ -71,7 +74,7 @@ open class GameScene(val game: Game,
     var lastUpdate = 0.0 // last game tick
 
     private val ticker = { ev: RenderPass.UpdateEvent ->
-        if ((ev.time - lastUpdate) * 1000 >= appContext.speed.value.msByPass) {
+        if ((ev.time - lastUpdate) * 1000 >= gameContext.speed.value.msByPass) {
             game.tick(ev)
             lastUpdate = ev.time
         }
@@ -82,7 +85,7 @@ open class GameScene(val game: Game,
     private val outerCamera get() = camera as OrthographicCamera
 
     init {
-        appContext.spriteMode.onChange {
+        gameContext.spriteMode.onChange {
             scope.launch {
                 reload(it)
                 levelView?.fullRefresh()
@@ -92,7 +95,7 @@ open class GameScene(val game: Game,
         // recreate on tileWidth change TBD
 
         camera = App.createCamera(
-            appContext.spriteMode.value.screenWidth, appContext.spriteMode.value.screenHeight
+            gameContext.spriteMode.value.screenWidth, gameContext.spriteMode.value.screenHeight
         ).apply {
             projCorrectionMode = Camera.ProjCorrectionMode.ONSCREEN
         }
@@ -117,11 +120,13 @@ open class GameScene(val game: Game,
     protected val tilesAtlas = atlases[atlasOrder.indexOf("tiles")]
     protected val fontAtlas = atlases[atlasOrder.indexOf("text")]
 
-    val spriteSystem by lazy { SpriteSystem(SpriteConfig {
-        this@GameScene.atlases.forEach { this += it }
-    }).apply {
+    val spriteSystem by lazy {
+        SpriteSystem( SpriteConfig {
+            this@GameScene.atlases.forEach { this += it }
+        }, "game sprites system" ).apply {
 //        mirrorTexCoordsY = true
-    }}
+        }
+    }
 
     // out of mask, for status text
     val uiSpriteSystem by lazy {
@@ -134,20 +139,21 @@ open class GameScene(val game: Game,
                     updateGround()
                     groundDirty = false
                 }
-                groundTiles.forEachIndexed { index, tile ->
-                    //update pos
-                    // under level view - level view posed by world coords aligned to top edge of camera's view
-                    // but we need here local coords 'in tiles' because of uiSprite is scaled.
-                    with(tile.modelMat) {
-                        set(
-                            Mat4d()
-                                .translate(index.toFloat() - game.level!!.width /2f, -1f, 0f)
-                                .translate(
-                                    -off!!.camera.position.x / appContext.spriteMode.value.tileWidth,
-                                    -off!!.camera.position.y / appContext.spriteMode.value.tileHeight, 0f)
-                        )
+                game.level?.let {
+                    groundTiles.forEachIndexed { index, tile ->
+                        //update pos
+                        // under level view - level view posed by world coords aligned to top edge of camera's view
+                        // but we need here local coords 'in tiles' because of uiSprite is scaled.
+                        with(tile.modelMat) {
+                            setIdentity()
+                            translate(index.toFloat() - it.width /2f, -1f, 0f)
+                            translate(
+                                -off!!.camera.position.x / gameContext.spriteMode.value.tileWidth,
+                                -off!!.camera.position.y / gameContext.spriteMode.value.tileHeight, 0f)
+                        }
                     }
                 }
+
                 ss.dirty = true
             }
             // layout depends on tileset
@@ -184,7 +190,7 @@ open class GameScene(val game: Game,
     }
 
     override suspend fun loadResources(assets: AssetManager, ctx: KoolContext) = with(assets) {
-        reload(appContext.spriteMode.value)
+        reload(gameContext.spriteMode.value)
         sounds.loadSounds()
     }
 
@@ -197,13 +203,13 @@ open class GameScene(val game: Game,
     override fun setup(ctx: KoolContext) {
         game.soundPlayer = sounds
         addNode(bg, 0)
-        +RunnerController(ctx.inputMgr, game.runner)
+        this += RunnerController(KeyboardInput, game.runner)
 
-        appContext.spriteMode.onChange {
+        gameContext.spriteMode.onChange {
             updateScales(it)
-            outerCamera.top = off!!.height + appContext.spriteMode.value.tileHeight * 2f
+            outerCamera.top = off!!.height + gameContext.spriteMode.value.tileHeight * 2f
         }
-        +uiSpriteSystem
+        this += uiSpriteSystem
 
         spriteSystem.dirty = true
         uiSpriteSystem.dirty = true
@@ -240,10 +246,10 @@ open class GameScene(val game: Game,
 
     private val groundTiles = mutableListOf<SpriteInstance>()
 
-    private fun updateScales(tileSet: TileSet = appContext.spriteMode.value) {
+    private fun updateScales(tileSet: TileSet = gameContext.spriteMode.value) {
         systems.forEach {
             it.transform.resetScale()
-            it.scale(
+            it.transform.setScale(
                 tileSet.tileWidth.toFloat(),
                 tileSet.tileHeight.toFloat(), 1f
             )
@@ -267,7 +273,7 @@ open class GameScene(val game: Game,
 
         levelView?.let {
             // draw by sprite system, but still need updates
-            +it
+            this += it
         }
 
         off = OffscreenRenderPass2d(spriteSystem, renderPassConfig {
@@ -326,14 +332,13 @@ open class GameScene(val game: Game,
 //            })
 
             crt?.let {
-                (it.drawNode as Group).apply {
-                    +textureMesh {
-                        generateFullscreenQuad()
-                        shader = CRTShader().apply {
-                            tex = off!!.colorTexture!!
-                        }
+                it.drawNode += textureMesh {
+                    generateFullscreenQuad()
+                    shader = CRTShader().apply {
+                        tex = off!!.colorTexture!!
                     }
                 }
+
                 it.dependsOn(pass)
                 addOffscreenPass(it)
                 /* does not work, need full screen rect, but we have level rect. BTW need frustum check
@@ -379,7 +384,7 @@ open class GameScene(val game: Game,
 
             levelView?.also { startTrack(game, borderZone, it.runnerView.instance.modelMat) }
             // initial
-            cameraToControl.position.y = - appContext.spriteMode.value.tileHeight * 2f
+            cameraToControl.position.y = - gameContext.spriteMode.value.tileHeight * 2f
             cameraToControl.lookAt.y = cameraToControl.position.y
 //            cameraToControl.position.y -= appContext.spriteMode.value.tileHeight * 2f
         }
@@ -395,7 +400,7 @@ open class GameScene(val game: Game,
         mask = group {
             // align top
             // translate(0f, outerCamera.height - levelHeight, 0f)
-            +textureMesh {
+            this += textureMesh {
                 generate {
                     rect {
                         size.set( off!!.width.toFloat(), off!!.height.toFloat())
@@ -404,7 +409,10 @@ open class GameScene(val game: Game,
                     }
                 }
 
-                shader = MaskShader { color { textureColor((crt?:off!!).colorTexture) } }
+                shader = MaskShader {
+                    color { textureColor((crt?:off!!).colorTexture) }
+                    //vertexCfg.isInstanced = true
+                }
 //                     unlitShader { useColorMap(off!!.colorTexture) }
 //                     unlitShader { useStaticColor(Color.RED) }
                 onUpdate += {
@@ -428,7 +436,7 @@ open class GameScene(val game: Game,
         //WTF #1? worked fine, not semi transparent
         addNode(mask!!, 0)
 
-        outerCamera.top = off!!.height + appContext.spriteMode.value.tileHeight * 2f
+        outerCamera.top = off!!.height + gameContext.spriteMode.value.tileHeight * 2f
         onUpdate += ticker // start play
     }
 

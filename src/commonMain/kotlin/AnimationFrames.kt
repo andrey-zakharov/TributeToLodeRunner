@@ -1,7 +1,7 @@
-import de.fabmax.kool.AssetManager
 import de.fabmax.kool.util.Log
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.*
+import me.az.AssetManager
 import me.az.utils.logd
 
 class AnimationFrames(
@@ -41,7 +41,7 @@ class AnimationFrames(
 
     private suspend fun AssetManager.loadAndPrepareAnims(assetPath: String): Map<String, List<Int>> {
         //everything here - breaks. very fragile
-        val root = Json.decodeFromString<JsonObject>(loadAsset(assetPath)!!.toArray().decodeToString())
+        val root = Json.decodeFromString<JsonObject>(loadAsset(assetPath)!!.decodeToString())
         val frames  = root["sequence"] as JsonObject
         return frames.keys.associateWith { k ->
             when(frames[k]) {

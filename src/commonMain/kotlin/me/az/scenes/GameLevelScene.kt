@@ -1,8 +1,7 @@
 package me.az.scenes
 
-import AppContext
+import GameContext
 import LevelsRep
-import de.fabmax.kool.AssetManager
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.MutableVec3f
 import de.fabmax.kool.math.spatial.BoundingBox
@@ -14,6 +13,8 @@ import de.fabmax.kool.scene.animation.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.yield
+import me.az.AssetManager
+import me.az.DefaultAssetManager
 import me.az.ilode.Game
 import me.az.ilode.GameState
 import me.az.utils.debugOnly
@@ -32,10 +33,10 @@ fun<V, T : InterpolatedValue<V>> Animator<V, T>.dis(): String = "duration=%.3f s
 class GameLevelScene (
     game: Game,
     ctx: KoolContext,
-    assets: AssetManager = ctx.assetMgr,
-    appContext: AppContext,
+    assets: AssetManager = DefaultAssetManager,
+    gameContext: GameContext,
     name: String? = null,
-) : GameScene(game, assets, appContext, name = name), CoroutineScope {
+) : GameScene(game, assets, name = name), CoroutineScope {
 
     val gameOverSprite by lazy {
         // on exit - break anim. TBD
@@ -54,17 +55,17 @@ class GameLevelScene (
             val tmpPos = MutableVec3f()
 
             onUpdate += { ev->
-                it.transform.resetScale() // still remains negative -1
+                it.transform.scale(1f)// still remains negative -1
                 //            it.translate(this@GameLevelScene.camera.globalCenter)
                 tmpPos.set(ev.viewport.width / 2f, ev.viewport.height / 2f, 0f)
                 levelView?.toLocalCoords(tmpPos)
                 it.transform.setTranslate( tmpPos.toVec3d() )
 
                 // -1.0 zoom glitches?
-                val scale = scaleAnim.tick(ev.ctx) / appContext.spriteMode.value.tileHeight
-                it.scale(1.0 /  appContext.spriteMode.value.tileWidth, scale.toDouble()
+                val scale = scaleAnim.tick(ev.ctx) / gameContext.spriteMode.value.tileHeight
+                it.scale(1.0 /  gameContext.spriteMode.value.tileWidth, scale.toDouble()
                         //hack
-                         * it.transform[1, 1].sign, 1.0)
+                         * it.transform.matrix[1, 1].sign, 1.0)
 
                 scaleAnim.speed = speedAnim.tick(ev.ctx) * scaleAnim.speed.sign
                 if ( scaleAnim.speed > 0 && scaleAnim.speed <= 1f && scaleAnim.repeating != Animator.ONCE ) {
@@ -85,7 +86,7 @@ class GameLevelScene (
                 // exit state
                 if (levelView?.findNode("gameover") != null) {
                     logd { "removing gameover sprite"}
-                    levelView?.run { -gameOverSprite }
+                    levelView?.run { this -= gameOverSprite }
                 }
             }
             when(this.name) {
@@ -104,7 +105,7 @@ class GameLevelScene (
                 GameState.GAME_PREV_LEVEL -> {
                     if ( shatterRadiusAnim.speed == 0f ) startOutro(ctx)
 
-                    with(appContext.currentLevel) {
+                    with(gameContext.currentLevel) {
                         set( value - 1 )
                         if ( value < 0 ) {
                             set( value + levels.levels.size )
@@ -116,7 +117,7 @@ class GameLevelScene (
                     // black
                     if ( shatterRadiusAnim.speed == 0f ) startOutro(ctx)
 
-                    with(appContext.currentLevel) {
+                    with(gameContext.currentLevel) {
                         set( value + 1 )
                         if ( value >= levels.levels.size ) {
                             // finish
@@ -134,17 +135,17 @@ class GameLevelScene (
                 }
                 GameState.GAME_OVER_ANIMATION -> {
 
-                    levelView?.run { +gameOverSprite }
-                    ctx.runDelayed((ctx.fps * 5).toInt()) {
-                        game.animEnds = false
-                        startOutro(ctx) // await
-                    }
+                    levelView?.run { this += gameOverSprite }
+                    //ctx.runDelayed((ctx.fps * 5).toInt()) {
+                    //    game.animEnds = false
+                    //    startOutro(ctx) // await
+                    //}
                 }
                 else -> Unit
             }
         }
     }
-    private val currentLevel get() = levels.getLevel(appContext.currentLevel.value, tilesAnims, false)
+    private val currentLevel get() = levels.getLevel(gameContext.currentLevel.value, tilesAnims, false)
 
     private val job = Job()
     override val coroutineContext: CoroutineContext
@@ -158,94 +159,96 @@ class GameLevelScene (
     override suspend fun loadResources(assets: AssetManager, ctx: KoolContext) {
         super.loadResources(assets, ctx)
         gameOverTex = assets.loadAndPrepareTexture("images/game-over.png", simpleTextureProps)
-        levels.load(appContext.levelSet.value)
+        levels.load(gameContext.levelSet.value)
     }
 
     fun setupUi(scene: Scene) = debugOnly { with(scene) {
-        +Panel {
-            modifier
-                .width(Grow(1f, max = 300f.dp))
-                .height(FitContent)
-                .margin(start = 25.dp, top = 25.dp, bottom = 60.dp)
-                .layout(ColumnLayout)
-                .alignX(AlignmentX.End)
-                .alignY(AlignmentY.Bottom)
-            Row {
-                Text(debug.use()) {
-                    modifier
-                        .width(FitContent)
-                        .height(FitContent)
-                    onUpdate += {
-                        with(game) {
+        addNode(
+            Panel {
+                modifier
+                    .width(Grow(1f, max = 300f.dp))
+                    .height(FitContent)
+                    .margin(start = 25.dp, top = 25.dp, bottom = 60.dp)
+                    .layout(ColumnLayout)
+                    .alignX(AlignmentX.End)
+                    .alignY(AlignmentY.Bottom)
+                Row {
+                    Text(debug.use()) {
+                        modifier
+                            .width(FitContent)
+                            .height(FitContent)
+                        onUpdate += {
+                            with(game) {
 
-                            debug.set(
-                                """
-                                    #speedAnim = %%s %%.3f
-                                    #scaleAnim = %%s %%.3f
-                                    shatter = %.3f
-                                    
-                                global runner center = %.1f x %.1f
-                                off.camera = %.1f x %.1f ${cameraController?.debug}
-                                ui.camera =  %.1f x %.1f
-                                act = %s
-                                barrier = %b
-                                has guard below = %b
-                                can move down: %b
-                                guards: %s
-                                level.gold=%d
-                               
-                                %s""".trimIndent()
-                                    .format(
-//                                        speedAnim.dis(), speedAnim.value.value, scaleAnim.dis(), scaleAnim.value.value,
-                                        currentShutter,
-                                        levelView?.runnerView?.instance?.modelMat?.get(12), // x
-                                        levelView?.runnerView?.instance?.modelMat?.get(13), // x
-                                        off?.camera?.position?.x,
-                                        off?.camera?.position?.y,
-                                        camera.position.x,
-                                        camera.position.y,
-                                        level?.act?.get(runner.x)?.get(runner.y) ?: "<no level>",
-                                        level?.isBarrier(runner.x, runner.y) ?: false,
-                                        level?.hasGuard(runner.x, runner.y + 1) ?: false,
-                                        level?.run { runner.canMoveDown } ?: false,
-                                        guards.joinToString(" ") { it.hasGold.toString() },
-                                        level?.gold ?: 0,
-                                        runner.toString()
-                                    )
-                            )
+                                debug.set(
+                                    """
+                                        #speedAnim = %%s %%.3f
+                                        #scaleAnim = %%s %%.3f
+                                        shatter = %.3f
+                                        
+                                    global runner center = %.1f x %.1f
+                                    off.camera = %.1f x %.1f ${cameraController?.debug}
+                                    ui.camera =  %.1f x %.1f
+                                    act = %s
+                                    barrier = %b
+                                    has guard below = %b
+                                    can move down: %b
+                                    guards: %s
+                                    level.gold=%d
+                                   
+                                    %s""".trimIndent()
+                                        .format(
+    //                                        speedAnim.dis(), speedAnim.value.value, scaleAnim.dis(), scaleAnim.value.value,
+                                            currentShutter,
+                                            levelView?.runnerView?.instance?.modelMat?.get(12), // x
+                                            levelView?.runnerView?.instance?.modelMat?.get(13), // x
+                                            off?.camera?.position?.x,
+                                            off?.camera?.position?.y,
+                                            camera.position.x,
+                                            camera.position.y,
+                                            level?.act?.get(runner.x)?.get(runner.y) ?: "<no level>",
+                                            level?.isBarrier(runner.x, runner.y) ?: false,
+                                            level?.hasGuard(runner.x, runner.y + 1) ?: false,
+                                            level?.run { runner.canMoveDown } ?: false,
+                                            guards.joinToString(" ") { it.hasGold.toString() },
+                                            level?.gold ?: 0,
+                                            runner.toString()
+                                        )
+                                )
+                            }
                         }
                     }
                 }
-            }
-            Row { LabeledSwitch("stop animations", game.stopAnims) }
-            Row { LabeledSwitch("stop guards", appContext.stopGuards) }
-            Row { LabeledSwitch("immortal", appContext.immortal) }
-            Row {
-                Text("camera") {
-                    labelStyle(Grow.Std)
+                Row { LabeledSwitch("stop animations", game.stopAnims) }
+                Row { LabeledSwitch("stop guards", gameContext.stopGuards) }
+                Row { LabeledSwitch("immortal", gameContext.immortal) }
+                Row {
+                    Text("camera") {
+                        labelStyle(Grow.Std)
+                    }
                 }
-            }
-            Row { LazyList(
-                width = Grow.Std,
-                height = Grow(1f, max = 400f.dp)
-            ) {
+                Row { LazyList(
+                    width = Grow.Std,
+                    height = Grow(1f, max = 400f.dp)
+                ) {
 
-                itemsIndexed(uiSpriteSystem.sprites) { i, item ->
-                    Text("${item.atlasId.value} ${item.tileIndex.value}") {
-                        modifier
-                            .width(Grow.Std)
-                            .height(sizes.normalText.sizePts.dp)
-                            .textAlignY(AlignmentY.Center)
+                    itemsIndexed(uiSpriteSystem.sprites) { i, item ->
+                        Text("${item.atlasId.value} ${item.tileIndex.value}") {
+                            modifier
+                                .width(Grow.Std)
+                                .height(sizes.normalText.sizePts.dp)
+                                .textAlignY(AlignmentY.Center)
+
+                        }
 
                     }
-
-                }
-            }}
-//            Row { Image(off?.colorTexture) {
-//                modifier.width = 240.dp
-//                modifier.height = 240.dp
-//            } }
-        }
+                }}
+    //            Row { Image(off?.colorTexture) {
+    //                modifier.width = 240.dp
+    //                modifier.height = 240.dp
+    //            } }
+            }
+        )
     } }
 
     fun TextScope.labelStyle(width: Dimension = FitContent) {

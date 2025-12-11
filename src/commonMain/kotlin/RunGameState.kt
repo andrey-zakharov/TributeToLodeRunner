@@ -1,30 +1,40 @@
-import de.fabmax.kool.InputManager
+
+import de.fabmax.kool.KoolContext
+import de.fabmax.kool.input.InputStack
+import de.fabmax.kool.input.KeyEvent
+import de.fabmax.kool.input.KeyboardInput
 import de.fabmax.kool.modules.ui2.UiScene
 import de.fabmax.kool.scene.Scene
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import me.az.app.controls.InputSpec
 import me.az.app.controls.toInputSpec
 import me.az.ilode.Game
 import me.az.ilode.GameState
 import me.az.scenes.GameLevelScene
 import me.az.scenes.GameUI
+import me.az.utils.runDelayed
 import me.az.view.GameControls
-import me.az.utils.StackedState
+
+import zakharov.kit.fsm.StackedState
 
 class RunGameState(private val app: App) : StackedState<AppState, App>(AppState.RUNGAME) {
 
     var gameScene: GameLevelScene? = null
     var infoScene: Scene? = null
     var debugScene: Scene? = null
-    private val keyListeners = mutableListOf<InputManager.KeyEventListener>()
+    private val keyListeners = mutableListOf<InputStack.SimpleKeyListener>()
     var exit = false
     val game = Game(app.context)
 
     enum class LocalActions(
         override val keyCode: InputSpec,
-        override val onPress: RunGameState.(InputManager.KeyEvent) -> Unit = {},
-        override val onRelease: RunGameState.(InputManager.KeyEvent) -> Unit = {}
+        override val onPress: RunGameState.(KeyEvent) -> Unit = {},
+        override val onRelease: RunGameState.(KeyEvent) -> Unit = {}
     ) : KeyAction<RunGameState> {
-        DEBUGTOGGLE('l'.toInputSpec(InputManager.KEY_MOD_CTRL), onRelease = {
+        DEBUGTOGGLE('l'.toInputSpec(KeyboardInput.KEY_MOD_CTRL), onRelease = {
             when (debugScene) {
                 null -> {}
                 else -> {
@@ -36,7 +46,7 @@ class RunGameState(private val app: App) : StackedState<AppState, App>(AppState.
                 }
             }
         }),
-        EXIT(InputManager.KEY_ESC.toInputSpec(), onRelease = {
+        EXIT(KeyboardInput.KEY_ESC.toInputSpec(), onRelease = {
             if ( gameScene?.pauseMenu?.isShown == true ) {
                 gameScene?.pauseMenu?.hideMenu()
                 game.resumeGame()
@@ -53,11 +63,11 @@ class RunGameState(private val app: App) : StackedState<AppState, App>(AppState.
 
             gameScene = GameLevelScene(
                 game, app.ctx,
-                appContext = app.context,
+                gameContext = app.context,
                 name = "level"
             ).apply {
-                +GameControls(game, app.ctx.inputMgr)
-                +GameUI(uiSpriteSystem, game, appContext)
+                addNode( GameControls(game, KeyboardInput) )
+                addNode( GameUI(uiSpriteSystem, game, gameContext) )
             }
 
             app.ctx.scenes += gameScene!!
@@ -66,7 +76,7 @@ class RunGameState(private val app: App) : StackedState<AppState, App>(AppState.
             debugScene = UiScene {
                 gameScene?.setupUi(this)!!
             }
-            keyListeners.addAll( app.ctx.inputMgr.registerActions(this, LocalActions.values().asIterable()) )
+            keyListeners.addAll( KeyboardInput.registerActions(this, LocalActions.entries.asIterable()) )
 
             game.onStateChanged += {
                 when (this.name) {
@@ -85,7 +95,7 @@ class RunGameState(private val app: App) : StackedState<AppState, App>(AppState.
         onExit {
 
             with(app.ctx) {
-                keyListeners.forEach { inputMgr.removeKeyListener(it) }
+                keyListeners.forEach { KeyboardInput.removeKeyListener(it) }
                 gameScene?.run {
                     game.finish()
                     scenes -= this;

@@ -29,8 +29,8 @@ class ActorView(
     soundsBank: Map<Sound, WavFile>
 ) : Node(name)/* : Sprite3d(tileSize, atlas.tex.value, atlas.getTileSize(), name)*/ {
 
-    private val scaleX get() = spriteSystem.transform[0, 0].toFloat()
-    private val scaleY get() = spriteSystem.transform[1, 1].toFloat()
+    private val scaleX get() = spriteSystem.transform.matrix[0, 0].toFloat()
+    private val scaleY get() = spriteSystem.transform.matrix[1, 1].toFloat()
 
     private val fallSound by lazy { FallSound() }
     private val clips = mapOf(

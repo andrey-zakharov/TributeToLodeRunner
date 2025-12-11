@@ -20,7 +20,7 @@ open class MaskShader(cfg: UnlitShaderConfig, model: KslProgram = MaskModel(cfg)
                 main {
                     val mvp = mat4Var(mvpMatrix().matrix)
                     uv.input set vertexAttribFloat2(Attribute.TEXTURE_COORDS.name)
-                    if (cfg.isInstanced) {
+                    if (cfg.vertexCfg.isInstanced) {
                         mvp *= instanceAttribMat4(Attribute.INSTANCE_MODEL_MAT.name)
                     }
                     outPosition set mvp * float4Value(vertexAttribFloat3(Attribute.POSITIONS.name), 1f)
