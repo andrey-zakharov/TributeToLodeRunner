@@ -99,12 +99,12 @@ class RunGameState(private val app: App) : StackedState<AppState, App>(AppState.
                 gameScene?.run {
                     game.finish()
                     scenes -= this;
-                    runDelayed(1) { dispose(this@with) }
+                    dispose(this@with)
                 }
                 gameScene = null
-                infoScene?.run { scenes -= this; runDelayed(1) { dispose(this@with) } }
+                infoScene?.run { scenes -= this; dispose(this@with) }
                 infoScene = null
-                debugScene?.run { app.ctx.scenes -= this; runDelayed(1) { dispose(this@with) } }
+                debugScene?.run { app.ctx.scenes -= this; dispose(this@with) }
                 debugScene = null
                 //app.ctx.scenes -= app.touchControls
                 // app.ctx.scenes.clear()

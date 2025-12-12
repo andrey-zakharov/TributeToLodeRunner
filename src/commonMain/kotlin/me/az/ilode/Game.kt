@@ -245,13 +245,6 @@ class Game(val state: GameContext) : CoroutineScope {
     override val coroutineContext: CoroutineContext
         get() = job
 
-    init {
-
-        async {
-            delay(100)
-        }
-
-    }
 
     val onStateChanged = mutableListOf<StackedState<GameState, Game>.() -> Unit>()
 

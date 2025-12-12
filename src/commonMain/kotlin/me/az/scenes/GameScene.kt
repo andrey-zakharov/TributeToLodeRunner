@@ -450,17 +450,18 @@ open class GameScene(val game: Game,
         onUpdate -= ticker // stop ticker
         off?.run {
             removeOffscreenPass(this)
-            ctx.runDelayed(1) { dispose(ctx) }//dispose(ctx)
+            //ctx.runDelayed(1) { dispose(ctx) }//dispose(ctx)
+            dispose(ctx)
         }
         off = null
         mask?.run {
             this@GameScene.removeNode(this)
-            ctx.runDelayed(1) { dispose(ctx) }
+            dispose(ctx)
         }
         mask = null
 
 
-        levelView?.run { ctx.runDelayed(1) { dispose(ctx) } }
+        levelView?.run { dispose(ctx) }
         levelView = null
     }
 
